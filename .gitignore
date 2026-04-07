@@ -7,13 +7,7 @@ build/
 node_modules/
 
 # Static Assets
-public/featured-*.png
-public/hero-bg.png
-public/media__*.png
-public/aromatherapy_thumb_*.png
-public/reflexology_thumb_*.png
-public/traditional_massage_thumb_*.png
-public/serenaraga_*.png
+# (Allowing project images now)
 
 # Logs
 npm-debug.log*

@@ -1,26 +1,52 @@
 @import "tailwindcss";
 
+@theme {
+  --font-serif: "Playfair Display", serif;
+  --font-sans: var(--font-inter), sans-serif;
+  
+  --color-earth-primary: #8B5E3C;
+  --color-earth-dark: #5D4037;
+  --color-earth-light: #A67C52;
+  --color-bg-cream: #FDFBF7;
+  --color-bg-soft: #F5F0E1;
+  --color-text-primary: #2D241E;
+  --color-text-secondary: #5D4037;
+  --color-sage: #8DA399;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --background: var(--color-bg-cream);
+  --foreground: var(--color-text-primary);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-serif {
+  font-family: var(--font-serif);
+}
+
+.text-gradient {
+  background: linear-gradient(to right, var(--color-text-primary), var(--color-earth-primary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@layer utilities {
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .container-custom {
+    max-width: 1200px;
+    margin-inline: auto;
+    padding: 0 1.5rem;
+  }
 }

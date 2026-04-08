@@ -96,7 +96,7 @@ export default function ReportsPage() {
               <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} tickFormatter={v => `${v / 1000000}jt`} />
               <Tooltip
-                formatter={(v: number) => [formatRp(v), 'Pendapatan']}
+                formatter={(v: unknown) => formatRp(Number(v))}
                 contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
                 cursor={{ fill: 'rgba(139,94,60,0.04)' }}
               />

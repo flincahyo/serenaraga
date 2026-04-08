@@ -93,7 +93,7 @@ export default function DashboardPage() {
   const netRevenue     = grossRevenue - terapisCut - bhpCut;
   const ownerPct       = Math.max(0, 100 - commissionPct - bhpPct);
 
-  const todayBookings  = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
+  const todayBookings  = bookings.filter(b => b.booking_date === todayStr);
 
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
   const prevMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
@@ -139,7 +139,7 @@ export default function DashboardPage() {
     { label: 'Penghasilan Bersih', value: formatRp(netRevenue),   icon: Wallet,
       change: `Owner ${ownerPct}%`, up: true, sub: `Setelah terapis & BHP` },
     { label: 'Jadwal Hari Ini',   value: String(todayBookings.length), icon: Star,
-      change: 'menunggu', up: true },
+      change: todayBookings.length > 0 ? `${todayBookings.filter(b => b.status === 'Confirmed' || b.status === 'Pending').length} aktif` : '', up: true },
   ];
 
   return (
@@ -257,13 +257,17 @@ export default function DashboardPage() {
               </div>
               {todayBookings.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center">
-                  <p className="text-sm text-zinc-400">Tidak ada jadwal</p>
+                  <p className="text-sm text-zinc-400">Tidak ada jadwal hari ini</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {todayBookings.slice(0, 5).map(b => (
+                  {todayBookings
+                    .sort((a, b) => (a.booking_time ?? '').localeCompare(b.booking_time ?? ''))
+                    .slice(0, 5).map(b => (
                     <div key={b.id} className="flex items-center gap-3">
-                      <span className="text-xs font-mono text-zinc-400 w-10 shrink-0">{b.booking_time ?? '--:--'}</span>
+                      <span className="text-xs font-mono text-zinc-400 w-10 shrink-0">
+                        {b.booking_time ? b.booking_time.slice(0, 5) : '--:--'}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-zinc-900 dark:text-white truncate">{b.customer_name}</p>
                         <p className="text-xs text-zinc-400 truncate">{b.service_name}</p>
@@ -273,6 +277,9 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   ))}
+                  {todayBookings.length > 5 && (
+                    <p className="text-[11px] text-zinc-400 text-center pt-1">+{todayBookings.length - 5} lainnya</p>
+                  )}
                 </div>
               )}
             </div>
@@ -403,7 +410,7 @@ export default function DashboardPage() {
                               onClick={() => setDetailBooking(detailBooking?.id === b.id ? null : b)}
                             >
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-mono text-zinc-400">{b.booking_time ?? '--:--'}</span>
+                                <span className="text-xs font-mono text-zinc-400">{b.booking_time ? b.booking_time.slice(0, 5) : '--:--'}</span>
                                 <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${statusColor[b.status] ?? ''}`}>
                                   {b.status}
                                 </span>

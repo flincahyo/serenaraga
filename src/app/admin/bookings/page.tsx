@@ -27,7 +27,7 @@ const STATUS_STYLES: Record<string, string> = {
   Canceled:  'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
 
-const EMPTY_FORM = { customer_name: '', phone: '', service_name: '', booking_date: '', booking_time: '', price: 0, status: 'Pending', notes: '' };
+const EMPTY_FORM = { customer_name: '', phone: '62', service_name: '', booking_date: '', booking_time: '', price: 0, status: 'Pending', notes: '' };
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -167,9 +167,9 @@ export default function BookingsPage() {
 
       {/* Search */}
       <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
         <input
-          className="admin-input pl-9"
+          className="admin-input pl-10"
           placeholder="Cari nama atau layanan..."
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -190,7 +190,7 @@ export default function BookingsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-zinc-900 dark:text-white">{b.customer_name}</p>
                     <p className="text-xs text-zinc-400 mt-0.5">{b.phone}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ?? ''}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">{b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ? b.booking_time.slice(0, 5) : ''}</p>
                   </div>
                   <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300 shrink-0 hidden md:block">{formatRp(b.price ?? 0)}</p>
 

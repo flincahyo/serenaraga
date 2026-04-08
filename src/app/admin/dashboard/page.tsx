@@ -105,12 +105,11 @@ export default function DashboardPage() {
   const grossRevenue   = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
   const terapisCut     = Math.round(grossRevenue * commissionPct / 100);
 
-  // BHP: gunakan bhp_cost aktual jika ada, fallback ke persentase global
-  const bhpActual      = completedMonth.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const hasActualBhp   = bhpActual > 0;
-  const bhpCut         = hasActualBhp ? bhpActual : Math.round(grossRevenue * bhpPct / 100);
-  const netRevenue     = grossRevenue - terapisCut - bhpCut;
-  const ownerPct       = Math.max(0, 100 - commissionPct - bhpPct);
+  // BHP: gunakan bhp_cost aktual dari per-booking (tidak pakai % lagi)
+  const bhpActual  = completedMonth.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
+  const bhpCut     = bhpActual;
+  const netRevenue = grossRevenue - terapisCut - bhpCut;
+  const ownerPct   = Math.max(0, 100 - commissionPct);
 
   const todayBookings  = bookings.filter(b => b.booking_date === todayStr);
 
@@ -226,18 +225,9 @@ export default function DashboardPage() {
                 </div>
                 {/* BHP */}
                 <div className="px-5 py-4">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <p className="text-[10px] font-medium text-blue-500 uppercase tracking-wide">Modal BHP</p>
-                    {hasActualBhp ? (
-                      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">aktual</span>
-                    ) : (
-                      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">estimasi {bhpPct}%</span>
-                    )}
-                  </div>
+                  <p className="text-[10px] font-medium text-blue-500 uppercase tracking-wide mb-1">Modal BHP</p>
                   <p className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{formatRp(bhpCut)}</p>
-                  <p className="text-[10px] text-blue-400 mt-1">
-                    {hasActualBhp ? 'dari data per booking' : `${bhpPct}% estimasi`}
-                  </p>
+                  <p className="text-[10px] text-blue-400 mt-1">dari data per booking</p>
                 </div>
                 {/* Net */}
                 <div className="px-5 py-4 bg-emerald-50/50 dark:bg-emerald-950/20">
@@ -246,10 +236,12 @@ export default function DashboardPage() {
                   <p className="text-[10px] text-emerald-500 mt-1">{ownerPct}%</p>
                 </div>
               </div>
-              {/* Progress bar */}
+              {/* Progress bar: terapis + bhp (% dari gross) + sisa */}
               <div className="h-1.5 flex">
                 <div className="bg-amber-400 transition-all" style={{ width: `${commissionPct}%` }} />
-                <div className="bg-blue-400 transition-all" style={{ width: `${bhpPct}%` }} />
+                {bhpCut > 0 && grossRevenue > 0 && (
+                  <div className="bg-blue-400 transition-all" style={{ width: `${Math.min(100 - commissionPct, Math.round(bhpCut / grossRevenue * 100))}%` }} />
+                )}
                 <div className="bg-emerald-500 transition-all flex-1" />
               </div>
             </div>

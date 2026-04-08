@@ -32,13 +32,20 @@ type Material = {
 type SvcMat = {
   id: string;
   material_id: string;
-  qty_multiplier: number; // 1 = normal, 2 = pakai 2x lipat
-  material?: Material;
+  qty_multiplier: number;
+  // Supabase returns joins as array — normalize with getMat()
+  material?: Material | Material[] | null;
+};
+
+// Normalize Supabase join result (may be array or single)
+const getMat = (raw: Material | Material[] | null | undefined): Material | null => {
+  if (!raw) return null;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
 };
 
 // Cost per customer untuk service material ini
 const svcMatCost = (sm: SvcMat) => {
-  const m = sm.material;
+  const m = getMat(sm.material);
   if (!m || m.customers_per_pack <= 0) return 0;
   return sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
 };
@@ -142,7 +149,7 @@ export default function ServicesPage() {
       .from('service_materials')
       .select('id, material_id, qty_multiplier, material:materials(id,name,pack_label,pack_price,customers_per_pack,is_global)')
       .eq('service_id', serviceId);
-    if (data) setEditSvcMats(data as SvcMat[]);
+    if (data) setEditSvcMats(data as unknown as SvcMat[]);
     setBhpLoading(false);
   }, []);
 
@@ -359,7 +366,7 @@ export default function ServicesPage() {
                     ) : (
                       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
                         {editSvcMats.map(sm => {
-                          const m = sm.material;
+                          const m = getMat(sm.material);
                           if (!m) return null;
                           const cost = svcMatCost(sm);
                           return (

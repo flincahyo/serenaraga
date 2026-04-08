@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Download, Plus, Trash2, Loader2, Share2, Users, Percent } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { useSettings } from '@/lib/settings';
 
 type Item = { id: number; name: string; duration: string; price: number; };
 type Service = { id: string; name: string; price: number; details: string; category: string; };
@@ -42,26 +41,24 @@ const InvoiceMaker = () => {
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.');
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
+  const [commissionPct, setCommissionPct]  = useState(30);
 
   const supabase = createClient();
-  const { settings } = useSettings();
-
-  const commissionPct = Number(settings.terapis_commission_pct ?? 30);
-  const invoiceFooter = settings.invoice_footer ?? 'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.';
 
   const fetchAll = useCallback(async () => {
     const [{ data: svcData }, { data: bkgData }, { data: settingsData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed', 'Completed']).order('booking_date', { ascending: false }).limit(50),
-      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text']),
+      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct']),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
     if (settingsData) {
       settingsData.forEach(({ key, value }) => {
-        if (key === 'invoice_footer_text') setInvoiceFooter(value);
-        if (key === 'invoice_social_text') setInvoiceSocial(value);
+        if (key === 'invoice_footer_text')   setInvoiceFooter(value);
+        if (key === 'invoice_social_text')   setInvoiceSocial(value);
+        if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
       });
     }
   }, []);

@@ -62,14 +62,6 @@ const BookingSection = () => {
                   <div className="bg-white/10 p-3 rounded-xl"><MapPin size={20} className="text-white" /></div>
                   <p className="font-medium text-sm">{settings.service_area}</p>
                 </div>
-                {settings.operational_note && (
-                  <div className="flex items-center gap-5">
-                    <div className="bg-white/10 p-3 rounded-xl">
-                      <Sparkles size={20} className="text-white" />
-                    </div>
-                    <p className="font-medium text-sm">{settings.operational_note}</p>
-                  </div>
-                )}
               </div>
             </motion.div>
           </div>

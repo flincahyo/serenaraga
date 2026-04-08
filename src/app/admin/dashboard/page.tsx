@@ -7,7 +7,7 @@ import {
   Tooltip, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
-import { useSettings } from '@/lib/settings';
+
 
 type Booking = {
   id: string; customer_name: string; service_name: string;

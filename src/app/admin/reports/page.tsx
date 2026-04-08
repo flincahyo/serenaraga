@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Download, TrendingUp, BarChart3, Loader2, Wallet } from 'lucide-react';
+import { Download, BarChart3, Loader2 } from 'lucide-react';
+
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
-import { useSettings } from '@/lib/settings';
+
 
 type Booking = {
   id: string; service_name: string; booking_date: string;
@@ -164,7 +165,7 @@ export default function ReportsPage() {
                 <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={formatRpShort} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${v/1000000}jt` : String(v)} />
                   <Tooltip
                     formatter={(v: unknown, name: unknown) => [formatRp(Number(v)), name === 'gross' ? 'Kotor' : 'Bersih Owner']}
                     contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
@@ -182,7 +183,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Service Breakdown */}
-          {serviceRows.length > 0 && (
+          {serviceBreakdown.length > 0 && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Performa per Layanan</h2>

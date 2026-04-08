@@ -2,25 +2,16 @@
 
 import React from 'react';
 import InvoiceMaker from '@/components/admin/InvoiceMaker';
-import { Receipt } from 'lucide-react';
 
 export default function InvoicesPage() {
   return (
-    <div className="space-y-10">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Receipt className="text-earth-primary" size={28} />
-            <h1 className="text-3xl font-serif font-bold text-text-primary dark:text-white">Billing & Invoices</h1>
-          </div>
-          <p className="text-text-secondary dark:text-white/40 max-w-xl">
-            Buat rincian biaya profesional untuk pelanggan dan kirim langsung melalui WhatsApp dalam format gambar.
-          </p>
-        </div>
+    <div className="space-y-5 max-w-6xl mx-auto">
+      <div>
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Invoice</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+          Buat & kirim rincian biaya langsung ke WhatsApp pelanggan
+        </p>
       </div>
-
-      {/* Main Feature */}
       <InvoiceMaker />
     </div>
   );

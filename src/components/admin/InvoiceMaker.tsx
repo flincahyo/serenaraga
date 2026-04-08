@@ -1,232 +1,331 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { 
-  Download, 
-  Copy, 
-  Send, 
-  RefreshCcw, 
-  Plus, 
-  Trash2,
-  Image as ImageIcon
-} from 'lucide-react';
+import { Download, Send, Plus, Trash2, Loader2, Share2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase';
+
+type Item = { id: number; name: string; duration: string; price: number; };
+type Service = { id: string; name: string; price: number; details: string; category: string; };
+
+const pad = (n: number) => String(n).padStart(3, '0');
+const genInvoiceNo = () => {
+  const now = new Date();
+  return `SR-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${pad(Math.floor(Math.random() * 900) + 100)}`;
+};
 
 const InvoiceMaker = () => {
   const invoiceRef = useRef<HTMLDivElement>(null);
-  const [invoiceNumber, setInvoiceNumber] = useState(`SR-${new Date().getFullYear()}-001`);
+  const [invoiceNumber] = useState(genInvoiceNo);
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [items, setItems] = useState([
-    { id: 1, name: 'Traditional Massage', duration: '90m', price: 250000 },
+  const [items, setItems] = useState<Item[]>([
+    { id: 1, name: '', duration: '', price: 0 },
   ]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [generating, setGenerating] = useState(false);
 
-  const addItem = () => {
-    setItems([...items, { id: Date.now(), name: '', duration: '', price: 0 }]);
+  const supabase = createClient();
+
+  const fetchServices = useCallback(async () => {
+    const { data } = await supabase
+      .from('services')
+      .select('id, name, price, details, category')
+      .order('category').order('sort_order');
+    if (data) setServices(data);
+  }, []);
+
+  useEffect(() => { fetchServices(); }, [fetchServices]);
+
+  const addItem = () => setItems(prev => [...prev, { id: Date.now(), name: '', duration: '', price: 0 }]);
+  const removeItem = (id: number) => setItems(prev => prev.filter(i => i.id !== id));
+  const updateItem = (id: number, field: keyof Item, value: string | number) =>
+    setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+
+  const onServiceSelect = (itemId: number, serviceName: string) => {
+    const svc = services.find(s => s.name === serviceName);
+    if (!svc) return;
+    // Extract duration from details (e.g. "60 menit" or "90 menit")
+    const durationMatch = svc.details?.match(/(\d+)\s*m(?:enit)?/i);
+    const duration = durationMatch ? `${durationMatch[1]}m` : '';
+    setItems(prev => prev.map(i => i.id === itemId
+      ? { ...i, name: svc.name, price: svc.price, duration }
+      : i
+    ));
   };
 
-  const removeItem = (id: number) => {
-    setItems(items.filter(item => item.id !== id));
-  };
+  const totalPrice = items.reduce((s, i) => s + Number(i.price), 0);
 
-  const updateItem = (id: number, field: string, value: any) => {
-    setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
-  };
-
-  const totalPrice = items.reduce((sum, item) => sum + Number(item.price), 0);
-
-  const downloadInvoice = async () => {
-    if (invoiceRef.current === null) return;
-    
+  const generateImage = async (): Promise<{ dataUrl: string; blob: Blob } | null> => {
+    if (!invoiceRef.current) return null;
+    setGenerating(true);
     try {
       const dataUrl = await toPng(invoiceRef.current, { cacheBust: true, pixelRatio: 2 });
-      const link = document.createElement('a');
-      link.download = `Invoice-${invoiceNumber}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (err) {
-      console.error('oops, something went wrong!', err);
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      return { dataUrl, blob };
+    } catch (e) {
+      console.error(e);
+      return null;
+    } finally {
+      setGenerating(false);
     }
   };
 
+  const downloadInvoice = async () => {
+    const result = await generateImage();
+    if (!result) return;
+    const link = document.createElement('a');
+    link.download = `Invoice-${invoiceNumber}.png`;
+    link.href = result.dataUrl;
+    link.click();
+  };
+
+  const shareToWhatsApp = async () => {
+    const result = await generateImage();
+    if (!result) return;
+
+    const file = new File([result.blob], `Invoice-${invoiceNumber}.png`, { type: 'image/png' });
+
+    // Try native share (works on mobile: iOS Safari, Android Chrome)
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Invoice ${invoiceNumber} - SerenaRaga`,
+          text: `Invoice untuk ${customerName || 'pelanggan'}\nTotal: Rp ${totalPrice.toLocaleString('id-ID')}`,
+        });
+        return;
+      } catch (e) {
+        // User cancelled share — that's okay
+        if ((e as Error).name === 'AbortError') return;
+      }
+    }
+
+    // Fallback for desktop: open WA with text, then download image
+    const msg = `Invoice ${invoiceNumber} untuk ${customerName || 'pelanggan'}\nTotal: Rp ${totalPrice.toLocaleString('id-ID')}\n\n*(Gambar invoice dilampirkan)*`;
+    const phone = customerPhone.replace(/\D/g, '');
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+    // Also trigger download so they can attach it
+    const link = document.createElement('a');
+    link.download = `Invoice-${invoiceNumber}.png`;
+    link.href = result.dataUrl;
+    link.click();
+  };
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    packages: 'Paket Massage',
+    services: 'Massage Services',
+    reflexology: 'Refleksi',
+    addons: 'Add-On',
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-      {/* Form Section */}
-      <div className="space-y-8 bg-white dark:bg-white/5 p-8 md:p-10 rounded-[2.5rem] border border-earth-primary/5 dark:border-white/5 shadow-sm">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-12 h-12 bg-earth-primary/10 rounded-2xl flex items-center justify-center text-earth-primary">
-            <Plus size={24} />
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-12">
+      {/* ── FORM SECTION ── */}
+      <div className="space-y-5 bg-white dark:bg-zinc-900 p-5 sm:p-8 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+          <Plus size={16} className="text-earth-primary" /> Buat Invoice Baru
+        </h2>
+
+        {/* Invoice No + Date */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">No. Invoice</label>
+            <input type="text" value={invoiceNumber} readOnly className="admin-input bg-zinc-50 dark:bg-zinc-800 font-mono text-xs opacity-70 cursor-not-allowed" />
           </div>
-          <h2 className="text-xl font-bold dark:text-white">Buat Invoice Baru</h2>
+          <div>
+            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Tanggal</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="admin-input" />
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black tracking-widest text-text-secondary/60 ml-2">No. Invoice</label>
-              <input 
-                type="text" 
-                value={invoiceNumber} 
-                onChange={(e) => setInvoiceNumber(e.target.value)}
-                className="w-full bg-bg-cream dark:bg-white/5 p-4 rounded-2xl text-sm border-none outline-none dark:text-white" 
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] uppercase font-black tracking-widest text-text-secondary/60 ml-2">Tanggal</label>
-              <input 
-                type="date" 
-                value={date} 
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-bg-cream dark:bg-white/5 p-4 rounded-2xl text-sm border-none outline-none dark:text-white" 
-              />
-            </div>
+        {/* Customer */}
+        <div>
+          <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Nama Pelanggan</label>
+          <input type="text" placeholder="Contoh: Ibu Rina" value={customerName} onChange={e => setCustomerName(e.target.value)} className="admin-input" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-zinc-500 mb-1.5 block">No. WhatsApp (untuk kirim langsung)</label>
+          <input type="tel" placeholder="628xxx" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className="admin-input" />
+        </div>
+
+        {/* Items */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="text-xs font-medium text-zinc-500">Daftar Layanan</label>
+            <button onClick={addItem} className="text-xs text-earth-primary font-semibold hover:underline">+ Tambah Item</button>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase font-black tracking-widest text-text-secondary/60 ml-2">Nama Pelanggan</label>
-            <input 
-              type="text" 
-              placeholder="Contoh: Ibu Rina"
-              value={customerName} 
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full bg-bg-cream dark:bg-white/5 p-4 rounded-2xl text-sm border-none outline-none dark:text-white" 
-            />
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between items-center px-2">
-              <label className="text-[10px] uppercase font-black tracking-widest text-text-secondary/60">Daftar Layanan</label>
-              <button onClick={addItem} className="text-earth-primary text-xs font-bold hover:underline">+ Tambah Item</button>
-            </div>
-            
+          <div className="space-y-3">
             {items.map((item) => (
-              <div key={item.id} className="grid grid-cols-12 gap-3 items-end bg-bg-cream/50 dark:bg-white/5 p-4 rounded-2xl border border-earth-primary/5">
-                <div className="col-span-12 md:col-span-5 space-y-1">
-                  <input 
-                    placeholder="Nama Layanan"
-                    value={item.name} 
-                    onChange={(e) => updateItem(item.id, 'name', e.target.value)}
-                    className="w-full bg-transparent p-1 border-b border-earth-primary/10 outline-none text-sm dark:text-white" 
-                  />
-                </div>
-                <div className="col-span-4 md:col-span-2 space-y-1">
-                  <input 
-                    placeholder="Duraso"
-                    value={item.duration} 
-                    onChange={(e) => updateItem(item.id, 'duration', e.target.value)}
-                    className="w-full bg-transparent p-1 border-b border-earth-primary/10 outline-none text-sm dark:text-white text-center" 
-                  />
-                </div>
-                <div className="col-span-6 md:col-span-4 space-y-1">
-                  <input 
-                    type="number"
-                    placeholder="Harga"
-                    value={item.price} 
-                    onChange={(e) => updateItem(item.id, 'price', e.target.value)}
-                    className="w-full bg-transparent p-1 border-b border-earth-primary/10 outline-none text-sm dark:text-white text-right font-mono" 
-                  />
-                </div>
-                <div className="col-span-2 md:col-span-1 pb-1">
-                  <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-500 transition-colors">
-                    <Trash2 size={18} />
-                  </button>
+              <div key={item.id} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-2">
+                {/* Service picker */}
+                <select
+                  value={item.name}
+                  onChange={e => onServiceSelect(item.id, e.target.value)}
+                  className="admin-input text-xs"
+                >
+                  <option value="">-- Pilih dari pricelist --</option>
+                  {['packages', 'services', 'reflexology', 'addons'].map(cat => (
+                    <optgroup key={cat} label={CATEGORY_LABELS[cat] ?? cat}>
+                      {services.filter(s => s.category === cat).map(s => (
+                        <option key={s.id} value={s.name}>{s.name} — Rp {s.price.toLocaleString('id-ID')}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+
+                <div className="grid grid-cols-12 gap-2 items-center">
+                  <div className="col-span-5">
+                    <input
+                      placeholder="Nama (opsional edit)"
+                      value={item.name}
+                      onChange={e => updateItem(item.id, 'name', e.target.value)}
+                      className="admin-input text-xs"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      placeholder="Durasi"
+                      value={item.duration}
+                      onChange={e => updateItem(item.id, 'duration', e.target.value)}
+                      className="admin-input text-xs text-center"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <input
+                      type="number"
+                      placeholder="Harga"
+                      value={item.price || ''}
+                      onChange={e => updateItem(item.id, 'price', Number(e.target.value))}
+                      className="admin-input text-xs text-right font-mono"
+                    />
+                  </div>
+                  <div className="col-span-1 flex justify-center">
+                    <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-500 p-1">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Preview & Snapshot Section */}
-      <div className="space-y-8">
-        <div className="flex justify-between items-center px-4">
-          <h3 className="text-sm font-bold text-text-primary dark:text-white uppercase tracking-widest flex items-center gap-2">
-            <ImageIcon size={18} className="text-earth-primary" /> Visual Preview
-          </h3>
-          <div className="flex gap-3">
-            <button 
-              onClick={downloadInvoice}
-              className="p-3 bg-earth-primary text-white rounded-xl hover:bg-earth-dark transition-all shadow-lg"
-              title="Download as Image"
-            >
-              <Download size={20} />
-            </button>
-          </div>
+        {/* Total */}
+        <div className="flex justify-between items-center bg-earth-primary/5 dark:bg-earth-primary/10 rounded-xl px-4 py-3">
+          <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total</span>
+          <span className="text-lg font-bold text-earth-primary font-mono">Rp {totalPrice.toLocaleString('id-ID')}</span>
         </div>
 
-        {/* The Capture Area (Optimized for Image Snapshot) */}
-        <div className="overflow-hidden rounded-[2.5rem] shadow-2xl border border-earth-primary/5">
-          <div 
-            ref={invoiceRef} 
-            className="bg-[#FDFBF7] p-12 w-[500px] min-h-[700px] text-zinc-900 font-sans"
+        {/* Actions */}
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={shareToWhatsApp}
+            disabled={generating}
+            className="admin-btn-primary flex-1 justify-center py-3 disabled:opacity-60"
+          >
+            {generating ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
+            Kirim WA
+          </button>
+          <button
+            onClick={downloadInvoice}
+            disabled={generating}
+            className="admin-btn-ghost px-4 py-3 disabled:opacity-60"
+            title="Download PNG"
+          >
+            <Download size={15} />
+          </button>
+        </div>
+
+        <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
+          "Kirim WA" akan membuka WhatsApp dengan pesan + gambar invoice.<br />
+          Di HP: langsung share. Di laptop: gambar di-download + WA dibuka.
+        </p>
+      </div>
+
+      {/* ── PREVIEW SECTION ── */}
+      <div className="space-y-4">
+        <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest px-1">Preview Invoice</h3>
+
+        {/* Scrollable wrapper for fixed-width invoice */}
+        <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg">
+          <div
+            ref={invoiceRef}
+            className="bg-[#FDFBF7] p-10 text-zinc-900 font-sans"
+            style={{ width: 480, minHeight: 680 }}
           >
             {/* Header */}
-            <div className="flex justify-between items-start mb-16">
+            <div className="flex justify-between items-start mb-14">
               <div>
-                <h1 className="text-3xl font-serif font-black tracking-tighter text-zinc-900">
-                  Serena<span className="text-[#8B5E3C]">Raga</span>
+                <h1 className="text-2xl font-serif font-black tracking-tighter text-zinc-900">
+                  Serena<span style={{ color: '#8B5E3C' }}>Raga</span>
                 </h1>
-                <p className="text-[8px] uppercase tracking-[0.4em] font-bold text-[#8B5E3C] mt-1">Exclusive Home Massage</p>
+                <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>
+                  EXCLUSIVE HOME MASSAGE
+                </p>
               </div>
               <div className="text-right">
-                <div className="inline-block px-4 py-1.5 bg-[#8B5E3C] text-white text-[10px] font-black italic rounded-lg mb-3">INVOICE</div>
-                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{invoiceNumber}</p>
+                <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8 }}>
+                  INVOICE
+                </div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.15em' }}>{invoiceNumber}</p>
               </div>
             </div>
 
             {/* Bill To */}
-            <div className="border-l-4 border-[#8B5E3C] pl-6 mb-16">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#8B5E3C]/50 mb-2">Ditujukan Untuk:</p>
-              <h4 className="text-xl font-bold">{customerName || 'Nama Pelanggan'}</h4>
-              <p className="text-xs text-zinc-400 mt-1">{new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <div style={{ borderLeft: '4px solid #8B5E3C', paddingLeft: 20, marginBottom: 48 }}>
+              <p style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(139,94,60,0.5)', marginBottom: 6 }}>Ditujukan Untuk:</p>
+              <h4 style={{ fontSize: 18, fontWeight: 700 }}>{customerName || 'Nama Pelanggan'}</h4>
+              <p style={{ fontSize: 11, color: '#a1a1aa', marginTop: 4 }}>
+                {new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
             </div>
 
             {/* Table */}
-            <div className="space-y-6 mb-20 text-sm">
-              <div className="grid grid-cols-12 border-b border-zinc-100 pb-4 text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                <div className="col-span-8">Layanan & Durasi</div>
-                <div className="col-span-4 text-right">Harga</div>
+            <div style={{ marginBottom: 48 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f4f4f5', paddingBottom: 12, marginBottom: 16, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
+                <span>Layanan &amp; Durasi</span>
+                <span>Harga</span>
               </div>
-              
               {items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-12 items-center">
-                  <div className="col-span-8">
-                    <p className="font-bold text-zinc-800">{item.name || 'Pilih Layanan...'}</p>
-                    <p className="text-[10px] text-zinc-400 italic font-medium">{item.duration}</p>
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13 }}>{item.name || 'Pilih Layanan...'}</p>
+                    {item.duration && <p style={{ fontSize: 10, color: '#a1a1aa', fontStyle: 'italic' }}>{item.duration}</p>}
                   </div>
-                  <div className="col-span-4 text-right font-bold text-zinc-900 tabular-nums">
+                  <p style={{ fontWeight: 700, fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>
                     Rp {Number(item.price).toLocaleString('id-ID')}
-                  </div>
+                  </p>
                 </div>
               ))}
 
-              <div className="pt-10 space-y-3">
-                <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              {/* Totals */}
+              <div style={{ marginTop: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>
                   <span>Subtotal</span>
                   <span>Rp {totalPrice.toLocaleString('id-ID')}</span>
                 </div>
-                <div className="flex justify-between items-center p-6 bg-[#8B5E3C] rounded-2xl text-white">
-                  <span className="text-xs font-black uppercase tracking-widest">Total Bayar</span>
-                  <span className="text-xl font-bold italic">Rp {totalPrice.toLocaleString('id-ID')}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#8B5E3C', borderRadius: 14, color: '#fff' }}>
+                  <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Bayar</span>
+                  <span style={{ fontSize: 18, fontWeight: 700, fontStyle: 'italic' }}>Rp {totalPrice.toLocaleString('id-ID')}</span>
                 </div>
               </div>
             </div>
 
             {/* Footer */}
-            <div className="text-center pt-10 border-t border-zinc-100">
-              <p className="text-xs italic text-zinc-400">Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.</p>
-              <p className="text-[10px] font-bold text-[#8B5E3C] uppercase tracking-[0.2em] mt-3">Instagram: @serena.raga</p>
+            <div style={{ textAlign: 'center', paddingTop: 24, borderTop: '1px solid #f4f4f5' }}>
+              <p style={{ fontSize: 11, fontStyle: 'italic', color: '#a1a1aa' }}>
+                Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.
+              </p>
+              <p style={{ fontSize: 9, fontWeight: 700, color: '#8B5E3C', textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: 10 }}>
+                Instagram &amp; Threads: @serena.raga
+              </p>
             </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 bg-emerald-500/10 p-6 rounded-2xl border border-emerald-500/20">
-          <div className="bg-emerald-500 text-white p-2 rounded-lg">
-            <Send size={20} />
-          </div>
-          <div>
-            <p className="text-xs font-bold text-emerald-800 dark:text-emerald-400">Siap Kirim WhatsApp</p>
-            <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/50 mt-1">Download gambar dan tempel langsung ke chat pelanggan.</p>
           </div>
         </div>
       </div>

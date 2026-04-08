@@ -2,59 +2,54 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  CalendarCheck,
-  ClipboardList,
-  Receipt,
-  BarChart3,
-  Image,
-  X,
-  LogOut,
+  LayoutDashboard, CalendarCheck, ClipboardList,
+  Receipt, BarChart3, Image, X, LogOut,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { createClient } from '@/lib/supabase';
 
 const navItems = [
-  { name: 'Dashboard',   icon: LayoutDashboard, href: '/admin/dashboard' },
-  { name: 'Bookings',    icon: CalendarCheck,   href: '/admin/bookings' },
-  { name: 'Services',    icon: ClipboardList,   href: '/admin/services' },
-  { name: 'Invoices',    icon: Receipt,         href: '/admin/invoices' },
-  { name: 'Reports',     icon: BarChart3,       href: '/admin/reports' },
-  { name: 'Konten',      icon: Image,           href: '/admin/content' },
+  { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
+  { name: 'Bookings',  icon: CalendarCheck,   href: '/admin/bookings' },
+  { name: 'Services',  icon: ClipboardList,   href: '/admin/services' },
+  { name: 'Invoices',  icon: Receipt,         href: '/admin/invoices' },
+  { name: 'Reports',   icon: BarChart3,       href: '/admin/reports' },
+  { name: 'Konten',    icon: Image,           href: '/admin/content' },
 ];
 
-interface SidebarProps {
-  open: boolean;
-  onClose: () => void;
-}
+interface SidebarProps { open: boolean; onClose: () => void; }
 
 const Sidebar = ({ open, onClose }: SidebarProps) => {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/admin');
+    router.refresh();
+  };
 
   return (
     <>
       {/* Mobile Overlay */}
       {open && (
-        <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onClose} />
       )}
 
-      <aside
-        className={`
-          fixed left-0 top-0 h-full z-40 flex flex-col
-          w-64 bg-white dark:bg-zinc-950
-          border-r border-zinc-100 dark:border-zinc-800
-          transition-transform duration-300 ease-in-out
-          ${open ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0
-        `}
-      >
+      <aside className={`
+        fixed left-0 top-0 h-full z-40 flex flex-col
+        w-64 bg-white dark:bg-zinc-950
+        border-r border-zinc-100 dark:border-zinc-800
+        transition-transform duration-300 ease-in-out
+        ${open ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0
+      `}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-100 dark:border-zinc-800">
-          <Link href="/admin/dashboard" className="flex flex-col leading-tight">
+          <Link href="/admin/dashboard" className="flex flex-col leading-tight" onClick={onClose}>
             <span className="text-lg font-bold tracking-tight dark:text-white font-sans">
               Serena<span className="text-earth-primary">Raga</span>
             </span>
@@ -108,13 +103,13 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
             </div>
             <ThemeToggle />
           </div>
-          <Link
-            href="/admin"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
           >
             <LogOut size={17} />
             Logout
-          </Link>
+          </button>
         </div>
       </aside>
     </>

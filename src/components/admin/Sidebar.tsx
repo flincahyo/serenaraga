@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2,
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { createClient } from '@/lib/supabase';
@@ -14,6 +14,7 @@ const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard' },
   { name: 'Bookings',  icon: CalendarCheck,   href: '/admin/bookings' },
   { name: 'Services',  icon: ClipboardList,   href: '/admin/services' },
+  { name: 'Bahan (BHP)', icon: FlaskConical,  href: '/admin/materials' },
   { name: 'Invoices',  icon: Receipt,         href: '/admin/invoices' },
   { name: 'Reports',   icon: BarChart3,       href: '/admin/reports' },
   { name: 'Konten',    icon: Image,           href: '/admin/content' },

@@ -89,12 +89,59 @@ export default function BookingsPage() {
     setShowForm(true);
   };
 
+  // Hitung BHP aktual berdasarkan service_materials + global materials
+  const calculateBhpCost = async (serviceName: string): Promise<number> => {
+    const svc = services.find(s => s.name === serviceName);
+    if (!svc) return 0;
+
+    const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
+      supabase
+        .from('service_materials')
+        .select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)')
+        .eq('service_id', svc.id),
+      supabase
+        .from('materials')
+        .select('id, pack_price, customers_per_pack')
+        .eq('is_global', true),
+    ]);
+
+    type SvcMatRow = { qty_multiplier: number; material: { id: string; pack_price: number; customers_per_pack: number; is_global: boolean } | null };
+    type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
+
+    // IDs material yg sudah ada di service_materials (termasuk yg global di-assign manual)
+    const assignedGlobalIds = new Set(
+      ((svcMats ?? []) as SvcMatRow[])
+        .filter(sm => sm.material?.is_global)
+        .map(sm => sm.material!.id)
+    );
+
+    let total = 0;
+
+    // Bahan spesifik layanan
+    for (const sm of (svcMats ?? []) as SvcMatRow[]) {
+      const m = sm.material;
+      if (!m || m.customers_per_pack <= 0) continue;
+      total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
+    }
+
+    // Tambah bahan global yang belum ter-include (hindari hitung dobel)
+    for (const gm of (globalMats ?? []) as GlobalMatRow[]) {
+      if (assignedGlobalIds.has(gm.id)) continue; // sudah dihitung di atas
+      if (gm.customers_per_pack <= 0) continue;
+      total += 1 * (gm.pack_price / gm.customers_per_pack);
+    }
+
+    return Math.round(total);
+  };
+
   const saveBooking = async () => {
     setSaving(true);
+    const bhp_cost = form.service_name ? await calculateBhpCost(form.service_name) : 0;
+    const payload = { ...form, bhp_cost };
     if (editId) {
-      await supabase.from('bookings').update(form).eq('id', editId);
+      await supabase.from('bookings').update(payload).eq('id', editId);
     } else {
-      await supabase.from('bookings').insert(form);
+      await supabase.from('bookings').insert(payload);
     }
     await fetchData();
     setShowForm(false);

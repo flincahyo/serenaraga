@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent, FlaskConical, Globe2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useSettings } from '@/lib/settings';
 
@@ -18,6 +18,29 @@ type Service = {
   featured_description: string | null;
   featured_duration: string | null;
   sort_order: number;
+};
+
+type Material = {
+  id: string;
+  name: string;
+  pack_label: string;
+  pack_price: number;
+  customers_per_pack: number;
+  is_global: boolean;
+};
+
+type SvcMat = {
+  id: string;
+  material_id: string;
+  qty_multiplier: number; // 1 = normal, 2 = pakai 2x lipat
+  material?: Material;
+};
+
+// Cost per customer untuk service material ini
+const svcMatCost = (sm: SvcMat) => {
+  const m = sm.material;
+  if (!m || m.customers_per_pack <= 0) return 0;
+  return sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
 };
 
 const CATEGORIES = [
@@ -87,18 +110,41 @@ export default function ServicesPage() {
   });
   const [newSplit, setNewSplit] = useState(30);
 
+  // BHP state
+  const [allMaterials, setAllMaterials]     = useState<Material[]>([]);
+  const [editSvcMats, setEditSvcMats]       = useState<SvcMat[]>([]);
+  const [bhpLoading, setBhpLoading]         = useState(false);
+  const [addMatId, setAddMatId]             = useState('');
+  const [addMatQty, setAddMatQty]           = useState<number>(1);
+  const [addingMat, setAddingMat]           = useState(false);
+
   const { settings } = useSettings();
   const defaultCommission = Number(settings.terapis_commission_pct ?? 30);
   const supabase = createClient();
 
   const fetchServices = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('services').select('*').order('category').order('sort_order');
-    if (data) setServices(data);
+    const [{ data: svcData }, { data: matData }] = await Promise.all([
+      supabase.from('services').select('*').order('category').order('sort_order'),
+      supabase.from('materials').select('id,name,pack_label,pack_price,customers_per_pack,is_global').order('name'),
+    ]);
+    if (svcData) setServices(svcData);
+    if (matData) setAllMaterials(matData);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchServices(); }, [fetchServices]);
+
+  // Fetch service_materials for the service being edited
+  const fetchSvcMats = useCallback(async (serviceId: string) => {
+    setBhpLoading(true);
+    const { data } = await supabase
+      .from('service_materials')
+      .select('id, material_id, qty_multiplier, material:materials(id,name,pack_label,pack_price,customers_per_pack,is_global)')
+      .eq('service_id', serviceId);
+    if (data) setEditSvcMats(data as SvcMat[]);
+    setBhpLoading(false);
+  }, []);
 
   const filtered = services.filter(s => s.category === activeTab);
   const cat = CATEGORIES.find(c => c.id === activeTab);
@@ -113,6 +159,10 @@ export default function ServicesPage() {
       featured_description: s.featured_description ?? '',
       featured_duration: s.featured_duration ?? '',
     });
+    setEditSvcMats([]);
+    setAddMatId('');
+    setAddMatQty(1);
+    fetchSvcMats(s.id);
   };
 
   const saveEdit = async () => {
@@ -123,6 +173,28 @@ export default function ServicesPage() {
     setEditId(null);
     setSaving(false);
   };
+
+  // Add material to current service
+  const addServiceMaterial = async () => {
+    if (!editId || !addMatId || addMatQty <= 0) return;
+    setAddingMat(true);
+    await supabase.from('service_materials').upsert({
+      service_id: editId, material_id: addMatId, qty_multiplier: addMatQty,
+    }, { onConflict: 'service_id,material_id' });
+    await fetchSvcMats(editId);
+    setAddMatId('');
+    setAddMatQty(1);
+    setAddingMat(false);
+  };
+
+  // Remove material from current service
+  const removeSvcMat = async (smId: string) => {
+    await supabase.from('service_materials').delete().eq('id', smId);
+    setEditSvcMats(prev => prev.filter(sm => sm.id !== smId));
+  };
+
+  // Total BHP per sesi (non-global; global masuk otomatis di booking)
+  const editTotalBhp = editSvcMats.reduce((s, sm) => s + svcMatCost(sm), 0);
 
   const toggleBestseller = async (s: Service) => {
     await supabase.from('services').update({ is_bestseller: !s.is_bestseller }).eq('id', s.id);
@@ -271,6 +343,108 @@ export default function ServicesPage() {
                       {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Simpan
                     </button>
                     <button onClick={() => setEditId(null)} className="admin-btn-ghost"><X size={14} /> Batal</button>
+                  </div>
+
+                  {/* ── BHP Editor ── */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+                      <FlaskConical size={14} className="text-earth-primary" />
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">BHP Layanan Ini</span>
+                      {bhpLoading && <Loader2 size={12} className="animate-spin text-zinc-400 ml-1" />}
+                    </div>
+
+                    {/* Existing materials */}
+                    {editSvcMats.length === 0 && !bhpLoading ? (
+                      <p className="text-xs text-zinc-400 text-center py-4">Belum ada bahan. Tambah di bawah.</p>
+                    ) : (
+                      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {editSvcMats.map(sm => {
+                          const m = sm.material;
+                          if (!m) return null;
+                          const cost = svcMatCost(sm);
+                          return (
+                            <div key={sm.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm text-zinc-800 dark:text-zinc-200">{m.name}</span>
+                                  {m.is_global && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                      <Globe2 size={8} /> global
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-zinc-400">
+                                  {formatRp(m.pack_price)} ÷ {m.customers_per_pack} customer
+                                  {sm.qty_multiplier !== 1 && (
+                                    <span className="text-amber-500 ml-1">× {sm.qty_multiplier}x
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <span className="text-xs font-mono font-semibold text-earth-primary shrink-0">
+                                {formatRp(cost)}
+                              </span>
+                              <button onClick={() => removeSvcMat(sm.id)}
+                                className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-zinc-300 hover:text-red-500 shrink-0">
+                                <X size={13} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {/* Total */}
+                        <div className="flex justify-between items-center px-4 py-2.5 bg-earth-primary/5 dark:bg-earth-primary/10">
+                          <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Total BHP per customer</span>
+                          <span className="text-sm font-bold font-mono text-earth-primary">{formatRp(editTotalBhp)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add material row */}
+                    <div className="flex gap-2 p-3 bg-zinc-50/60 dark:bg-zinc-800/40 border-t border-zinc-100 dark:border-zinc-700">
+                      <select
+                        value={addMatId}
+                        onChange={e => setAddMatId(e.target.value)}
+                        className="admin-input text-xs flex-1"
+                      >
+                        <option value="">-- Pilih bahan --</option>
+                        {allMaterials
+                          .filter(m => !editSvcMats.find(sm => sm.material_id === m.id))
+                          .map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}{m.pack_label ? ` (${m.pack_label})` : ''}{m.is_global ? ' · global' : ''}
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        type="number" min={1} step={1}
+                        value={addMatQty || ''}
+                        onChange={e => setAddMatQty(Math.max(1, Math.round(Number(e.target.value))))}
+                        title="Multiplier: 1 = pakai normal, 2 = pakai 2x lipat"
+                        placeholder="1×"
+                        className="admin-input text-xs w-16 font-mono text-center"
+                      />
+                      <button
+                        onClick={addServiceMaterial}
+                        disabled={!addMatId || addMatQty <= 0 || addingMat}
+                        className="admin-btn-primary py-1.5 px-3 disabled:opacity-50"
+                      >
+                        {addingMat ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                      </button>
+                    </div>
+                    {/* Preview cost hint */}
+                    {addMatId && (() => {
+                      const mat = allMaterials.find(m => m.id === addMatId);
+                      if (!mat) return null;
+                      const baseCost = mat.customers_per_pack > 0 ? mat.pack_price / mat.customers_per_pack : 0;
+                      const cost = addMatQty * baseCost;
+                      return (
+                        <p className="text-[11px] text-zinc-400 px-4 pb-2">
+                          {formatRp(mat.pack_price)} ÷ {mat.customers_per_pack} customer
+                          {addMatQty !== 1 && <span className="text-amber-500"> × {addMatQty}x</span>} =&nbsp;
+                          <span className="font-mono font-semibold text-earth-primary">{formatRp(cost)}/customer</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
               ) : (

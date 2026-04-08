@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase';
 type Booking = {
   id: string; customer_name: string; service_name: string;
   booking_date: string; booking_time: string; price: number; status: string;
-  phone?: string; notes?: string;
+  phone?: string; notes?: string; bhp_cost?: number;
 };
 
 const statusColor: Record<string, string> = {
@@ -35,6 +35,16 @@ const formatRp   = (n: number) => n >= 1000000
   : `Rp ${n.toLocaleString('id-ID')}`;
 const formatRpFull = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
+// Helper: tanggal dalam format YYYY-MM-DD sesuai WIB (UTC+7), bukan UTC
+const toWIBDateStr = (date: Date): string =>
+  date.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+// Helper: ambil tahun & bulan lokal WIB dari Date object
+const getWIBParts = (date: Date) => {
+  const wib = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+  return { y: wib.getFullYear(), m: wib.getMonth(), day: wib.getDate() };
+};
+
 export default function DashboardPage() {
   const [loading, setLoading]             = useState(true);
   const [bookings, setBookings]           = useState<Booking[]>([]);
@@ -42,9 +52,10 @@ export default function DashboardPage() {
   const [commissionPct, setCommissionPct] = useState(30);
   const [bhpPct, setBhpPct]               = useState(10);
 
-  // Calendar state
+  // Calendar state — gunakan WIB untuk inisialisasi
   const [calMonth, setCalMonth] = useState(() => {
-    const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() };
+    const { y, m } = getWIBParts(new Date());
+    return { y, m };
   });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
@@ -62,11 +73,13 @@ export default function DashboardPage() {
       setBookings(allBookings);
       const last7: { day: string; bookings: number }[] = [];
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(d.getDate() - (6 - i));
-        const dateStr = d.toISOString().split('T')[0];
+        // Gunakan offset milidetik agar hari ke-i dihitung dalam WIB
+        const d = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000);
+        const dateStr = toWIBDateStr(d);
         const count   = allBookings.filter(b => b.booking_date === dateStr).length;
-        last7.push({ day: DAYS_ID[d.getDay()], bookings: count });
+        // getDay() dari representasi WIB
+        const dayIdx  = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })).getDay();
+        last7.push({ day: DAYS_ID[dayIdx], bookings: count });
       }
       setWeeklyData(last7);
     }
@@ -81,27 +94,41 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const now          = new Date();
-  const todayStr     = now.toISOString().split('T')[0];
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const now             = new Date();
+  // Semua perbandingan tanggal menggunakan WIB (UTC+7)
+  const todayStr        = toWIBDateStr(now);
+  const { y: wibY, m: wibM } = getWIBParts(now);
+  const startOfMonth    = `${wibY}-${String(wibM + 1).padStart(2, '0')}-01`;
 
   const monthBookings  = bookings.filter(b => b.booking_date >= startOfMonth);
   const completedMonth = monthBookings.filter(b => b.status === 'Completed');
   const grossRevenue   = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
   const terapisCut     = Math.round(grossRevenue * commissionPct / 100);
-  const bhpCut         = Math.round(grossRevenue * bhpPct / 100);
+
+  // BHP: gunakan bhp_cost aktual jika ada, fallback ke persentase global
+  const bhpActual      = completedMonth.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
+  const hasActualBhp   = bhpActual > 0;
+  const bhpCut         = hasActualBhp ? bhpActual : Math.round(grossRevenue * bhpPct / 100);
   const netRevenue     = grossRevenue - terapisCut - bhpCut;
   const ownerPct       = Math.max(0, 100 - commissionPct - bhpPct);
 
   const todayBookings  = bookings.filter(b => b.booking_date === todayStr);
 
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-  const prevMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-  const prevMonthBkg   = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd);
-  const bookingChange  = prevMonthBkg.length > 0
+  // Bulan lalu dalam WIB
+  const prevWibM        = wibM === 0 ? 11 : wibM - 1;
+  const prevWibY        = wibM === 0 ? wibY - 1 : wibY;
+  const prevMonthStart  = `${prevWibY}-${String(prevWibM + 1).padStart(2, '0')}-01`;
+  const prevMonthLastDay = new Date(wibY, wibM, 0).getDate();
+  const prevMonthEnd    = `${prevWibY}-${String(prevWibM + 1).padStart(2, '0')}-${String(prevMonthLastDay).padStart(2, '0')}`;
+  const prevMonthBkg    = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd);
+  const bookingChange   = prevMonthBkg.length > 0
     ? Math.round(((monthBookings.length - prevMonthBkg.length) / prevMonthBkg.length) * 100) : 0;
 
-  const today = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  // Tampilkan tanggal hari ini dalam WIB
+  const today = now.toLocaleDateString('id-ID', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'Asia/Jakarta',
+  });
 
   // ── Calendar helpers ──
   const calFirstDay = new Date(calMonth.y, calMonth.m, 1).getDay();
@@ -118,15 +145,17 @@ export default function DashboardPage() {
 
   const prevCal = () => {
     setCalMonth(p => {
-      const d = new Date(p.y, p.m - 1, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
+      const pm = p.m === 0 ? 11 : p.m - 1;
+      const py = p.m === 0 ? p.y - 1 : p.y;
+      return { y: py, m: pm };
     });
     setSelectedDate(null);
   };
   const nextCal = () => {
     setCalMonth(p => {
-      const d = new Date(p.y, p.m + 1, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
+      const nm = p.m === 11 ? 0 : p.m + 1;
+      const ny = p.m === 11 ? p.y + 1 : p.y;
+      return { y: ny, m: nm };
     });
     setSelectedDate(null);
   };
@@ -197,9 +226,18 @@ export default function DashboardPage() {
                 </div>
                 {/* BHP */}
                 <div className="px-5 py-4">
-                  <p className="text-[10px] font-medium text-blue-500 uppercase tracking-wide mb-1">Modal BHP</p>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <p className="text-[10px] font-medium text-blue-500 uppercase tracking-wide">Modal BHP</p>
+                    {hasActualBhp ? (
+                      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">aktual</span>
+                    ) : (
+                      <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">estimasi {bhpPct}%</span>
+                    )}
+                  </div>
                   <p className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{formatRp(bhpCut)}</p>
-                  <p className="text-[10px] text-blue-400 mt-1">{bhpPct}%</p>
+                  <p className="text-[10px] text-blue-400 mt-1">
+                    {hasActualBhp ? 'dari data per booking' : `${bhpPct}% estimasi`}
+                  </p>
                 </div>
                 {/* Net */}
                 <div className="px-5 py-4 bg-emerald-50/50 dark:bg-emerald-950/20">
@@ -300,7 +338,7 @@ export default function DashboardPage() {
                   <ChevronLeft size={15} />
                 </button>
                 <button
-                  onClick={() => { const d = new Date(); setCalMonth({ y: d.getFullYear(), m: d.getMonth() }); setSelectedDate(null); }}
+                  onClick={() => { const { y, m } = getWIBParts(new Date()); setCalMonth({ y, m }); setSelectedDate(null); }}
                   className="px-2 py-1 text-[11px] font-medium rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
                 >
                   Hari Ini

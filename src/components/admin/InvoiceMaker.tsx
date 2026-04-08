@@ -41,7 +41,7 @@ const InvoiceMaker = () => {
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.');
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
-  const [commissionPct, setCommissionPct]  = useState(30);
+  const [commissionPct, setCommissionPct] = useState(30);
 
   const supabase = createClient();
 
@@ -56,8 +56,8 @@ const InvoiceMaker = () => {
     if (bkgData) setBookings(bkgData);
     if (settingsData) {
       settingsData.forEach(({ key, value }) => {
-        if (key === 'invoice_footer_text')   setInvoiceFooter(value);
-        if (key === 'invoice_social_text')   setInvoiceSocial(value);
+        if (key === 'invoice_footer_text') setInvoiceFooter(value);
+        if (key === 'invoice_social_text') setInvoiceSocial(value);
         if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
       });
     }
@@ -292,7 +292,7 @@ const InvoiceMaker = () => {
                 <h1 className="text-2xl font-serif font-black tracking-tighter text-zinc-900">
                   Serena<span style={{ color: '#8B5E3C' }}>Raga</span>
                 </h1>
-                <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>EXCLUSIVE HOME MASSAGE</p>
+                <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
               </div>
               <div className="text-right">
                 <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8 }}>INVOICE</div>

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { Download, Plus, Trash2, Loader2, Share2, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
 
 type Item = { id: number; name: string; duration: string; price: number; };
 type Service = { id: string; name: string; price: number; details: string; category: string; };
@@ -37,19 +38,22 @@ const InvoiceMaker = () => {
   const [items, setItems] = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
   const [services, setServices] = useState<Service[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [generating, setGenerating] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
 
   const supabase = createClient();
 
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: bkgData }] = await Promise.all([
+    const [{ data: svcData }, { data: bkgData }, appSettings] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed', 'Completed']).order('booking_date', { ascending: false }).limit(50),
+      fetchSettings(),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
+    setSettings(appSettings);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -312,10 +316,10 @@ const InvoiceMaker = () => {
             {/* Footer */}
             <div style={{ textAlign: 'center', paddingTop: 20, borderTop: '1px solid #f4f4f5' }}>
               <p style={{ fontSize: 11, fontStyle: 'italic', color: '#a1a1aa' }}>
-                Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.
+                {settings.invoice_footer_text}
               </p>
               <p style={{ fontSize: 9, fontWeight: 700, color: '#8B5E3C', textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: 8 }}>
-                Instagram &amp; Threads: @serena.raga
+                {settings.invoice_social_text}
               </p>
             </div>
           </div>

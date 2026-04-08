@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
 
 type Booking = {
   id: string;
@@ -33,6 +34,7 @@ const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [search, setSearch] = useState('');
@@ -56,7 +58,10 @@ export default function BookingsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    fetchSettings().then(setSettings);
+  }, [fetchData]);
 
   const updateStatus = async (id: string, status: string) => {
     await supabase.from('bookings').update({ status }).eq('id', id);
@@ -78,8 +83,15 @@ export default function BookingsPage() {
   };
 
   const sendWA = (b: Booking) => {
-    const msg = `Halo ${b.customer_name}, konfirmasi booking SerenaRaga:\n📅 ${formatDate(b.booking_date)} pukul ${b.booking_time}\n💆 ${b.service_name}\n💰 ${formatRp(b.price)}\nTerima kasih! 🙏`;
-    window.open(`https://wa.me/${b.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+    const template = settings.whatsapp_reminder_message;
+    const msg = template
+      .replace('{nama}', b.customer_name)
+      .replace('{tanggal}', b.booking_date ? formatDate(b.booking_date) : '-')
+      .replace('{waktu}', b.booking_time ?? '-')
+      .replace('{layanan}', b.service_name ?? '-')
+      .replace('{harga}', formatRp(b.price ?? 0));
+    const phone = (b.phone ?? '').replace(/\D/g, '');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const filtered = bookings

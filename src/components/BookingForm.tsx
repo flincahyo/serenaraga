@@ -1,13 +1,20 @@
 'use client';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MessageCircle, Clock, MapPin, Sparkles } from 'lucide-react';
+import { MessageCircle, Clock, MapPin, Sparkles, Loader2 } from 'lucide-react';
+import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
 
 const BookingSection = () => {
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    fetchSettings().then(setSettings);
+  }, []);
+
   const handleWhatsAppClick = () => {
-    const message = `Halo Admin SerenaRaga! Saya ingin tanya layanan massage di rumah. Bisa bantu informasinya?`;
-    const whatsappUrl = `https://wa.me/6289518359037?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    const message = settings.whatsapp_booking_message;
+    const number = settings.whatsapp_number.replace(/\D/g, '');
+    window.open(`https://wa.me/${number}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   return (
@@ -15,7 +22,7 @@ const BookingSection = () => {
       <div className="container-custom">
         <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-earth-primary/10">
 
-          {/* Left Column: Atmospheric Info */}
+          {/* Left: Info */}
           <div className="md:w-1/2 bg-earth-primary p-12 md:p-20 text-white flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -28,21 +35,20 @@ const BookingSection = () => {
               <p className="text-white/80 mb-12 text-base leading-relaxed max-w-md">
                 Terapis profesional kami siap menghadirkan pengalaman spa premium langsung ke hunian Anda. Klik tombol di samping untuk jadwal dan jenis layanan.
               </p>
-
               <div className="space-y-6">
                 <div className="flex items-center gap-5">
                   <div className="bg-white/10 p-3 rounded-xl"><Clock size={20} className="text-white" /></div>
-                  <p className="font-medium text-sm">Operasional: 08:00 - 21:00 (Setiap Hari)</p>
+                  <p className="font-medium text-sm">Operasional: {settings.operational_hours}</p>
                 </div>
                 <div className="flex items-center gap-5">
                   <div className="bg-white/10 p-3 rounded-xl"><MapPin size={20} className="text-white" /></div>
-                  <p className="font-medium text-sm">Melayani Area Yogyakarta</p>
+                  <p className="font-medium text-sm">{settings.service_area}</p>
                 </div>
               </div>
             </motion.div>
           </div>
 
-          {/* Right Column: Direct WhatsApp CTA */}
+          {/* Right: CTA */}
           <div className="md:w-1/2 p-12 md:p-20 bg-bg-soft/30 flex flex-col justify-center items-center text-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut,
+  Receipt, BarChart3, Image, X, LogOut, Settings,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { createClient } from '@/lib/supabase';
@@ -17,6 +17,7 @@ const navItems = [
   { name: 'Invoices',  icon: Receipt,         href: '/admin/invoices' },
   { name: 'Reports',   icon: BarChart3,       href: '/admin/reports' },
   { name: 'Konten',    icon: Image,           href: '/admin/content' },
+  { name: 'Settings',  icon: Settings,        href: '/admin/settings' },
 ];
 
 interface SidebarProps { open: boolean; onClose: () => void; }

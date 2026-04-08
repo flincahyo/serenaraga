@@ -11,6 +11,7 @@ const DEFAULTS: Settings = {
   reminder_template:     'Halo {nama}, reminder booking SerenaRaga Anda:\n📅 {tanggal} pukul {waktu}\n💆 {layanan}\n💰 {harga}\n\nKami menunggu kedatangan Anda! 🙏',
   invoice_footer:        'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.',
   terapis_commission_pct:'30',
+  bhp_pct:               '10',
   operational_hours:     '08:00 – 21:00',
   operational_days:      'Setiap Hari',
   operational_note:      'Free Ongkir 10km pertama',

@@ -22,26 +22,32 @@ export default function ReportsPage() {
   const [bookings, setBookings]           = useState<Booking[]>([]);
   const [loading, setLoading]             = useState(true);
   const [commissionPct, setCommissionPct] = useState(30);
+  const [bhpPct, setBhpPct]               = useState(10);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data }, { data: settingData }] = await Promise.all([
+    const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
         .select('id, service_name, booking_date, price, status')
         .eq('status', 'Completed')
         .order('booking_date'),
-      supabase.from('settings').select('value').eq('key', 'terapis_commission_pct').single(),
+      supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct', 'bhp_pct']),
     ]);
     if (data) setBookings(data);
-    if (settingData) setCommissionPct(Number(settingData.value) || 30);
+    if (settingsRows) {
+      settingsRows.forEach(({ key, value }) => {
+        if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
+        if (key === 'bhp_pct')               setBhpPct(Number(value) || 10);
+      });
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const ownerPct = 100 - commissionPct;
+  const ownerPct = Math.max(0, 100 - commissionPct - bhpPct);
 
   // Build monthly chart data (last 6 months)
   const now = new Date();
@@ -55,8 +61,9 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
-    const gross = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
-    const net   = Math.round(gross * ownerPct / 100);
+    const gross  = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
+    const bhpCut = Math.round(gross * bhpPct / 100);
+    const net    = Math.round(gross * ownerPct / 100);
     return { month: MONTHS_ID[m], bookings: monthBookings.length, gross, net };
   });
 
@@ -74,6 +81,7 @@ export default function ReportsPage() {
       count:    v.count,
       gross:    v.gross,
       terapis:  Math.round(v.gross * commissionPct / 100),
+      bhp:      Math.round(v.gross * bhpPct / 100),
       net:      Math.round(v.gross * ownerPct / 100),
     }))
     .sort((a, b) => b.count - a.count)
@@ -81,15 +89,17 @@ export default function ReportsPage() {
 
   const totalGross   = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
   const totalTerapis = Math.round(totalGross * commissionPct / 100);
-  const totalNet     = totalGross - totalTerapis;
+  const totalBhp     = Math.round(totalGross * bhpPct / 100);
+  const totalNet     = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
 
   const exportCSV = () => {
-    const headers = ['Bulan', 'Total Booking', 'Pendapatan Kotor', 'Bagian Terapis', 'Penghasilan Bersih'];
+    const headers = ['Bulan', 'Total Booking', 'Pendapatan Kotor', 'Bagian Terapis', 'Modal BHP', 'Penghasilan Bersih'];
     const rows = monthlyData.map(d => [
       d.month, d.bookings, d.gross,
       Math.round(d.gross * commissionPct / 100),
+      Math.round(d.gross * bhpPct / 100),
       Math.round(d.gross * ownerPct / 100),
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -99,6 +109,7 @@ export default function ReportsPage() {
     link.href     = url;
     link.download = `SerenaRaga_Report_${new Date().toISOString().slice(0, 7)}.csv`;
     link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -119,7 +130,7 @@ export default function ReportsPage() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Total Booking</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{totalBookings}</p>
@@ -128,17 +139,17 @@ export default function ReportsPage() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Pendapatan Kotor</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(totalGross)}</p>
-              <p className="text-xs text-zinc-400 mt-1">Sebelum bagi hasil</p>
+              <p className="text-xs text-zinc-400 mt-1">Sebelum potongan</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Bagian Terapis ({commissionPct}%)</p>
-              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">{formatRp(totalTerapis)}</p>
-              <p className="text-xs text-amber-600/60 mt-1">Total komisi terapis</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Terapis ({commissionPct}%) + BHP ({bhpPct}%)</p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">{formatRp(totalTerapis + totalBhp)}</p>
+              <p className="text-xs text-amber-600/60 mt-1">Total potongan</p>
             </div>
             <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4">
               <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">Penghasilan Bersih Owner ({ownerPct}%)</p>
               <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatRp(totalNet)}</p>
-              <p className="text-xs text-emerald-600/60 mt-1">Setelah bagi hasil</p>
+              <p className="text-xs text-emerald-600/60 mt-1">Setelah semua potongan</p>
             </div>
           </div>
 
@@ -178,7 +189,7 @@ export default function ReportsPage() {
               </ResponsiveContainer>
             </div>
             <p className="text-[10px] text-zinc-400 text-center mt-2">
-              Hijau = pemilik ({ownerPct}%) · Kuning = terapis ({commissionPct}%)
+              Hijau = pemilik ({ownerPct}%) · Kuning/BHP = potongan ({commissionPct + bhpPct}%)
             </p>
           </div>
 
@@ -201,6 +212,7 @@ export default function ReportsPage() {
                       <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right">Booking</th>
                       <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right">Kotor</th>
                       <th className="px-4 py-3 text-xs font-medium text-amber-600 text-right">Terapis</th>
+                      <th className="px-4 py-3 text-xs font-medium text-blue-500 text-right">BHP</th>
                       <th className="px-4 py-3 text-xs font-medium text-emerald-600 text-right">Bersih</th>
                     </tr>
                   </thead>
@@ -211,6 +223,7 @@ export default function ReportsPage() {
                         <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{s.count}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400 font-mono text-xs">{formatRp(s.gross)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-amber-600 font-mono text-xs">{formatRp(s.terapis)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-blue-500 font-mono text-xs">{formatRp(s.bhp)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs font-semibold">{formatRp(s.net)}</td>
                       </tr>
                     ))}
@@ -221,6 +234,7 @@ export default function ReportsPage() {
                       <td className="px-4 py-3 text-right tabular-nums text-xs font-bold text-zinc-700 dark:text-zinc-300">{totalBookings}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">{formatRp(totalGross)}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-amber-600">{formatRp(totalTerapis)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-blue-500">{formatRp(totalBhp)}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-emerald-600">{formatRp(totalNet)}</td>
                     </tr>
                   </tfoot>

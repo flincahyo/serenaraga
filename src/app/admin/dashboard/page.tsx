@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [weeklyData, setWeeklyData]   = useState<{ day: string; bookings: number }[]>([]);
   const [commissionPct, setCommissionPct] = useState(30);
+  const [bhpPct, setBhpPct]               = useState(10);
 
   const supabase = createClient();
 
@@ -38,9 +39,9 @@ export default function DashboardPage() {
     setLoading(true);
     const now = new Date();
 
-    const [{ data: allBookings }, { data: settingData }] = await Promise.all([
+    const [{ data: allBookings }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }),
-      supabase.from('settings').select('value').eq('key', 'terapis_commission_pct').single(),
+      supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct', 'bhp_pct']),
     ]);
 
     if (allBookings) {
@@ -56,7 +57,12 @@ export default function DashboardPage() {
       setWeeklyData(last7);
     }
 
-    if (settingData) setCommissionPct(Number(settingData.value) || 30);
+    if (settingsRows) {
+      settingsRows.forEach(({ key, value }) => {
+        if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
+        if (key === 'bhp_pct')               setBhpPct(Number(value) || 10);
+      });
+    }
     setLoading(false);
   }, []);
 
@@ -71,7 +77,8 @@ export default function DashboardPage() {
   const completedMonth  = monthBookings.filter(b => b.status === 'Completed');
   const grossRevenue    = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
   const terapisCut      = Math.round(grossRevenue * commissionPct / 100);
-  const netRevenue      = grossRevenue - terapisCut;
+  const bhpCut          = Math.round(grossRevenue * bhpPct / 100);
+  const netRevenue      = grossRevenue - terapisCut - bhpCut;
 
   const todayBookings   = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
 
@@ -86,9 +93,9 @@ export default function DashboardPage() {
 
   const stats = [
     { label: 'Booking Bulan Ini', value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
-    { label: 'Pendapatan Kotor',  value: formatRp(grossRevenue),        icon: TrendingUp, change: '', up: true, sub: 'Transaksi selesai bulan ini' },
-    { label: 'Penghasilan Bersih', value: formatRp(netRevenue),         icon: Wallet,     change: `Terapis ${commissionPct}%`, up: true, sub: `Owner ${100 - commissionPct}%` },
-    { label: 'Jadwal Hari Ini',   value: String(todayBookings.length),  icon: Star,       change: 'menunggu', up: true },
+    { label: 'Pendapatan Kotor',   value: formatRp(grossRevenue), icon: TrendingUp, change: '', up: true, sub: 'Transaksi selesai bulan ini' },
+    { label: 'Penghasilan Bersih', value: formatRp(netRevenue),   icon: Wallet, change: `Terapis ${commissionPct}% · BHP ${bhpPct}%`, up: true, sub: `Owner ${Math.max(0, 100 - commissionPct - bhpPct)}%` },
+    { label: 'Jadwal Hari Ini',    value: String(todayBookings.length), icon: Star, change: 'menunggu', up: true },
   ];
 
   return (

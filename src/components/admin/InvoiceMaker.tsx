@@ -49,7 +49,7 @@ const InvoiceMaker = () => {
     const [{ data: svcData }, { data: bkgData }, { data: settingsData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
-        .in('status', ['Pending', 'Confirmed', 'Completed']).order('booking_date', { ascending: false }).limit(50),
+        .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
       supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct']),
     ]);
     if (svcData) setServices(svcData);

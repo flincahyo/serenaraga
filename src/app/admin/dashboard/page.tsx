@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, Users, ShoppingBag, Star, Clock, ArrowUpRight, Loader2 } from 'lucide-react';
+import { TrendingUp, Users, ShoppingBag, Star, Clock, ArrowUpRight, Loader2, Wallet } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer
@@ -25,64 +25,64 @@ const statusColor: Record<string, string> = {
   Canceled:  'bg-red-100 text-red-600 dark:bg-red-950 dark:text-red-400',
 };
 
-const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-const formatRp = (n: number) => n >= 1000000 ? `Rp ${(n / 1000000).toFixed(1).replace('.', ',')}JT` : `Rp ${n.toLocaleString('id-ID')}`;
+const DAYS_ID  = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const formatRp = (n: number) => n >= 1000000
+  ? `Rp ${(n / 1000000).toFixed(1).replace('.', ',')}JT`
+  : `Rp ${n.toLocaleString('id-ID')}`;
 
 export default function DashboardPage() {
-  const [loading, setLoading] = useState(true);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [weeklyData, setWeeklyData] = useState<{ day: string; bookings: number }[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [bookings, setBookings]       = useState<Booking[]>([]);
+  const [weeklyData, setWeeklyData]   = useState<{ day: string; bookings: number }[]>([]);
+  const [commissionPct, setCommissionPct] = useState(30);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const todayStr = now.toISOString().split('T')[0];
 
-    // 7 days ago
-    const sevenDaysAgo = new Date(now);
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
-
-    const [{ data: allBookings }] = await Promise.all([
+    const [{ data: allBookings }, { data: settingData }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }),
+      supabase.from('settings').select('value').eq('key', 'terapis_commission_pct').single(),
     ]);
 
     if (allBookings) {
       setBookings(allBookings);
-
-      // Build weekly chart data (last 7 days)
       const last7: { day: string; bookings: number }[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split('T')[0];
-        const count = allBookings.filter(b => b.booking_date === dateStr).length;
+        const count   = allBookings.filter(b => b.booking_date === dateStr).length;
         last7.push({ day: DAYS_ID[d.getDay()], bookings: count });
       }
       setWeeklyData(last7);
     }
 
+    if (settingData) setCommissionPct(Number(settingData.value) || 30);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const now          = new Date();
+  const todayStr     = now.toISOString().split('T')[0];
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
 
-  const monthBookings = bookings.filter(b => b.booking_date >= startOfMonth);
-  const monthRevenue = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
-  const todayBookings = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
+  const monthBookings   = bookings.filter(b => b.booking_date >= startOfMonth);
+  // Revenue: only Completed bookings
+  const completedMonth  = monthBookings.filter(b => b.status === 'Completed');
+  const grossRevenue    = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
+  const terapisCut      = Math.round(grossRevenue * commissionPct / 100);
+  const netRevenue      = grossRevenue - terapisCut;
 
-  // Month-over-month comparison (rough estimate)
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+  const todayBookings   = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
+
+  const prevMonthStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+  const prevMonthEnd    = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
   const prevMonthBookings = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd);
-  const bookingChange = prevMonthBookings.length > 0
+  const bookingChange   = prevMonthBookings.length > 0
     ? Math.round(((monthBookings.length - prevMonthBookings.length) / prevMonthBookings.length) * 100)
     : 0;
 
@@ -90,9 +90,9 @@ export default function DashboardPage() {
 
   const stats = [
     { label: 'Booking Bulan Ini', value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
-    { label: 'Pendapatan', value: formatRp(monthRevenue), icon: TrendingUp, change: '', up: true },
-    { label: 'Total Booking', value: String(bookings.length), icon: Users, change: '', up: true },
-    { label: 'Hari Ini', value: String(todayBookings.length), icon: Star, change: 'jadwal', up: true },
+    { label: 'Pendapatan Kotor',  value: formatRp(grossRevenue),        icon: TrendingUp, change: '', up: true, sub: 'Transaksi selesai bulan ini' },
+    { label: 'Penghasilan Bersih', value: formatRp(netRevenue),         icon: Wallet,     change: `Terapis ${commissionPct}%`, up: true, sub: `Owner ${100 - commissionPct}%` },
+    { label: 'Jadwal Hari Ini',   value: String(todayBookings.length),  icon: Star,       change: 'menunggu', up: true },
   ];
 
   return (
@@ -108,7 +108,7 @@ export default function DashboardPage() {
         <>
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map(({ label, value, icon: Icon, change, up }) => (
+            {stats.map(({ label, value, icon: Icon, change, up, sub }) => (
               <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-8 h-8 rounded-lg bg-earth-primary/10 flex items-center justify-center">
@@ -120,8 +120,9 @@ export default function DashboardPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{value}</p>
+                <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums leading-tight">{value}</p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{label}</p>
+                {sub && <p className="text-[10px] text-zinc-400 mt-0.5">{sub}</p>}
               </div>
             ))}
           </div>
@@ -144,7 +145,7 @@ export default function DashboardPage() {
                   <AreaChart data={weeklyData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                     <defs>
                       <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#8B5E3C" stopOpacity={0.15} />
+                        <stop offset="5%"  stopColor="#8B5E3C" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#8B5E3C" stopOpacity={0} />
                       </linearGradient>
                     </defs>

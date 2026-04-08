@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Download, TrendingUp, BarChart3, Loader2 } from 'lucide-react';
+import { Download, TrendingUp, BarChart3, Loader2, Wallet } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
+  Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
 
@@ -17,27 +17,32 @@ type Booking = {
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
-
 const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
 
 export default function ReportsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings]           = useState<Booking[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [commissionPct, setCommissionPct] = useState(30);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('bookings')
-      .select('id, service_name, booking_date, price, status')
-      .neq('status', 'Canceled')
-      .order('booking_date');
+    const [{ data }, { data: settingData }] = await Promise.all([
+      supabase.from('bookings')
+        .select('id, service_name, booking_date, price, status')
+        .eq('status', 'Completed')
+        .order('booking_date'),
+      supabase.from('settings').select('value').eq('key', 'terapis_commission_pct').single(),
+    ]);
     if (data) setBookings(data);
+    if (settingData) setCommissionPct(Number(settingData.value) || 30);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const ownerPct = 100 - commissionPct;
 
   // Build monthly chart data (last 6 months)
   const now = new Date();
@@ -49,38 +54,48 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
-    return {
-      month: MONTHS_ID[m],
-      bookings: monthBookings.length,
-      revenue: monthBookings.reduce((s, b) => s + (b.price ?? 0), 0),
-    };
+    const gross = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
+    const net   = Math.round(gross * ownerPct / 100);
+    return { month: MONTHS_ID[m], bookings: monthBookings.length, gross, net };
   });
 
   // Service breakdown
-  const serviceMap: Record<string, { count: number; revenue: number }> = {};
+  const serviceMap: Record<string, { count: number; gross: number }> = {};
   bookings.forEach(b => {
     if (!b.service_name) return;
-    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, revenue: 0 };
-    serviceMap[b.service_name].count += 1;
-    serviceMap[b.service_name].revenue += b.price ?? 0;
+    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0 };
+    serviceMap[b.service_name].count  += 1;
+    serviceMap[b.service_name].gross  += b.price ?? 0;
   });
   const serviceBreakdown = Object.entries(serviceMap)
-    .map(([name, v]) => ({ name, ...v }))
+    .map(([name, v]) => ({
+      name,
+      count:    v.count,
+      gross:    v.gross,
+      terapis:  Math.round(v.gross * commissionPct / 100),
+      net:      Math.round(v.gross * ownerPct / 100),
+    }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  const totalRevenue = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
+  const totalGross   = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
+  const totalTerapis = Math.round(totalGross * commissionPct / 100);
+  const totalNet     = totalGross - totalTerapis;
   const totalBookings = bookings.length;
-  const topService = serviceBreakdown[0];
+  const topService    = serviceBreakdown[0];
 
   const exportCSV = () => {
-    const headers = ['Bulan', 'Total Booking', 'Total Pendapatan'];
-    const rows = monthlyData.map(d => [d.month, d.bookings, d.revenue]);
+    const headers = ['Bulan', 'Total Booking', 'Pendapatan Kotor', 'Bagian Terapis', 'Penghasilan Bersih'];
+    const rows = monthlyData.map(d => [
+      d.month, d.bookings, d.gross,
+      Math.round(d.gross * commissionPct / 100),
+      Math.round(d.gross * ownerPct / 100),
+    ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
+    link.href     = url;
     link.download = `SerenaRaga_Report_${new Date().toISOString().slice(0, 7)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
@@ -91,7 +106,7 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Reports</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Ringkasan performa bisnis SerenaRaga</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Ringkasan performa bisnis SerenaRaga · hanya transaksi <span className="font-semibold text-blue-600 dark:text-blue-400">Completed</span></p>
         </div>
         <button onClick={exportCSV} className="admin-btn-ghost">
           <Download size={15} /> Export CSV
@@ -103,27 +118,26 @@ export default function ReportsPage() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Total Pendapatan</p>
-              <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(totalRevenue)}</p>
-              <p className="text-xs text-zinc-400 mt-1">Semua waktu (non-canceled)</p>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Total Booking</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{totalBookings}</p>
-              <p className="text-xs text-zinc-400 mt-1">Semua waktu</p>
+              <p className="text-xs text-zinc-400 mt-1">Semua waktu (Completed)</p>
             </div>
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Layanan Terlaris</p>
-              {topService ? (
-                <>
-                  <p className="text-lg font-bold text-zinc-900 dark:text-white leading-tight">{topService.name}</p>
-                  <p className="text-xs text-zinc-400 mt-1">{topService.count} booking · {formatRp(topService.revenue)}</p>
-                </>
-              ) : (
-                <p className="text-sm text-zinc-400 mt-2">Belum ada data</p>
-              )}
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Pendapatan Kotor</p>
+              <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(totalGross)}</p>
+              <p className="text-xs text-zinc-400 mt-1">Sebelum bagi hasil</p>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Bagian Terapis ({commissionPct}%)</p>
+              <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">{formatRp(totalTerapis)}</p>
+              <p className="text-xs text-amber-600/60 mt-1">Total komisi terapis</p>
+            </div>
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4">
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">Penghasilan Bersih Owner ({ownerPct}%)</p>
+              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatRp(totalNet)}</p>
+              <p className="text-xs text-emerald-600/60 mt-1">Setelah bagi hasil</p>
             </div>
           </div>
 
@@ -131,20 +145,25 @@ export default function ReportsPage() {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
             <div className="flex items-center gap-2 mb-6">
               <BarChart3 size={16} className="text-earth-primary" />
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Pendapatan 6 Bulan Terakhir</h2>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Pendapatan 6 Bulan Terakhir</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">Kotor vs Bersih Owner</p>
+              </div>
             </div>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${v/1000000}jt` : String(v)} />
                   <Tooltip
-                    formatter={(v: unknown) => [formatRp(Number(v)), 'Pendapatan']}
+                    formatter={(v: unknown, name: unknown) => [formatRp(Number(v)), name === 'gross' ? 'Kotor' : 'Bersih Owner']}
                     contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
                     cursor={{ fill: 'rgba(139,94,60,0.04)' }}
                   />
-                  <Bar dataKey="revenue" fill="#8B5E3C" radius={[6, 6, 0, 0]} />
+                  <Legend formatter={v => v === 'gross' ? 'Kotor' : 'Bersih Owner'} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="gross" fill="#8B5E3C" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="net"   fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -153,33 +172,53 @@ export default function ReportsPage() {
           {/* Service Breakdown */}
           {serviceBreakdown.length > 0 && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Performa per Layanan</h2>
+                <div className="flex items-center gap-4 text-[10px] text-zinc-400">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-earth-primary inline-block"/>Kotor</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"/>Terapis</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>Bersih</span>
+                </div>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left border-b border-zinc-100 dark:border-zinc-800">
-                    <th className="px-6 py-3 text-xs font-medium text-zinc-500">Layanan</th>
-                    <th className="px-6 py-3 text-xs font-medium text-zinc-500 text-right">Booking</th>
-                    <th className="px-6 py-3 text-xs font-medium text-zinc-500 text-right">Pendapatan</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {serviceBreakdown.map(s => (
-                    <tr key={s.name} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                      <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 font-medium">{s.name}</td>
-                      <td className="px-6 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{s.count}</td>
-                      <td className="px-6 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400 font-mono text-xs">{formatRp(s.revenue)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b border-zinc-100 dark:border-zinc-800">
+                      <th className="px-6 py-3 text-xs font-medium text-zinc-500">Layanan</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right">Booking</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right">Kotor</th>
+                      <th className="px-4 py-3 text-xs font-medium text-amber-600 text-right">Terapis</th>
+                      <th className="px-4 py-3 text-xs font-medium text-emerald-600 text-right">Bersih</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {serviceBreakdown.map(s => (
+                      <tr key={s.name} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                        <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 font-medium">{s.name}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{s.count}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400 font-mono text-xs">{formatRp(s.gross)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-amber-600 font-mono text-xs">{formatRp(s.terapis)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs font-semibold">{formatRp(s.net)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-zinc-200 dark:border-zinc-700">
+                    <tr className="bg-zinc-50 dark:bg-zinc-800/50">
+                      <td className="px-6 py-3 text-xs font-bold text-zinc-700 dark:text-zinc-300">TOTAL</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-xs font-bold text-zinc-700 dark:text-zinc-300">{totalBookings}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-zinc-700 dark:text-zinc-300">{formatRp(totalGross)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-amber-600">{formatRp(totalTerapis)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-emerald-600">{formatRp(totalNet)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           )}
 
           {totalBookings === 0 && (
             <div className="text-center py-12 text-sm text-zinc-400">
-              Belum ada data booking. Tambahkan booking melalui halaman Bookings.
+              Belum ada transaksi Completed. Ubah status booking menjadi Completed untuk melihat laporan.
             </div>
           )}
         </>

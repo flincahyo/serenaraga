@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search } from 'lucide-react';
+import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
 type Booking = {
@@ -27,32 +27,37 @@ const STATUS_STYLES: Record<string, string> = {
   Canceled:  'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
 
+const EMPTY_FORM = { customer_name: '', phone: '', service_name: '', booking_date: '', booking_time: '', price: 0, status: 'Pending', notes: '' };
+
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
+const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
 export default function BookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings]       = useState<Booking[]>([]);
+  const [services, setServices]       = useState<Service[]>([]);
+  const [loading, setLoading]         = useState(true);
   const [filterStatus, setFilterStatus] = useState('Semua');
-  const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    customer_name: '', phone: '', service_name: '', booking_date: '',
-    booking_time: '', price: 0, status: 'Pending', notes: '',
-  });
+  const [search, setSearch]           = useState('');
+  const [showForm, setShowForm]       = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [editId, setEditId]           = useState<string | null>(null);
+  const [deleteId, setDeleteId]       = useState<string | null>(null);
+  const [deleting, setDeleting]       = useState(false);
+  const [reminderTemplate, setReminderTemplate] = useState('');
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: b }, { data: s }] = await Promise.all([
+    const [{ data: b }, { data: s }, { data: settingsData }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('services').select('id, name, price, category').order('category').order('sort_order'),
+      supabase.from('settings').select('value').eq('key', 'whatsapp_reminder_message').single(),
     ]);
     if (b) setBookings(b);
     if (s) setServices(s);
+    if (settingsData) setReminderTemplate(settingsData.value);
     setLoading(false);
   }, []);
 
@@ -63,13 +68,48 @@ export default function BookingsPage() {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
   };
 
-  const addBooking = async () => {
+  const openAdd = () => {
+    setEditId(null);
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+  };
+
+  const openEdit = (b: Booking) => {
+    setEditId(b.id);
+    setForm({
+      customer_name: b.customer_name,
+      phone: b.phone,
+      service_name: b.service_name,
+      booking_date: b.booking_date,
+      booking_time: b.booking_time,
+      price: b.price,
+      status: b.status,
+      notes: b.notes ?? '',
+    });
+    setShowForm(true);
+  };
+
+  const saveBooking = async () => {
     setSaving(true);
-    await supabase.from('bookings').insert(form);
+    if (editId) {
+      await supabase.from('bookings').update(form).eq('id', editId);
+    } else {
+      await supabase.from('bookings').insert(form);
+    }
     await fetchData();
     setShowForm(false);
-    setForm({ customer_name: '', phone: '', service_name: '', booking_date: '', booking_time: '', price: 0, status: 'Pending', notes: '' });
+    setEditId(null);
+    setForm(EMPTY_FORM);
     setSaving(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    await supabase.from('bookings').delete().eq('id', deleteId);
+    setBookings(prev => prev.filter(b => b.id !== deleteId));
+    setDeleteId(null);
+    setDeleting(false);
   };
 
   const onServiceSelect = (name: string) => {
@@ -78,7 +118,14 @@ export default function BookingsPage() {
   };
 
   const sendWA = (b: Booking) => {
-    const msg = `Halo ${b.customer_name}, konfirmasi booking SerenaRaga:\n📅 ${formatDate(b.booking_date)} pukul ${b.booking_time}\n💆 ${b.service_name}\n💰 ${formatRp(b.price)}\nTerima kasih! 🙏`;
+    const template = reminderTemplate ||
+      'Halo {nama}, konfirmasi booking SerenaRaga:\n📅 {tanggal} pukul {waktu}\n💆 {layanan}\n💰 {harga}\nTerima kasih! 🙏';
+    const msg = template
+      .replace('{nama}', b.customer_name)
+      .replace('{tanggal}', b.booking_date ? formatDate(b.booking_date) : '-')
+      .replace('{waktu}', b.booking_time ?? '-')
+      .replace('{layanan}', b.service_name ?? '-')
+      .replace('{harga}', formatRp(b.price ?? 0));
     window.open(`https://wa.me/${b.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -96,7 +143,7 @@ export default function BookingsPage() {
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Bookings</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{bookings.length} total pesanan</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="admin-btn-primary">
+        <button onClick={openAdd} className="admin-btn-primary">
           <Plus size={16} /> Tambah Booking
         </button>
       </div>
@@ -139,13 +186,14 @@ export default function BookingsPage() {
           ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {filtered.map(b => (
-                <div key={b.id} className="px-4 py-3 flex items-center gap-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                <div key={b.id} className="px-4 py-3 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-zinc-900 dark:text-white">{b.customer_name}</p>
                     <p className="text-xs text-zinc-400 mt-0.5">{b.phone}</p>
                     <p className="text-xs text-zinc-500 mt-0.5">{b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ?? ''}</p>
                   </div>
                   <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300 shrink-0 hidden md:block">{formatRp(b.price ?? 0)}</p>
+
                   {/* Status Dropdown */}
                   <div className="relative shrink-0">
                     <select
@@ -157,8 +205,16 @@ export default function BookingsPage() {
                     </select>
                     <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                   </div>
-                  <button onClick={() => sendWA(b)} className="shrink-0 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500" title="Kirim WhatsApp">
+
+                  {/* Actions */}
+                  <button onClick={() => sendWA(b)} className="shrink-0 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500" title="Kirim Reminder WA">
                     <MessageCircle size={16} />
+                  </button>
+                  <button onClick={() => openEdit(b)} className="shrink-0 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-500" title="Edit Booking">
+                    <Pencil size={15} />
+                  </button>
+                  <button onClick={() => setDeleteId(b.id)} className="shrink-0 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400" title="Hapus Booking">
+                    <Trash2 size={15} />
                   </button>
                 </div>
               ))}
@@ -167,13 +223,15 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {/* Add Booking Modal */}
+      {/* Add / Edit Booking Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
           <div className="relative w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-2xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-3 z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-zinc-900 dark:text-white">Tambah Booking</h3>
+              <h3 className="font-semibold text-zinc-900 dark:text-white">
+                {editId ? 'Edit Booking' : 'Tambah Booking'}
+              </h3>
               <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"><X size={16} /></button>
             </div>
 
@@ -203,9 +261,39 @@ export default function BookingsPage() {
 
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowForm(false)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
-              <button onClick={addBooking} disabled={saving || !form.customer_name} className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Simpan
+              <button onClick={saveBooking} disabled={saving || !form.customer_name} className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                {editId ? 'Update' : 'Simpan'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteId(null)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 z-10">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center">
+                <AlertTriangle size={22} className="text-red-500" />
+              </div>
+              <h3 className="font-semibold text-zinc-900 dark:text-white">Hapus Booking?</h3>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                {bookings.find(b => b.id === deleteId)?.customer_name} — tindakan ini tidak bisa dibatalkan.
+              </p>
+              <div className="flex gap-3 w-full pt-2">
+                <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-60"
+                >
+                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  Hapus
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -39,17 +39,26 @@ const InvoiceMaker = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [generating, setGenerating] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
+  const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.');
+  const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
 
   const supabase = createClient();
 
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: bkgData }] = await Promise.all([
+    const [{ data: svcData }, { data: bkgData }, { data: settingsData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed', 'Completed']).order('booking_date', { ascending: false }).limit(50),
+      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text']),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
+    if (settingsData) {
+      settingsData.forEach(({ key, value }) => {
+        if (key === 'invoice_footer_text') setInvoiceFooter(value);
+        if (key === 'invoice_social_text') setInvoiceSocial(value);
+      });
+    }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -312,10 +321,10 @@ const InvoiceMaker = () => {
             {/* Footer */}
             <div style={{ textAlign: 'center', paddingTop: 20, borderTop: '1px solid #f4f4f5' }}>
               <p style={{ fontSize: 11, fontStyle: 'italic', color: '#a1a1aa' }}>
-                Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.
+                {invoiceFooter}
               </p>
               <p style={{ fontSize: 9, fontWeight: 700, color: '#8B5E3C', textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: 8 }}>
-                Instagram &amp; Threads: @serena.raga
+                {invoiceSocial}
               </p>
             </div>
           </div>

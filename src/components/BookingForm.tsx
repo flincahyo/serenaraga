@@ -1,12 +1,36 @@
 'use client';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { MessageCircle, Clock, MapPin, Sparkles } from 'lucide-react';
+import { createClient } from '@/lib/supabase';
+
+const DEFAULTS = {
+  whatsapp_number: '6289518359037',
+  whatsapp_booking_message: 'Halo Admin SerenaRaga! Saya ingin tanya layanan massage di rumah. Bisa bantu informasinya?',
+  operational_hours: 'Senin - Minggu, 08.00 - 21.00 WIB',
+  service_area: 'Melayani Area Yogyakarta',
+};
 
 const BookingSection = () => {
+  const [settings, setSettings] = useState(DEFAULTS);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from('settings')
+      .select('key, value')
+      .in('key', Object.keys(DEFAULTS))
+      .then(({ data }) => {
+        if (data) {
+          const obj: Record<string, string> = {};
+          data.forEach(({ key, value }) => { obj[key] = value; });
+          setSettings(prev => ({ ...prev, ...obj }));
+        }
+      });
+  }, []);
+
   const handleWhatsAppClick = () => {
-    const message = `Halo Admin SerenaRaga! Saya ingin tanya layanan massage di rumah. Bisa bantu informasinya?`;
-    const whatsappUrl = `https://wa.me/6289518359037?text=${encodeURIComponent(message)}`;
+    const whatsappUrl = `https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(settings.whatsapp_booking_message)}`;
     window.open(whatsappUrl, '_blank');
   };
 
@@ -32,11 +56,11 @@ const BookingSection = () => {
               <div className="space-y-6">
                 <div className="flex items-center gap-5">
                   <div className="bg-white/10 p-3 rounded-xl"><Clock size={20} className="text-white" /></div>
-                  <p className="font-medium text-sm">Operasional: 08:00 - 21:00 (Setiap Hari)</p>
+                  <p className="font-medium text-sm">Operasional: {settings.operational_hours}</p>
                 </div>
                 <div className="flex items-center gap-5">
                   <div className="bg-white/10 p-3 rounded-xl"><MapPin size={20} className="text-white" /></div>
-                  <p className="font-medium text-sm">Melayani Area Yogyakarta</p>
+                  <p className="font-medium text-sm">{settings.service_area}</p>
                 </div>
               </div>
             </motion.div>
@@ -53,7 +77,7 @@ const BookingSection = () => {
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-8 mx-auto">
                 <Sparkles size={32} className="text-earth-primary" />
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-text-primary">Eksklusif & Personal</h3>
+              <h3 className="text-2xl font-bold mb-4 text-text-primary">Eksklusif &amp; Personal</h3>
               <p className="text-text-secondary text-sm mb-10 leading-relaxed">
                 Konsultasikan keluhan atau kebutuhan relaksasi Anda langsung dengan Admin kami lewat WhatsApp.
               </p>
@@ -68,7 +92,7 @@ const BookingSection = () => {
               </button>
 
               <p className="mt-8 text-[10px] text-text-secondary/50 uppercase tracking-[0.2em] font-bold">
-                Respon Cepat & Tanya-Tanya Gratis
+                Respon Cepat &amp; Tanya-Tanya Gratis
               </p>
             </motion.div>
           </div>

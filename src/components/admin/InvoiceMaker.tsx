@@ -2,8 +2,9 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Plus, Trash2, Loader2, Share2, Users } from 'lucide-react';
+import { Download, Plus, Trash2, Loader2, Share2, Users, Percent } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useSettings } from '@/lib/settings';
 
 type Item = { id: number; name: string; duration: string; price: number; };
 type Service = { id: string; name: string; price: number; details: string; category: string; };
@@ -43,6 +44,10 @@ const InvoiceMaker = () => {
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
 
   const supabase = createClient();
+  const { settings } = useSettings();
+
+  const commissionPct = Number(settings.terapis_commission_pct ?? 30);
+  const invoiceFooter = settings.invoice_footer ?? 'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.';
 
   const fetchAll = useCallback(async () => {
     const [{ data: svcData }, { data: bkgData }, { data: settingsData }] = await Promise.all([
@@ -243,10 +248,24 @@ const InvoiceMaker = () => {
           </div>
         </div>
 
-        {/* Total */}
-        <div className="flex justify-between items-center bg-earth-primary/5 dark:bg-earth-primary/10 rounded-xl px-4 py-3">
-          <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total</span>
-          <span className="text-lg font-bold text-earth-primary font-mono">Rp {totalPrice.toLocaleString('id-ID')}</span>
+        {/* Total + Commission breakdown */}
+        <div className="rounded-xl bg-earth-primary/5 dark:bg-earth-primary/10 p-4 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total Invoice</span>
+            <span className="text-lg font-bold text-earth-primary font-mono">Rp {totalPrice.toLocaleString('id-ID')}</span>
+          </div>
+          {commissionPct > 0 && totalPrice > 0 && (
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%)</span>
+                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">Rp {Math.round(totalPrice * commissionPct / 100).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
+                <span>Pemilik ({100 - commissionPct}%)</span>
+                <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">Rp {Math.round(totalPrice * (100 - commissionPct) / 100).toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useSettings } from '@/lib/settings';
 
 type Booking = {
   id: string;
@@ -46,6 +47,7 @@ export default function BookingsPage() {
   const [reminderTemplate, setReminderTemplate] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
 
+  const { settings } = useSettings();
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {

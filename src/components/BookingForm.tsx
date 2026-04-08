@@ -39,7 +39,7 @@ const BookingSection = () => {
       <div className="container-custom">
         <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-earth-primary/10">
 
-          {/* Left Column: Atmospheric Info */}
+          {/* Left Column */}
           <div className="md:w-1/2 bg-earth-primary p-12 md:p-20 text-white flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -50,7 +50,7 @@ const BookingSection = () => {
                 Siap Menemukan <br />Ketenangan?
               </h2>
               <p className="text-white/80 mb-12 text-base leading-relaxed max-w-md">
-                Terapis profesional kami siap menghadirkan pengalaman spa premium langsung ke hunian Anda. Klik tombol di samping untuk jadwal dan jenis layanan.
+                Terapis profesional kami siap menghadirkan pengalaman spa premium langsung ke hunian Anda.
               </p>
 
               <div className="space-y-6">
@@ -62,11 +62,19 @@ const BookingSection = () => {
                   <div className="bg-white/10 p-3 rounded-xl"><MapPin size={20} className="text-white" /></div>
                   <p className="font-medium text-sm">{settings.service_area}</p>
                 </div>
+                {settings.operational_note && (
+                  <div className="flex items-center gap-5">
+                    <div className="bg-white/10 p-3 rounded-xl">
+                      <Sparkles size={20} className="text-white" />
+                    </div>
+                    <p className="font-medium text-sm">{settings.operational_note}</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
 
-          {/* Right Column: Direct WhatsApp CTA */}
+          {/* Right Column */}
           <div className="md:w-1/2 p-12 md:p-20 bg-bg-soft/30 flex flex-col justify-center items-center text-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}

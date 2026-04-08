@@ -7,13 +7,11 @@ import {
   Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
+import { useSettings } from '@/lib/settings';
 
 type Booking = {
-  id: string;
-  service_name: string;
-  booking_date: string;
-  price: number;
-  status: string;
+  id: string; service_name: string; booking_date: string;
+  price: number; status: string;
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -46,6 +44,8 @@ export default function ReportsPage() {
 
   // Build monthly chart data (last 6 months)
   const now = new Date();
+
+  // Last 6 months chart data
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const y = d.getFullYear();
@@ -98,12 +98,12 @@ export default function ReportsPage() {
     link.href     = url;
     link.download = `SerenaRaga_Report_${new Date().toISOString().slice(0, 7)}.csv`;
     link.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Reports</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Ringkasan performa bisnis SerenaRaga · hanya transaksi <span className="font-semibold text-blue-600 dark:text-blue-400">Completed</span></p>
@@ -141,6 +141,15 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* Top Service */}
+          {topService && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+              <p className="text-xs text-zinc-500 mb-1">Layanan Terlaris</p>
+              <p className="text-base font-bold text-zinc-900 dark:text-white">{topService.name}</p>
+              <p className="text-xs text-zinc-400 mt-1">{topService.count} booking · Kotor: {formatRp(topService.gross)} · Bersih: {formatRp(topService.net)}</p>
+            </div>
+          )}
+
           {/* Revenue Chart */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
             <div className="flex items-center gap-2 mb-6">
@@ -150,12 +159,12 @@ export default function ReportsPage() {
                 <p className="text-xs text-zinc-400 mt-0.5">Kotor vs Bersih Owner</p>
               </div>
             </div>
-            <div className="h-56">
+            <div className="h-60">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${v/1000000}jt` : String(v)} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={formatRpShort} />
                   <Tooltip
                     formatter={(v: unknown, name: unknown) => [formatRp(Number(v)), name === 'gross' ? 'Kotor' : 'Bersih Owner']}
                     contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
@@ -167,10 +176,13 @@ export default function ReportsPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <p className="text-[10px] text-zinc-400 text-center mt-2">
+              Hijau = pemilik ({ownerPct}%) · Kuning = terapis ({commissionPct}%)
+            </p>
           </div>
 
           {/* Service Breakdown */}
-          {serviceBreakdown.length > 0 && (
+          {serviceRows.length > 0 && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
               <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Performa per Layanan</h2>
@@ -216,7 +228,7 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {totalBookings === 0 && (
+          {bookings.length === 0 && (
             <div className="text-center py-12 text-sm text-zinc-400">
               Belum ada transaksi Completed. Ubah status booking menjadi Completed untuk melihat laporan.
             </div>

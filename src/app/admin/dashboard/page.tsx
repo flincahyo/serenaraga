@@ -7,15 +7,11 @@ import {
   Tooltip, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
+import { useSettings } from '@/lib/settings';
 
 type Booking = {
-  id: string;
-  customer_name: string;
-  service_name: string;
-  booking_date: string;
-  booking_time: string;
-  price: number;
-  status: string;
+  id: string; customer_name: string; service_name: string;
+  booking_date: string; booking_time: string; price: number; status: string;
 };
 
 const statusColor: Record<string, string> = {
@@ -52,7 +48,7 @@ export default function DashboardPage() {
       const last7: { day: string; bookings: number }[] = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
-        d.setDate(d.getDate() - i);
+        d.setDate(d.getDate() - (6 - i));
         const dateStr = d.toISOString().split('T')[0];
         const count   = allBookings.filter(b => b.booking_date === dateStr).length;
         last7.push({ day: DAYS_ID[d.getDay()], bookings: count });
@@ -103,7 +99,9 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-earth-primary" size={28} /></div>
+        <div className="flex justify-center py-20">
+          <Loader2 className="animate-spin text-earth-primary" size={28} />
+        </div>
       ) : (
         <>
           {/* Stats */}
@@ -127,9 +125,31 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Charts + Schedule */}
+          {/* Bagi Hasil Bulan Ini */}
+          {grossRevenue > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-3">
+                Rincian Bagi Hasil Bulan Ini ({commissionPct}% terapis)
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <p className="text-[10px] text-amber-500 mb-1">Pendapatan Kotor</p>
+                  <p className="font-bold text-sm text-amber-800 dark:text-amber-300 font-mono">{formatRp(grossRevenue)}</p>
+                </div>
+                <div className="text-center border-x border-amber-200 dark:border-amber-700">
+                  <p className="text-[10px] text-amber-500 mb-1">Terapis ({commissionPct}%)</p>
+                  <p className="font-bold text-sm text-amber-700 dark:text-amber-400 font-mono">{formatRp(terapisCut)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-amber-500 mb-1">Pemilik ({100 - commissionPct}%)</p>
+                  <p className="font-bold text-sm text-emerald-700 dark:text-emerald-400 font-mono">{formatRp(netRevenue)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Chart + Schedule */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Weekly Chart */}
             <div className="lg:col-span-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -159,14 +179,13 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Today's Schedule */}
             <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-6">
                 <Clock size={15} className="text-earth-primary" />
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Jadwal Hari Ini</h2>
               </div>
               {todayBookings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-center">
+                <div className="flex flex-col items-center justify-center h-40">
                   <p className="text-sm text-zinc-400">Tidak ada jadwal hari ini</p>
                 </div>
               ) : (

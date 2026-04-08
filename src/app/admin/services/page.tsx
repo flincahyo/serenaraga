@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useSettings } from '@/lib/settings';
 
 type Service = {
   id: string;
@@ -25,8 +26,6 @@ const CATEGORIES = [
   { id: 'reflexology',label: 'Refleksi Service' },
   { id: 'addons',     label: 'Add-On Service' },
 ];
-
-const DEFAULT_SPLIT = 30; // default terapis 30%
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
@@ -79,15 +78,17 @@ export default function ServicesPage() {
   const [activeTab, setActiveTab] = useState('packages');
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Service>>({});
-  const [editSplit, setEditSplit] = useState(DEFAULT_SPLIT);
+  const [editSplit, setEditSplit] = useState(30);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [newSvc, setNewSvc] = useState({
     name: '', details: '', price: 0, is_bestseller: false,
     is_featured: false, featured_image: '', featured_description: '', featured_duration: '',
   });
-  const [newSplit, setNewSplit] = useState(DEFAULT_SPLIT);
+  const [newSplit, setNewSplit] = useState(30);
 
+  const { settings } = useSettings();
+  const defaultCommission = Number(settings.terapis_commission_pct ?? 30);
   const supabase = createClient();
 
   const fetchServices = useCallback(async () => {
@@ -104,7 +105,7 @@ export default function ServicesPage() {
 
   const startEdit = (s: Service) => {
     setEditId(s.id);
-    setEditSplit(DEFAULT_SPLIT);
+    setEditSplit(defaultCommission);
     setEditData({
       name: s.name, details: s.details, price: s.price,
       is_bestseller: s.is_bestseller, is_featured: s.is_featured,
@@ -151,7 +152,7 @@ export default function ServicesPage() {
     await fetchServices();
     setShowAdd(false);
     setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '' });
-    setNewSplit(DEFAULT_SPLIT);
+    setNewSplit(defaultCommission);
     setSaving(false);
   };
 

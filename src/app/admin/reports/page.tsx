@@ -5,7 +5,7 @@ import { Download, BarChart3, Loader2 } from 'lucide-react';
 
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer
+  Tooltip, ResponsiveContainer
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
 
@@ -61,10 +61,11 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
-    const gross  = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
-    const bhpCut = Math.round(gross * bhpPct / 100);
-    const net    = Math.round(gross * ownerPct / 100);
-    return { month: MONTHS_ID[m], bookings: monthBookings.length, gross, net };
+    const gross    = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
+    const terapis   = Math.round(gross * commissionPct / 100);
+    const bhpCut    = Math.round(gross * bhpPct / 100);
+    const net       = Math.round(gross * ownerPct / 100);
+    return { month: MONTHS_ID[m], bookings: monthBookings.length, gross, terapis, bhp: bhpCut, net };
   });
 
   // Service breakdown
@@ -164,33 +165,42 @@ export default function ReportsPage() {
 
           {/* Revenue Chart */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <BarChart3 size={16} className="text-earth-primary" />
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Pendapatan 6 Bulan Terakhir</h2>
-                <p className="text-xs text-zinc-400 mt-0.5">Kotor vs Bersih Owner</p>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <BarChart3 size={16} className="text-earth-primary" />
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Pendapatan 6 Bulan Terakhir</h2>
+                  <p className="text-xs text-zinc-400 mt-0.5">Rincian: Kotor · Terapis · BHP · Bersih Owner</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-[10px] text-zinc-400 shrink-0">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-[#8B5E3C] inline-block"/>Kotor</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block"/>Terapis</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-blue-400 inline-block"/>BHP</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"/>Bersih</span>
               </div>
             </div>
-            <div className="h-60">
+            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barGap={2}>
+                <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -15, bottom: 0 }} barCategoryGap="30%" barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${v/1000000}jt` : String(v)} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}jt` : String(v)} />
                   <Tooltip
-                    formatter={(v: unknown, name: unknown) => [formatRp(Number(v)), name === 'gross' ? 'Kotor' : 'Bersih Owner']}
+                    formatter={(v: unknown, name: unknown) => {
+                      const labels: Record<string, string> = { gross: 'Kotor', terapis: 'Terapis', bhp: 'BHP', net: 'Bersih Owner' };
+                      return [formatRp(Number(v)), labels[String(name)] ?? String(name)];
+                    }}
                     contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
-                    cursor={{ fill: 'rgba(139,94,60,0.04)' }}
+                    cursor={{ fill: 'rgba(139,94,60,0.03)' }}
                   />
-                  <Legend formatter={v => v === 'gross' ? 'Kotor' : 'Bersih Owner'} wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="gross" fill="#8B5E3C" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="net"   fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="gross"   name="gross"   fill="#8B5E3C" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="terapis" name="terapis" fill="#FBBF24" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="bhp"     name="bhp"     fill="#60A5FA" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="net"     name="net"     fill="#10b981" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[10px] text-zinc-400 text-center mt-2">
-              Hijau = pemilik ({ownerPct}%) · Kuning/BHP = potongan ({commissionPct + bhpPct}%)
-            </p>
           </div>
 
           {/* Service Breakdown */}

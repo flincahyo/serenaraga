@@ -105,30 +105,41 @@ export default function BookingsPage() {
         .eq('is_global', true),
     ]);
 
-    type SvcMatRow = { qty_multiplier: number; material: { id: string; pack_price: number; customers_per_pack: number; is_global: boolean } | null };
+    // Supabase returns joined relations as arrays — cast via unknown to correct type
+    type MatObj = { id: string; pack_price: number; customers_per_pack: number; is_global: boolean };
+    type SvcMatRow = { qty_multiplier: number; material: MatObj | MatObj[] | null };
     type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
 
-    // IDs material yg sudah ada di service_materials (termasuk yg global di-assign manual)
+    // Helper: normalize material (single or array) → single object or null
+    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => {
+      if (!raw) return null;
+      return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+    };
+
+    const rows = (svcMats ?? []) as unknown as SvcMatRow[];
+
+    // Collect IDs of global materials already included via service_materials
     const assignedGlobalIds = new Set(
-      ((svcMats ?? []) as SvcMatRow[])
-        .filter(sm => sm.material?.is_global)
-        .map(sm => sm.material!.id)
+      rows
+        .map(sm => getMat(sm.material))
+        .filter((m): m is MatObj => m !== null && m.is_global)
+        .map(m => m.id)
     );
 
     let total = 0;
 
-    // Bahan spesifik layanan
-    for (const sm of (svcMats ?? []) as SvcMatRow[]) {
-      const m = sm.material;
+    // Bahan spesifik layanan (termasuk jika ada global yang di-assign manual)
+    for (const sm of rows) {
+      const m = getMat(sm.material);
       if (!m || m.customers_per_pack <= 0) continue;
       total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
     }
 
     // Tambah bahan global yang belum ter-include (hindari hitung dobel)
-    for (const gm of (globalMats ?? []) as GlobalMatRow[]) {
-      if (assignedGlobalIds.has(gm.id)) continue; // sudah dihitung di atas
+    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) {
+      if (assignedGlobalIds.has(gm.id)) continue;
       if (gm.customers_per_pack <= 0) continue;
-      total += 1 * (gm.pack_price / gm.customers_per_pack);
+      total += gm.pack_price / gm.customers_per_pack;
     }
 
     return Math.round(total);

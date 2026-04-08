@@ -407,30 +407,41 @@ export default function ServicesPage() {
                     )}
 
                     {/* Add row */}
-                    <div className="p-3 border-t border-zinc-100 dark:border-zinc-700 space-y-2 bg-zinc-50/50 dark:bg-zinc-800/30">
-                      <div className="flex gap-2">
-                        <select value={addMatId} onChange={e => setAddMatId(e.target.value)}
-                          className="admin-input text-xs flex-1">
-                          <option value="">+ Pilih bahan untuk ditambah</option>
-                          {allMaterials
-                            .filter(m => !editSvcMats.find(sm => sm.material_id === m.id))
-                            .map(m => (
-                              <option key={m.id} value={m.id}>
-                                {m.name}{m.pack_label ? ` (${m.pack_label})` : ''}{m.is_global ? ' · global' : ''} · {formatRp(Math.round(m.customers_per_pack > 0 ? m.pack_price / m.customers_per_pack : 0))}/cust
-                              </option>
-                            ))}
-                        </select>
-                        <input type="number" min={1} step={1}
-                          value={addMatQty || ''} placeholder="1×"
-                          onChange={e => setAddMatQty(Math.max(1, Math.round(Number(e.target.value))))}
-                          title="Multiplier: 1=normal, 2=pakai 2× lipat"
-                          className="admin-input text-xs w-14 font-mono text-center" />
+                    <div className="p-4 border-t border-zinc-100 dark:border-zinc-700 space-y-3 bg-zinc-50/50 dark:bg-zinc-800/20">
+                      <div className="flex items-stretch gap-2.5">
+                        <div className="relative flex-1">
+                          <select value={addMatId} onChange={e => setAddMatId(e.target.value)}
+                            className="w-full text-xs sm:text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-3 pr-8 py-2 text-zinc-900 dark:text-zinc-100 appearance-none focus:outline-none focus:ring-2 focus:ring-earth-primary/50 focus:border-earth-primary/50 cursor-pointer h-10 transition-shadow">
+                            <option value="">+ Pilih bahan untuk ditambah...</option>
+                            {allMaterials
+                              .filter(m => !editSvcMats.find(sm => sm.material_id === m.id))
+                              .map(m => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}{m.pack_label ? ` (${m.pack_label})` : ''}{m.is_global ? ' · global' : ''} · {formatRp(Math.round(m.customers_per_pack > 0 ? m.pack_price / m.customers_per_pack : 0))}/cust
+                                </option>
+                              ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                            <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                        <div className="relative w-20 shrink-0">
+                          <input type="number" min={1} step={1}
+                            value={addMatQty || ''} placeholder="Qty"
+                            onChange={e => setAddMatQty(Math.max(1, Math.round(Number(e.target.value))))}
+                            title="Multiplier: 1=normal, 2=pakai 2× lipat"
+                            className="w-full text-xs sm:text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-3 pr-6 py-2 text-center text-zinc-900 dark:text-zinc-100 font-mono focus:outline-none focus:ring-2 focus:ring-earth-primary/50 focus:border-earth-primary/50 h-10 transition-shadow" />
+                          <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                            <span className="text-zinc-400 text-[10px] font-bold">×</span>
+                          </div>
+                        </div>
                         <button onClick={addServiceMaterial}
                           disabled={!addMatId || addMatQty <= 0 || addingMat}
-                          className="admin-btn-primary py-1.5 px-3 disabled:opacity-50 shrink-0">
-                          {addingMat ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                          className="flex items-center justify-center bg-earth-primary hover:bg-earth-primary/90 text-white rounded-lg px-4 disabled:opacity-50 disabled:cursor-not-allowed shrink-0 h-10 transition-colors shadow-sm">
+                          {addingMat ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                         </button>
                       </div>
+                      {/* Preview cost */}
                       {addMatId && (() => {
                         const mat = allMaterials.find(m => m.id === addMatId);
                         if (!mat || mat.customers_per_pack <= 0) return null;

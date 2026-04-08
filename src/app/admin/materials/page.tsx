@@ -17,7 +17,7 @@ type Material = {
   notes: string;
 };
 
-type Service = { id: string; name: string; category: string };
+type Service = { id: string; name: string; category: string; details?: string };
 
 const EMPTY_MAT: Omit<Material, 'id'> = {
   name: '', pack_label: '', pack_price: 0,
@@ -202,10 +202,15 @@ function BulkAssignModal({
           </div>
           <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
             {services.map(s => (
-              <label key={s.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer">
+              <label key={s.id} className="flex items-start gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 cursor-pointer">
                 <input type="checkbox" checked={selected.has(s.id)}
-                  onChange={() => toggleSvc(s.id)} className="accent-earth-primary w-4 h-4" />
-                <span className="text-sm text-zinc-700 dark:text-zinc-300">{s.name}</span>
+                  onChange={() => toggleSvc(s.id)} className="accent-earth-primary w-4 h-4 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 leading-tight">{s.name}</p>
+                  {s.details && (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-1">{s.details}</p>
+                  )}
+                </div>
               </label>
             ))}
           </div>
@@ -249,7 +254,7 @@ export default function MaterialsPage() {
     const [{ data: mats }, { data: svcMats }, { data: svcs }] = await Promise.all([
       supabase.from('materials').select('*').order('name'),
       supabase.from('service_materials').select('material_id'),
-      supabase.from('services').select('id, name, category').order('category').order('sort_order'),
+      supabase.from('services').select('id, name, category, details').order('category').order('sort_order'),
     ]);
     if (mats) setMaterials(mats);
     if (svcs)  setServices(svcs);

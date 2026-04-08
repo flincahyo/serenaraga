@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { fetchSettings } from '@/lib/settings';
+import { useSettings } from '@/lib/settings';
 
 type Service = {
   id: string;
@@ -87,6 +87,8 @@ export default function ServicesPage() {
   });
   const [newSplit, setNewSplit] = useState(30);
 
+  const { settings } = useSettings();
+  const defaultCommission = Number(settings.terapis_commission_pct ?? 30);
   const supabase = createClient();
 
   const fetchServices = useCallback(async () => {
@@ -96,20 +98,14 @@ export default function ServicesPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchServices();
-    fetchSettings().then(s => {
-      setEditSplit(s.terapis_commission_pct);
-      setNewSplit(s.terapis_commission_pct);
-    });
-  }, [fetchServices]);
+  useEffect(() => { fetchServices(); }, [fetchServices]);
 
   const filtered = services.filter(s => s.category === activeTab);
   const cat = CATEGORIES.find(c => c.id === activeTab);
 
   const startEdit = (s: Service) => {
     setEditId(s.id);
-    // Keep current editSplit from global settings (already loaded on mount)
+    setEditSplit(defaultCommission);
     setEditData({
       name: s.name, details: s.details, price: s.price,
       is_bestseller: s.is_bestseller, is_featured: s.is_featured,
@@ -156,7 +152,7 @@ export default function ServicesPage() {
     await fetchServices();
     setShowAdd(false);
     setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '' });
-    // newSplit stays at global commission % — don't reset
+    setNewSplit(defaultCommission);
     setSaving(false);
   };
 

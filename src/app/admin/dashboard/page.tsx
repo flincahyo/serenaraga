@@ -1,22 +1,14 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { TrendingUp, Users, ShoppingBag, TrendingDown, Clock, ArrowUpRight, Loader2 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
-} from 'recharts';
+import { TrendingUp, Users, ShoppingBag, Wallet, Clock, ArrowUpRight, Loader2 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { createClient } from '@/lib/supabase';
-import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
+import { useSettings } from '@/lib/settings';
 
 type Booking = {
-  id: string;
-  customer_name: string;
-  service_name: string;
-  booking_date: string;
-  booking_time: string;
-  price: number;
-  status: string;
+  id: string; customer_name: string; service_name: string;
+  booking_date: string; booking_time: string; price: number; status: string;
 };
 
 const statusColor: Record<string, string> = {
@@ -29,37 +21,31 @@ const statusColor: Record<string, string> = {
 const DAYS_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 const formatRp = (n: number) =>
-  n >= 1000000 ? `Rp ${(n / 1000000).toFixed(1).replace('.', ',')}JT` : `Rp ${n.toLocaleString('id-ID')}`;
+  n >= 1_000_000 ? `Rp ${(n / 1_000_000).toFixed(1).replace('.', ',')}JT` : `Rp ${n.toLocaleString('id-ID')}`;
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [weeklyData, setWeeklyData] = useState<{ day: string; bookings: number }[]>([]);
+  const { settings } = useSettings();
+  const commissionPct = Number(settings.terapis_commission_pct ?? 30);
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: allBookings }, appSettings] = await Promise.all([
-      supabase.from('bookings').select('*').order('booking_date', { ascending: false }),
-      fetchSettings(),
-    ]);
-
-    if (allBookings) {
-      setBookings(allBookings);
+    const { data } = await supabase.from('bookings').select('*').order('booking_date', { ascending: false });
+    if (data) {
+      setBookings(data);
       const now = new Date();
-      const last7: { day: string; bookings: number }[] = [];
-      for (let i = 6; i >= 0; i--) {
+      const last7 = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(now);
-        d.setDate(d.getDate() - i);
+        d.setDate(d.getDate() - (6 - i));
         const dateStr = d.toISOString().split('T')[0];
-        const count = allBookings.filter(b => b.booking_date === dateStr).length;
-        last7.push({ day: DAYS_ID[d.getDay()], bookings: count });
-      }
+        return { day: DAYS_ID[d.getDay()], bookings: data.filter(b => b.booking_date === dateStr).length };
+      });
       setWeeklyData(last7);
     }
-    setSettings(appSettings);
     setLoading(false);
   }, []);
 
@@ -68,28 +54,26 @@ export default function DashboardPage() {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
 
-  const monthBookings = bookings.filter(b => b.booking_date >= startOfMonth);
-  const prevMonthBookings = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd);
-  const todayBookings = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
+  const monthBookings   = bookings.filter(b => b.booking_date >= startOfMonth && b.status !== 'Canceled');
+  const grossRevenue    = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
+  const terapisCut      = Math.round(grossRevenue * commissionPct / 100);
+  const netRevenue      = grossRevenue - terapisCut;
+  const todayBookings   = bookings.filter(b => b.booking_date === todayStr && (b.status === 'Confirmed' || b.status === 'Pending'));
 
-  const grossRevenue = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
-  const commissionPct = settings.terapis_commission_pct;
-  const terapisCut = Math.round(grossRevenue * commissionPct / 100);
-  const netRevenue = grossRevenue - terapisCut;
-
-  const bookingChange = prevMonthBookings.length > 0
+  const prevMonthStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+  const prevMonthEnd    = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+  const prevMonthBookings = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd && b.status !== 'Canceled');
+  const bookingChange   = prevMonthBookings.length > 0
     ? Math.round(((monthBookings.length - prevMonthBookings.length) / prevMonthBookings.length) * 100) : 0;
 
   const today = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const stats = [
-    { label: 'Booking Bulan Ini', value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0, sub: `vs bulan lalu` },
-    { label: 'Pendapatan Kotor', value: formatRp(grossRevenue), icon: TrendingUp, change: '', up: true, sub: 'Total sebelum komisi' },
-    { label: `Bagi Hasil Terapis (${commissionPct}%)`, value: formatRp(terapisCut), icon: TrendingDown, change: '', up: false, sub: 'Potongan dari pendapatan kotor' },
-    { label: 'Pendapatan Bersih', value: formatRp(netRevenue), icon: Users, change: '', up: true, sub: 'Setelah bagi hasil terapis' },
+    { label: 'Booking Bulan Ini',   value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange !== 0 ? `${bookingChange > 0 ? '+' : ''}${bookingChange}%` : '', up: bookingChange >= 0 },
+    { label: 'Pendapatan Kotor',    value: formatRp(grossRevenue),       icon: TrendingUp,  change: '', up: true, note: 'Sebelum komisi' },
+    { label: `Penghasilan Bersih`,  value: formatRp(netRevenue),         icon: Wallet,      change: '', up: true, note: `Setelah ${commissionPct}% terapis` },
+    { label: 'Jadwal Hari Ini',     value: String(todayBookings.length), icon: Users,       change: '', up: true },
   ];
 
   return (
@@ -100,33 +84,57 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-earth-primary" size={28} /></div>
+        <div className="flex justify-center py-20">
+          <Loader2 className="animate-spin text-earth-primary" size={28} />
+        </div>
       ) : (
         <>
-          {/* Stats Grid */}
+          {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {stats.map(({ label, value, icon: Icon, change, up, sub }) => (
+            {stats.map(({ label, value, icon: Icon, change, up, note }) => (
               <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${up ? 'bg-earth-primary/10' : 'bg-rose-50 dark:bg-rose-950/30'}`}>
-                    <Icon size={16} className={up ? 'text-earth-primary' : 'text-rose-500'} />
+                  <div className="w-8 h-8 rounded-lg bg-earth-primary/10 flex items-center justify-center">
+                    <Icon size={16} className="text-earth-primary" />
                   </div>
                   {change && (
-                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${up ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400' : 'text-red-500 bg-red-50 dark:bg-red-950/30'}`}>
+                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${up ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400' : 'text-red-500 bg-red-50'}`}>
                       {change}
                     </span>
                   )}
                 </div>
-                <p className="text-xl font-bold text-zinc-900 dark:text-white tabular-nums leading-tight">{value}</p>
+                <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums leading-tight">{value}</p>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{label}</p>
-                <p className="text-[10px] text-zinc-400 mt-0.5">{sub}</p>
+                {note && <p className="text-[10px] text-zinc-400 mt-0.5">{note}</p>}
               </div>
             ))}
           </div>
 
+          {/* Bagi Hasil Bulan Ini */}
+          {grossRevenue > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-3">
+                Rincian Bagi Hasil Bulan Ini ({commissionPct}% terapis)
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <p className="text-[10px] text-amber-500 mb-1">Pendapatan Kotor</p>
+                  <p className="font-bold text-sm text-amber-800 dark:text-amber-300 font-mono">{formatRp(grossRevenue)}</p>
+                </div>
+                <div className="text-center border-x border-amber-200 dark:border-amber-700">
+                  <p className="text-[10px] text-amber-500 mb-1">Terapis ({commissionPct}%)</p>
+                  <p className="font-bold text-sm text-amber-700 dark:text-amber-400 font-mono">{formatRp(terapisCut)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-amber-500 mb-1">Pemilik ({100 - commissionPct}%)</p>
+                  <p className="font-bold text-sm text-emerald-700 dark:text-emerald-400 font-mono">{formatRp(netRevenue)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Chart + Schedule */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Weekly Chart */}
             <div className="lg:col-span-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -156,15 +164,13 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Today's Schedule */}
             <div className="lg:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
               <div className="flex items-center gap-2 mb-6">
                 <Clock size={15} className="text-earth-primary" />
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Jadwal Hari Ini</h2>
-                <span className="ml-auto text-xs text-zinc-400">{todayBookings.length} sesi</span>
               </div>
               {todayBookings.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-center">
+                <div className="flex flex-col items-center justify-center h-40">
                   <p className="text-sm text-zinc-400">Tidak ada jadwal hari ini</p>
                 </div>
               ) : (
@@ -184,31 +190,6 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Revenue Breakdown Card */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white mb-4">Rincian Keuangan Bulan Ini</h2>
-            <div className="flex flex-col sm:flex-row gap-0 sm:divide-x divide-zinc-100 dark:divide-zinc-800">
-              {[
-                { label: 'Pendapatan Kotor', value: grossRevenue, color: 'text-zinc-900 dark:text-white' },
-                { label: `Komisi Terapis (${commissionPct}%)`, value: terapisCut, color: 'text-rose-500' },
-                { label: 'Pendapatan Bersih', value: netRevenue, color: 'text-emerald-600 dark:text-emerald-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex-1 px-0 sm:px-6 py-3 sm:py-0 first:pl-0 last:pr-0">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">{label}</p>
-                  <p className={`text-xl font-bold font-mono tabular-nums ${color}`}>
-                    Rp {value.toLocaleString('id-ID')}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 bg-zinc-50 dark:bg-zinc-800 rounded-lg h-2 overflow-hidden">
-              <div className="h-full bg-earth-primary rounded-lg transition-all" style={{ width: `${Math.round((netRevenue / Math.max(grossRevenue, 1)) * 100)}%` }} />
-            </div>
-            <p className="text-[10px] text-zinc-400 mt-1.5">
-              {Math.round((netRevenue / Math.max(grossRevenue, 1)) * 100)}% dari pendapatan kotor → pemilik
-            </p>
           </div>
         </>
       )}

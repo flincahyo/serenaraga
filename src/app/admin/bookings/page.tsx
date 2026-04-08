@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
+import { useSettings } from '@/lib/settings';
 
 type Booking = {
   id: string;
@@ -34,7 +34,6 @@ const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [search, setSearch] = useState('');
@@ -45,6 +44,7 @@ export default function BookingsPage() {
     booking_time: '', price: 0, status: 'Pending', notes: '',
   });
 
+  const { settings } = useSettings();
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
@@ -58,10 +58,7 @@ export default function BookingsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    fetchSettings().then(setSettings);
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const updateStatus = async (id: string, status: string) => {
     await supabase.from('bookings').update({ status }).eq('id', id);
@@ -83,15 +80,15 @@ export default function BookingsPage() {
   };
 
   const sendWA = (b: Booking) => {
-    const template = settings.whatsapp_reminder_message;
+    const template = settings.reminder_template ||
+      'Halo {nama}, reminder booking SerenaRaga:\n📅 {tanggal} pukul {waktu}\n💆 {layanan}\n💰 {harga}\n\nKami menunggu kedatangan Anda! 🙏';
     const msg = template
-      .replace('{nama}', b.customer_name)
-      .replace('{tanggal}', b.booking_date ? formatDate(b.booking_date) : '-')
-      .replace('{waktu}', b.booking_time ?? '-')
-      .replace('{layanan}', b.service_name ?? '-')
-      .replace('{harga}', formatRp(b.price ?? 0));
-    const phone = (b.phone ?? '').replace(/\D/g, '');
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      .replace(/{nama}/g, b.customer_name)
+      .replace(/{tanggal}/g, b.booking_date ? formatDate(b.booking_date) : '-')
+      .replace(/{waktu}/g, b.booking_time ?? '-')
+      .replace(/{layanan}/g, b.service_name ?? '-')
+      .replace(/{harga}/g, formatRp(b.price ?? 0));
+    window.open(`https://wa.me/${b.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const filtered = bookings

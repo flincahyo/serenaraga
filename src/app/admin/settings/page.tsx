@@ -1,138 +1,102 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Clock, Phone, MessageCircle, FileText, Percent,
-  MapPin, Save, Loader2, Check
-} from 'lucide-react';
-import { fetchSettings, saveSetting, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
+import React, { useState } from 'react';
+import { Check, Loader2, Clock, Phone, MessageSquare, Receipt, Percent, MapPin, Save } from 'lucide-react';
+import { useAdminSettings } from '@/lib/settings';
 
-type Section = {
+type SettingSection = {
   title: string;
   icon: React.ReactNode;
-  color: string;
-  fields: Field[];
+  fields: {
+    key: string;
+    label: string;
+    description?: string;
+    type?: 'text' | 'tel' | 'number' | 'textarea';
+    placeholder?: string;
+    suffix?: string;
+    min?: number;
+    max?: number;
+  }[];
 };
 
-type Field = {
-  key: keyof AppSettings;
-  label: string;
-  hint?: string;
-  type: 'text' | 'textarea' | 'number' | 'tel';
-  placeholder?: string;
-  rows?: number;
-};
-
-const SECTIONS: Section[] = [
+const SECTIONS: SettingSection[] = [
   {
-    title: 'Jam & Area Operasional',
-    icon: <Clock size={16} />,
-    color: 'text-blue-500',
+    title: 'Jam Operasional',
+    icon: <Clock size={16} className="text-earth-primary" />,
     fields: [
-      { key: 'operational_hours', label: 'Jam Operasional', type: 'text', placeholder: 'Senin - Minggu, 08.00 - 21.00 WIB', hint: 'Ditampilkan di bagian Booking landing page' },
-      { key: 'service_area', label: 'Area Layanan', type: 'text', placeholder: 'Melayani Area Yogyakarta', hint: 'Info area layanan di landing page' },
+      { key: 'operational_hours',  label: 'Jam Operasional', placeholder: '08:00 – 21:00', description: 'Tampil di bagian booking landing page' },
+      { key: 'operational_days',   label: 'Hari Operasional', placeholder: 'Setiap Hari', description: 'Contoh: Senin – Sabtu' },
+      { key: 'operational_note',   label: 'Catatan Tambahan', placeholder: 'Free Ongkir 10km pertama', description: 'Info singkat yang tampil di booking section' },
+      { key: 'service_area',       label: 'Area Layanan', placeholder: 'Area Yogyakarta' },
     ],
   },
   {
-    title: 'WhatsApp & Pesan Booking',
-    icon: <Phone size={16} />,
-    color: 'text-emerald-500',
+    title: 'WhatsApp & Kontak',
+    icon: <Phone size={16} className="text-earth-primary" />,
     fields: [
-      { key: 'whatsapp_number', label: 'Nomor WhatsApp (format: 628xxx)', type: 'tel', placeholder: '6289518359037', hint: 'Nomor tujuan saat customer klik tombol Booking di landing page' },
-      { key: 'whatsapp_booking_message', label: 'Pesan Default Booking', type: 'textarea', rows: 3, hint: 'Pesan yang otomatis terisi saat customer klik tombol WhatsApp di landing page' },
+      { key: 'whatsapp_number', label: 'Nomor WhatsApp Admin', type: 'tel', placeholder: '628xxxxxxxxxx', description: 'Digunakan untuk tombol Chat WA di landing page' },
+      { key: 'booking_wa_message', label: 'Pesan Awal Booking', type: 'textarea', placeholder: 'Halo Admin SerenaRaga!...', description: 'Pesan yang langsung muncul saat pelanggan klik tombol WA di landing page' },
     ],
   },
   {
-    title: 'Pesan Reminder (Bookings)',
-    icon: <MessageCircle size={16} />,
-    color: 'text-violet-500',
+    title: 'Template Pesan Admin',
+    icon: <MessageSquare size={16} className="text-earth-primary" />,
     fields: [
       {
-        key: 'whatsapp_reminder_message',
-        label: 'Template Reminder ke Customer',
+        key: 'reminder_template',
+        label: 'Template Reminder Pelanggan',
         type: 'textarea',
-        rows: 5,
-        hint: 'Digunakan tombol WA di halaman Bookings. Gunakan variabel: {nama}, {tanggal}, {waktu}, {layanan}, {harga}',
+        description: 'Digunakan saat klik tombol WA di halaman Bookings. Variabel: {nama}, {tanggal}, {waktu}, {layanan}, {harga}',
+        placeholder: 'Halo {nama}, reminder booking...',
       },
     ],
   },
   {
-    title: 'Teks Invoice',
-    icon: <FileText size={16} />,
-    color: 'text-amber-500',
+    title: 'Invoice',
+    icon: <Receipt size={16} className="text-earth-primary" />,
     fields: [
-      { key: 'invoice_footer_text', label: 'Kalimat Penutup Invoice', type: 'textarea', rows: 2, hint: 'Tampil di bagian bawah gambar invoice' },
-      { key: 'invoice_social_text', label: 'Teks Social Media / Kontak', type: 'text', placeholder: 'Instagram & Threads: @serena.raga', hint: 'Tampil di footer invoice' },
+      { key: 'invoice_footer', label: 'Pesan Footer Invoice', type: 'textarea', placeholder: 'Terima kasih...', description: 'Teks yang tampil di bagian bawah gambar invoice' },
     ],
   },
   {
-    title: 'Komisi Terapis (Global)',
-    icon: <Percent size={16} />,
-    color: 'text-rose-500',
+    title: 'Komisi Terapis',
+    icon: <Percent size={16} className="text-earth-primary" />,
     fields: [
       {
         key: 'terapis_commission_pct',
-        label: 'Persentase Bagi Hasil Terapis (%)',
+        label: 'Persentase Bagi Hasil Terapis',
         type: 'number',
+        min: 0,
+        max: 100,
+        suffix: '%',
         placeholder: '30',
-        hint: 'Berlaku global untuk kalkulasi di pricelist, dashboard, dan laporan. Contoh: 30 = terapis dapat 30% dari harga layanan',
+        description: 'Digunakan untuk kalkulasi otomatis. Penghasilan bersih pemilik = Total Pendapatan × (100% − komisi%). Tampil di Dashboard dan Reports.',
       },
     ],
   },
 ];
 
-function SaveStatus({ status }: { status: 'idle' | 'saving' | 'saved' }) {
-  if (status === 'idle') return null;
-  return (
-    <span className={`text-xs flex items-center gap-1 ${status === 'saved' ? 'text-emerald-500' : 'text-zinc-400'}`}>
-      {status === 'saving' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-      {status === 'saving' ? 'Menyimpan...' : 'Tersimpan'}
-    </span>
-  );
-}
-
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
-  const [hasChanges, setHasChanges] = useState<Record<string, boolean>>({});
+  const { settings, setSettings, loading, saving, saveAll } = useAdminSettings();
+  const [saved, setSaved] = useState(false);
 
-  const loadSettings = useCallback(async () => {
-    setLoading(true);
-    const s = await fetchSettings();
-    setSettings(s);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { loadSettings(); }, [loadSettings]);
-
-  const handleChange = (key: keyof AppSettings, value: string) => {
-    setSettings(prev => ({ ...prev, [key]: key === 'terapis_commission_pct' ? Number(value) : value }));
-    setHasChanges(prev => ({ ...prev, [key]: true }));
-    setSaveStatus(prev => ({ ...prev, [key]: 'idle' }));
-  };
-
-  const handleSave = async (key: keyof AppSettings) => {
-    setSaveStatus(prev => ({ ...prev, [key]: 'saving' }));
-    const value = String(settings[key]);
-    await saveSetting(key, value);
-    setSaveStatus(prev => ({ ...prev, [key]: 'saved' }));
-    setHasChanges(prev => ({ ...prev, [key]: false }));
-    setTimeout(() => setSaveStatus(prev => ({ ...prev, [key]: 'idle' })), 2500);
+  const handleChange = (key: string, value: string) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
   };
 
   const handleSaveAll = async () => {
-    const changedKeys = Object.keys(hasChanges).filter(k => hasChanges[k]) as (keyof AppSettings)[];
-    if (changedKeys.length === 0) return;
-    await Promise.all(changedKeys.map(k => handleSave(k)));
+    await saveAll(settings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  const changedCount = Object.values(hasChanges).filter(Boolean).length;
+  const commission = Number(settings.terapis_commission_pct ?? 30);
+  const ownerPct = 100 - commission;
 
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <Loader2 className="animate-spin text-earth-primary" size={28} />
+        <Loader2 className="animate-spin text-earth-primary" size={24} />
       </div>
     );
   }
@@ -143,86 +107,87 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Settings</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Konfigurasi operasional, WhatsApp, invoice, dan komisi</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Konfigurasi operasional SerenaRaga</p>
         </div>
-        {changedCount > 0 && (
-          <button onClick={handleSaveAll} className="admin-btn-primary">
-            <Save size={15} /> Simpan Semua ({changedCount})
-          </button>
-        )}
+        <button
+          onClick={handleSaveAll}
+          disabled={saving}
+          className="admin-btn-primary disabled:opacity-60"
+        >
+          {saving ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : saved ? (
+            <><Check size={15} /> Tersimpan!</>
+          ) : (
+            <><Save size={15} /> Simpan Semua</>
+          )}
+        </button>
       </div>
 
-      {/* Sections */}
+      {/* Commission Preview */}
+      {commission > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Percent size={14} className="text-amber-600" />
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Preview Bagi Hasil (per Rp 100.000)</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white dark:bg-amber-950/30 rounded-lg px-4 py-3 border border-amber-100 dark:border-amber-800">
+              <p className="text-[10px] text-amber-500 mb-1">Terapis ({commission}%)</p>
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-300 font-mono">
+                Rp {(100000 * commission / 100).toLocaleString('id-ID')}
+              </p>
+            </div>
+            <div className="bg-white dark:bg-amber-950/30 rounded-lg px-4 py-3 border border-amber-100 dark:border-amber-800">
+              <p className="text-[10px] text-amber-500 mb-1">Pemilik ({ownerPct}%)</p>
+              <p className="text-lg font-bold text-amber-700 dark:text-amber-300 font-mono">
+                Rp {(100000 * ownerPct / 100).toLocaleString('id-ID')}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Sections */}
       {SECTIONS.map(section => (
-        <div key={section.title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
-          {/* Section Header */}
-          <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2.5">
-            <span className={section.color}>{section.icon}</span>
+        <div key={section.title} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-zinc-100 dark:border-zinc-800">
+            {section.icon}
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{section.title}</h2>
           </div>
-
-          {/* Fields */}
           <div className="p-5 space-y-5">
             {section.fields.map(field => (
               <div key={field.key} className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{field.label}</label>
-                  <div className="flex items-center gap-3">
-                    <SaveStatus status={saveStatus[field.key] ?? 'idle'} />
-                    {hasChanges[field.key] && (
-                      <button
-                        onClick={() => handleSave(field.key)}
-                        className="text-xs text-earth-primary font-semibold hover:underline flex items-center gap-1"
-                      >
-                        <Save size={11} /> Simpan
-                      </button>
-                    )}
-                  </div>
+                <div className="flex items-baseline justify-between">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{field.label}</label>
+                  {field.suffix && <span className="text-xs text-zinc-400">{field.suffix}</span>}
                 </div>
-
+                {field.description && (
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">{field.description}</p>
+                )}
                 {field.type === 'textarea' ? (
                   <textarea
-                    rows={field.rows ?? 3}
-                    className="admin-input resize-none font-sans text-sm leading-relaxed"
-                    placeholder={field.placeholder ?? ''}
-                    value={String(settings[field.key])}
+                    rows={3}
+                    className="admin-input resize-none text-sm"
+                    placeholder={field.placeholder}
+                    value={settings[field.key] ?? ''}
                     onChange={e => handleChange(field.key, e.target.value)}
                   />
-                ) : field.type === 'number' ? (
-                  <div className="flex items-center gap-3">
+                ) : (
+                  <div className="relative">
                     <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      className="admin-input font-mono w-28 text-center"
-                      value={settings[field.key]}
+                      type={field.type ?? 'text'}
+                      min={field.min}
+                      max={field.max}
+                      className="admin-input text-sm"
+                      placeholder={field.placeholder}
+                      value={settings[field.key] ?? ''}
                       onChange={e => handleChange(field.key, e.target.value)}
                     />
-                    <span className="text-sm text-zinc-400">%</span>
-                    {/* Preview commission split */}
-                    {field.key === 'terapis_commission_pct' && (
-                      <div className="flex gap-3 ml-2">
-                        <span className="text-xs bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                          Terapis: {settings.terapis_commission_pct}%
-                        </span>
-                        <span className="text-xs bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                          Pemilik: {100 - Number(settings.terapis_commission_pct)}%
-                        </span>
-                      </div>
+                    {field.suffix && (
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">{field.suffix}</span>
                     )}
                   </div>
-                ) : (
-                  <input
-                    type={field.type}
-                    className="admin-input"
-                    placeholder={field.placeholder ?? ''}
-                    value={String(settings[field.key])}
-                    onChange={e => handleChange(field.key, e.target.value)}
-                  />
-                )}
-
-                {field.hint && (
-                  <p className="text-[11px] text-zinc-400 leading-relaxed">{field.hint}</p>
                 )}
               </div>
             ))}
@@ -230,23 +195,23 @@ export default function SettingsPage() {
         </div>
       ))}
 
-      {/* Info box for template variables */}
-      <div className="bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-800 rounded-xl p-4">
-        <p className="text-xs font-semibold text-violet-700 dark:text-violet-400 mb-2">Variabel Template Pesan</p>
+      {/* Template Variables Reference */}
+      <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
+        <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-2">Variabel Template yang Tersedia</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {[
-            ['{nama}', 'Nama pelanggan'],
-            ['{tanggal}', 'Tanggal booking'],
-            ['{waktu}', 'Jam booking'],
-            ['{layanan}', 'Nama layanan'],
-            ['{harga}', 'Harga layanan'],
-          ].map(([v, d]) => (
-            <div key={v} className="flex items-center gap-1.5">
-              <code className="text-[11px] font-mono bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded">{v}</code>
-              <span className="text-[11px] text-violet-600 dark:text-violet-400">{d}</span>
-            </div>
+          {['{nama}', '{tanggal}', '{waktu}', '{layanan}', '{harga}'].map(v => (
+            <code key={v} className="text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-earth-primary font-mono">
+              {v}
+            </code>
           ))}
         </div>
+      </div>
+
+      {/* Save button (bottom) */}
+      <div className="flex justify-end pb-4">
+        <button onClick={handleSaveAll} disabled={saving} className="admin-btn-primary disabled:opacity-60">
+          {saving ? <Loader2 size={15} className="animate-spin" /> : saved ? <><Check size={15} /> Tersimpan!</> : <><Save size={15} /> Simpan Semua</>}
+        </button>
       </div>
     </div>
   );

@@ -1,52 +1,83 @@
-import { createClient } from './supabase';
+'use client';
 
-export type AppSettings = {
-  operational_hours: string;
-  service_area: string;
-  whatsapp_number: string;
-  whatsapp_booking_message: string;
-  whatsapp_reminder_message: string;
-  invoice_footer_text: string;
-  invoice_social_text: string;
-  terapis_commission_pct: number;
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase';
+
+export type Settings = Record<string, string>;
+
+const DEFAULTS: Settings = {
+  whatsapp_number:       '6289518359037',
+  booking_wa_message:    'Halo Admin SerenaRaga! Saya ingin tanya layanan massage di rumah. Bisa bantu informasinya?',
+  reminder_template:     'Halo {nama}, reminder booking SerenaRaga Anda:\n📅 {tanggal} pukul {waktu}\n💆 {layanan}\n💰 {harga}\n\nKami menunggu kedatangan Anda! 🙏',
+  invoice_footer:        'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.',
+  terapis_commission_pct:'30',
+  operational_hours:     '08:00 – 21:00',
+  operational_days:      'Setiap Hari',
+  operational_note:      'Free Ongkir 10km pertama',
+  service_area:          'Area Yogyakarta',
 };
 
-export const DEFAULT_SETTINGS: AppSettings = {
-  operational_hours: 'Senin - Minggu, 08.00 - 21.00 WIB',
-  service_area: 'Melayani Area Yogyakarta',
-  whatsapp_number: '6289518359037',
-  whatsapp_booking_message: 'Halo Admin SerenaRaga! Saya ingin tanya layanan massage di rumah. Bisa bantu informasinya?',
-  whatsapp_reminder_message: 'Halo {nama}, reminder booking SerenaRaga:\n📅 {tanggal} pukul {waktu}\n💆 {layanan}\n💰 {harga}\n\nTerima kasih! 🙏',
-  invoice_footer_text: 'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.',
-  invoice_social_text: 'Instagram & Threads: @serena.raga',
-  terapis_commission_pct: 30,
-};
+export function useSettings() {
+  const [settings, setSettings] = useState<Settings>(DEFAULTS);
+  const [loading, setLoading] = useState(true);
 
-export async function fetchSettings(): Promise<AppSettings> {
-  try {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('settings').select('key, value');
-    if (error || !data) return DEFAULT_SETTINGS;
-
-    const map: Record<string, string> = {};
-    data.forEach(row => { map[row.key] = row.value; });
-
-    return {
-      operational_hours:        map.operational_hours        ?? DEFAULT_SETTINGS.operational_hours,
-      service_area:             map.service_area             ?? DEFAULT_SETTINGS.service_area,
-      whatsapp_number:          map.whatsapp_number          ?? DEFAULT_SETTINGS.whatsapp_number,
-      whatsapp_booking_message: map.whatsapp_booking_message ?? DEFAULT_SETTINGS.whatsapp_booking_message,
-      whatsapp_reminder_message:map.whatsapp_reminder_message?? DEFAULT_SETTINGS.whatsapp_reminder_message,
-      invoice_footer_text:      map.invoice_footer_text      ?? DEFAULT_SETTINGS.invoice_footer_text,
-      invoice_social_text:      map.invoice_social_text      ?? DEFAULT_SETTINGS.invoice_social_text,
-      terapis_commission_pct:   Number(map.terapis_commission_pct ?? DEFAULT_SETTINGS.terapis_commission_pct),
+  useEffect(() => {
+    const load = async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from('settings').select('key, value');
+      if (data && data.length > 0) {
+        const map: Settings = { ...DEFAULTS };
+        data.forEach(({ key, value }) => { if (value !== null) map[key] = value; });
+        setSettings(map);
+      }
+      setLoading(false);
     };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+    load();
+  }, []);
+
+  return { settings, loading };
 }
 
-export async function saveSetting(key: keyof AppSettings, value: string): Promise<void> {
+// For admin: fetch + save
+export function useAdminSettings() {
+  const [settings, setSettings] = useState<Settings>(DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const supabase = createClient();
-  await supabase.from('settings').upsert({ key, value, updated_at: new Date().toISOString() });
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('settings').select('key, value');
+    if (data) {
+      const map: Settings = { ...DEFAULTS };
+      data.forEach(({ key, value }) => { if (value !== null) map[key] = value; });
+      setSettings(map);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async (key: string, value: string) => {
+    setSaving(true);
+    await supabase.from('settings').upsert({ key, value, updated_at: new Date().toISOString() });
+    setSettings(prev => ({ ...prev, [key]: value }));
+    setSaving(false);
+  };
+
+  const saveAll = async (updates: Partial<Settings>) => {
+    setSaving(true);
+    const rows = Object.entries(updates)
+      .filter(([, v]) => v !== undefined)
+      .map(([key, value]) => ({ key, value: value as string, updated_at: new Date().toISOString() }));
+    await supabase.from('settings').upsert(rows);
+    const defined = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined)
+    ) as Settings;
+    setSettings(prev => ({ ...prev, ...defined }));
+    setSaving(false);
+  };
+
+  return { settings, setSettings, loading, saving, save, saveAll };
 }

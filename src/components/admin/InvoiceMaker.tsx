@@ -2,9 +2,9 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { Download, Plus, Trash2, Loader2, Share2, Users } from 'lucide-react';
+import { Download, Plus, Trash2, Loader2, Share2, Users, Percent } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
-import { fetchSettings, DEFAULT_SETTINGS, type AppSettings } from '@/lib/settings';
+import { useSettings } from '@/lib/settings';
 
 type Item = { id: number; name: string; duration: string; price: number; };
 type Service = { id: string; name: string; price: number; details: string; category: string; };
@@ -38,22 +38,23 @@ const InvoiceMaker = () => {
   const [items, setItems] = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
   const [services, setServices] = useState<Service[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [generating, setGenerating] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
 
   const supabase = createClient();
+  const { settings } = useSettings();
+
+  const commissionPct = Number(settings.terapis_commission_pct ?? 30);
+  const invoiceFooter = settings.invoice_footer ?? 'Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.';
 
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: bkgData }, appSettings] = await Promise.all([
+    const [{ data: svcData }, { data: bkgData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed', 'Completed']).order('booking_date', { ascending: false }).limit(50),
-      fetchSettings(),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
-    setSettings(appSettings);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -238,10 +239,24 @@ const InvoiceMaker = () => {
           </div>
         </div>
 
-        {/* Total */}
-        <div className="flex justify-between items-center bg-earth-primary/5 dark:bg-earth-primary/10 rounded-xl px-4 py-3">
-          <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total</span>
-          <span className="text-lg font-bold text-earth-primary font-mono">Rp {totalPrice.toLocaleString('id-ID')}</span>
+        {/* Total + Commission breakdown */}
+        <div className="rounded-xl bg-earth-primary/5 dark:bg-earth-primary/10 p-4 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total Invoice</span>
+            <span className="text-lg font-bold text-earth-primary font-mono">Rp {totalPrice.toLocaleString('id-ID')}</span>
+          </div>
+          {commissionPct > 0 && totalPrice > 0 && (
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%)</span>
+                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">Rp {Math.round(totalPrice * commissionPct / 100).toLocaleString('id-ID')}</span>
+              </div>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
+                <span>Pemilik ({100 - commissionPct}%)</span>
+                <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">Rp {Math.round(totalPrice * (100 - commissionPct) / 100).toLocaleString('id-ID')}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}
@@ -316,10 +331,10 @@ const InvoiceMaker = () => {
             {/* Footer */}
             <div style={{ textAlign: 'center', paddingTop: 20, borderTop: '1px solid #f4f4f5' }}>
               <p style={{ fontSize: 11, fontStyle: 'italic', color: '#a1a1aa' }}>
-                {settings.invoice_footer_text}
+                {invoiceFooter}
               </p>
               <p style={{ fontSize: 9, fontWeight: 700, color: '#8B5E3C', textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: 8 }}>
-                {settings.invoice_social_text}
+                Instagram &amp; Threads: @serena.raga
               </p>
             </div>
           </div>

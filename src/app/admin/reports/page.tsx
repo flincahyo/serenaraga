@@ -1,28 +1,25 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Download, BarChart3, Loader2 } from 'lucide-react';
-
+import { Download, BarChart3, Loader2, FlaskConical } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
+  Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
 
-
 type Booking = {
   id: string; service_name: string; booking_date: string;
-  price: number; status: string;
+  price: number; status: string; bhp_cost?: number;
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
-const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+const MONTHS_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
 
 export default function ReportsPage() {
   const [bookings, setBookings]           = useState<Booking[]>([]);
   const [loading, setLoading]             = useState(true);
   const [commissionPct, setCommissionPct] = useState(30);
-  const [bhpPct, setBhpPct]               = useState(10);
 
   const supabase = createClient();
 
@@ -30,16 +27,15 @@ export default function ReportsPage() {
     setLoading(true);
     const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
-        .select('id, service_name, booking_date, price, status')
+        .select('id, service_name, booking_date, price, status, bhp_cost')
         .eq('status', 'Completed')
         .order('booking_date'),
-      supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct', 'bhp_pct']),
+      supabase.from('settings').select('key, value').eq('key', 'terapis_commission_pct'),
     ]);
     if (data) setBookings(data);
     if (settingsRows) {
       settingsRows.forEach(({ key, value }) => {
         if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
-        if (key === 'bhp_pct')               setBhpPct(Number(value) || 10);
       });
     }
     setLoading(false);
@@ -47,67 +43,60 @@ export default function ReportsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const ownerPct = Math.max(0, 100 - commissionPct - bhpPct);
-
-  // Build monthly chart data (last 6 months)
+  // ── Monthly chart (last 6 months) ──
   const now = new Date();
-
-  // Last 6 months chart data
   const monthlyData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const y = d.getFullYear();
     const m = d.getMonth();
-    const monthBookings = bookings.filter(b => {
+    const mb = bookings.filter(b => {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
-    const gross    = monthBookings.reduce((s, b) => s + (b.price ?? 0), 0);
-    const terapis   = Math.round(gross * commissionPct / 100);
-    const bhpCut    = Math.round(gross * bhpPct / 100);
-    const net       = Math.round(gross * ownerPct / 100);
-    return { month: MONTHS_ID[m], bookings: monthBookings.length, gross, terapis, bhp: bhpCut, net };
+    const gross   = mb.reduce((s, b) => s + (b.price ?? 0), 0);
+    const terapis = Math.round(gross * commissionPct / 100);
+    const bhp     = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
+    const net     = gross - terapis - bhp;
+    return { month: MONTHS_ID[m], bookings: mb.length, gross, terapis, bhp, net };
   });
 
-  // Service breakdown
-  const serviceMap: Record<string, { count: number; gross: number }> = {};
+  // ── Service breakdown ──
+  const serviceMap: Record<string, { count: number; gross: number; bhp: number }> = {};
   bookings.forEach(b => {
     if (!b.service_name) return;
-    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0 };
-    serviceMap[b.service_name].count  += 1;
-    serviceMap[b.service_name].gross  += b.price ?? 0;
+    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, bhp: 0 };
+    serviceMap[b.service_name].count += 1;
+    serviceMap[b.service_name].gross += b.price ?? 0;
+    serviceMap[b.service_name].bhp   += b.bhp_cost ?? 0;
   });
   const serviceBreakdown = Object.entries(serviceMap)
     .map(([name, v]) => ({
       name,
-      count:    v.count,
-      gross:    v.gross,
-      terapis:  Math.round(v.gross * commissionPct / 100),
-      bhp:      Math.round(v.gross * bhpPct / 100),
-      net:      Math.round(v.gross * ownerPct / 100),
+      count:   v.count,
+      gross:   v.gross,
+      terapis: Math.round(v.gross * commissionPct / 100),
+      bhp:     Math.round(v.bhp),
+      net:     Math.round(v.gross - (v.gross * commissionPct / 100) - v.bhp),
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
   const totalGross   = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
+  const totalBhp     = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
   const totalTerapis = Math.round(totalGross * commissionPct / 100);
-  const totalBhp     = Math.round(totalGross * bhpPct / 100);
   const totalNet     = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
+  const hasBhpData    = totalBhp > 0;
 
   const exportCSV = () => {
-    const headers = ['Bulan', 'Total Booking', 'Pendapatan Kotor', 'Bagian Terapis', 'Modal BHP', 'Penghasilan Bersih'];
-    const rows = monthlyData.map(d => [
-      d.month, d.bookings, d.gross,
-      Math.round(d.gross * commissionPct / 100),
-      Math.round(d.gross * bhpPct / 100),
-      Math.round(d.gross * ownerPct / 100),
-    ]);
-    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const headers = ['Bulan','Total Booking','Pendapatan Kotor','Bagian Terapis','Modal BHP (aktual)','Penghasilan Bersih'];
+    const rows = monthlyData.map(d => [d.month, d.bookings, d.gross, d.terapis, d.bhp, d.net]);
+    const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href     = url;
+    link.href = url;
     link.download = `SerenaRaga_Report_${new Date().toISOString().slice(0, 7)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
@@ -119,7 +108,14 @@ export default function ReportsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Reports</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">Ringkasan performa bisnis SerenaRaga · hanya transaksi <span className="font-semibold text-blue-600 dark:text-blue-400">Completed</span></p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
+            Ringkasan performa bisnis · hanya transaksi <span className="font-semibold text-blue-600 dark:text-blue-400">Completed</span>
+            {!hasBhpData && (
+              <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                <FlaskConical size={11} /> BHP belum ada data — input bahan di halaman Bahan (BHP)
+              </span>
+            )}
+          </p>
         </div>
         <button onClick={exportCSV} className="admin-btn-ghost">
           <Download size={15} /> Export CSV
@@ -143,12 +139,12 @@ export default function ReportsPage() {
               <p className="text-xs text-zinc-400 mt-1">Sebelum potongan</p>
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Terapis ({commissionPct}%) + BHP ({bhpPct}%)</p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Terapis ({commissionPct}%) + BHP</p>
               <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">{formatRp(totalTerapis + totalBhp)}</p>
               <p className="text-xs text-amber-600/60 mt-1">Total potongan</p>
             </div>
             <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-4">
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">Penghasilan Bersih Owner ({ownerPct}%)</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mb-1">Penghasilan Bersih Owner</p>
               <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatRp(totalNet)}</p>
               <p className="text-xs text-emerald-600/60 mt-1">Setelah semua potongan</p>
             </div>
@@ -159,18 +155,20 @@ export default function ReportsPage() {
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
               <p className="text-xs text-zinc-500 mb-1">Layanan Terlaris</p>
               <p className="text-base font-bold text-zinc-900 dark:text-white">{topService.name}</p>
-              <p className="text-xs text-zinc-400 mt-1">{topService.count} booking · Kotor: {formatRp(topService.gross)} · Bersih: {formatRp(topService.net)}</p>
+              <p className="text-xs text-zinc-400 mt-1">
+                {topService.count} booking · Kotor: {formatRp(topService.gross)} · BHP: {formatRp(topService.bhp)} · Bersih: {formatRp(topService.net)}
+              </p>
             </div>
           )}
 
           {/* Revenue Chart */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div className="flex items-center gap-2">
                 <BarChart3 size={16} className="text-earth-primary" />
                 <div>
                   <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Pendapatan 6 Bulan Terakhir</h2>
-                  <p className="text-xs text-zinc-400 mt-0.5">Rincian: Kotor · Terapis · BHP · Bersih Owner</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Rincian: Kotor · Terapis · BHP aktual · Bersih Owner</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-[10px] text-zinc-400 shrink-0">
@@ -185,19 +183,20 @@ export default function ReportsPage() {
                 <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -15, bottom: 0 }} barCategoryGap="30%" barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#A1A1AA' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }} tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}jt` : String(v)} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#A1A1AA' }}
+                    tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}jt` : String(v)} />
                   <Tooltip
                     formatter={(v: unknown, name: unknown) => {
-                      const labels: Record<string, string> = { gross: 'Kotor', terapis: 'Terapis', bhp: 'BHP', net: 'Bersih Owner' };
+                      const labels: Record<string, string> = { gross: 'Kotor', terapis: 'Terapis', bhp: 'BHP (aktual)', net: 'Bersih Owner' };
                       return [formatRp(Number(v)), labels[String(name)] ?? String(name)];
                     }}
                     contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', fontSize: 12 }}
                     cursor={{ fill: 'rgba(139,94,60,0.03)' }}
                   />
-                  <Bar dataKey="gross"   name="gross"   fill="#8B5E3C" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="terapis" name="terapis" fill="#FBBF24" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="bhp"     name="bhp"     fill="#60A5FA" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="net"     name="net"     fill="#10b981" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="gross"   name="gross"   fill="#8B5E3C" radius={[3,3,0,0]} />
+                  <Bar dataKey="terapis" name="terapis" fill="#FBBF24" radius={[3,3,0,0]} />
+                  <Bar dataKey="bhp"     name="bhp"     fill="#60A5FA" radius={[3,3,0,0]} />
+                  <Bar dataKey="net"     name="net"     fill="#10b981" radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -211,6 +210,7 @@ export default function ReportsPage() {
                 <div className="flex items-center gap-4 text-[10px] text-zinc-400">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-earth-primary inline-block"/>Kotor</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"/>Terapis</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"/>BHP</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>Bersih</span>
                 </div>
               </div>
@@ -233,7 +233,9 @@ export default function ReportsPage() {
                         <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400">{s.count}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-zinc-600 dark:text-zinc-400 font-mono text-xs">{formatRp(s.gross)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-amber-600 font-mono text-xs">{formatRp(s.terapis)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-blue-500 font-mono text-xs">{formatRp(s.bhp)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-blue-500 font-mono text-xs">
+                          {s.bhp > 0 ? formatRp(s.bhp) : <span className="text-zinc-300 dark:text-zinc-600">—</span>}
+                        </td>
                         <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs font-semibold">{formatRp(s.net)}</td>
                       </tr>
                     ))}

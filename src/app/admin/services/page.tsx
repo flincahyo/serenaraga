@@ -354,15 +354,24 @@ export default function ServicesPage() {
 
                   {/* ── BHP Editor ── */}
                   <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
-                      <FlaskConical size={14} className="text-earth-primary" />
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">BHP Layanan Ini</span>
-                      {bhpLoading && <Loader2 size={12} className="animate-spin text-zinc-400 ml-1" />}
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800/60 border-b border-zinc-200 dark:border-zinc-700">
+                      <div className="flex items-center gap-2">
+                        <FlaskConical size={14} className="text-earth-primary" />
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Bahan Habis Pakai</span>
+                      </div>
+                      {bhpLoading
+                        ? <Loader2 size={12} className="animate-spin text-zinc-400" />
+                        : editSvcMats.length > 0 && (
+                          <span className="text-xs font-mono font-bold text-earth-primary">
+                            {formatRp(editTotalBhp)}<span className="font-normal text-zinc-400">/customer</span>
+                          </span>
+                        )}
                     </div>
 
-                    {/* Existing materials */}
+                    {/* Assigned materials */}
                     {editSvcMats.length === 0 && !bhpLoading ? (
-                      <p className="text-xs text-zinc-400 text-center py-4">Belum ada bahan. Tambah di bawah.</p>
+                      <p className="text-xs text-zinc-400 text-center py-5 italic">Belum ada bahan — tambah di bawah</p>
                     ) : (
                       <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
                         {editSvcMats.map(sm => {
@@ -370,88 +379,73 @@ export default function ServicesPage() {
                           if (!m) return null;
                           const cost = svcMatCost(sm);
                           return (
-                            <div key={sm.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                            <div key={sm.id} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-sm text-zinc-800 dark:text-zinc-200">{m.name}</span>
+                                  {m.pack_label && <span className="text-[10px] text-zinc-400">{m.pack_label}</span>}
                                   {m.is_global && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                                      <Globe2 size={8} /> global
-                                    </span>
+                                    <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">global</span>
+                                  )}
+                                  {sm.qty_multiplier > 1 && (
+                                    <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">×{sm.qty_multiplier}</span>
                                   )}
                                 </div>
-                                <p className="text-[11px] text-zinc-400">
-                                  {formatRp(m.pack_price)} ÷ {m.customers_per_pack} customer
-                                  {sm.qty_multiplier !== 1 && (
-                                    <span className="text-amber-500 ml-1">× {sm.qty_multiplier}x
-                                    </span>
-                                  )}
+                                <p className="text-[11px] text-zinc-400 mt-0.5">
+                                  {formatRp(m.pack_price)} ÷ {m.customers_per_pack}{sm.qty_multiplier > 1 ? ` × ${sm.qty_multiplier}` : ''}
                                 </p>
                               </div>
-                              <span className="text-xs font-mono font-semibold text-earth-primary shrink-0">
-                                {formatRp(cost)}
-                              </span>
+                              <span className="text-xs font-mono font-semibold text-earth-primary shrink-0">{formatRp(cost)}</span>
                               <button onClick={() => removeSvcMat(sm.id)}
-                                className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-zinc-300 hover:text-red-500 shrink-0">
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/30 text-zinc-300 hover:text-red-500 shrink-0 transition-opacity">
                                 <X size={13} />
                               </button>
                             </div>
                           );
                         })}
-                        {/* Total */}
-                        <div className="flex justify-between items-center px-4 py-2.5 bg-earth-primary/5 dark:bg-earth-primary/10">
-                          <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Total BHP per customer</span>
-                          <span className="text-sm font-bold font-mono text-earth-primary">{formatRp(editTotalBhp)}</span>
-                        </div>
                       </div>
                     )}
 
-                    {/* Add material row */}
-                    <div className="flex gap-2 p-3 bg-zinc-50/60 dark:bg-zinc-800/40 border-t border-zinc-100 dark:border-zinc-700">
-                      <select
-                        value={addMatId}
-                        onChange={e => setAddMatId(e.target.value)}
-                        className="admin-input text-xs flex-1"
-                      >
-                        <option value="">-- Pilih bahan --</option>
-                        {allMaterials
-                          .filter(m => !editSvcMats.find(sm => sm.material_id === m.id))
-                          .map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name}{m.pack_label ? ` (${m.pack_label})` : ''}{m.is_global ? ' · global' : ''}
-                            </option>
-                          ))}
-                      </select>
-                      <input
-                        type="number" min={1} step={1}
-                        value={addMatQty || ''}
-                        onChange={e => setAddMatQty(Math.max(1, Math.round(Number(e.target.value))))}
-                        title="Multiplier: 1 = pakai normal, 2 = pakai 2x lipat"
-                        placeholder="1×"
-                        className="admin-input text-xs w-16 font-mono text-center"
-                      />
-                      <button
-                        onClick={addServiceMaterial}
-                        disabled={!addMatId || addMatQty <= 0 || addingMat}
-                        className="admin-btn-primary py-1.5 px-3 disabled:opacity-50"
-                      >
-                        {addingMat ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                      </button>
+                    {/* Add row */}
+                    <div className="p-3 border-t border-zinc-100 dark:border-zinc-700 space-y-2 bg-zinc-50/50 dark:bg-zinc-800/30">
+                      <div className="flex gap-2">
+                        <select value={addMatId} onChange={e => setAddMatId(e.target.value)}
+                          className="admin-input text-xs flex-1">
+                          <option value="">+ Pilih bahan untuk ditambah</option>
+                          {allMaterials
+                            .filter(m => !editSvcMats.find(sm => sm.material_id === m.id))
+                            .map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name}{m.pack_label ? ` (${m.pack_label})` : ''}{m.is_global ? ' · global' : ''} · {formatRp(Math.round(m.customers_per_pack > 0 ? m.pack_price / m.customers_per_pack : 0))}/cust
+                              </option>
+                            ))}
+                        </select>
+                        <input type="number" min={1} step={1}
+                          value={addMatQty || ''} placeholder="1×"
+                          onChange={e => setAddMatQty(Math.max(1, Math.round(Number(e.target.value))))}
+                          title="Multiplier: 1=normal, 2=pakai 2× lipat"
+                          className="admin-input text-xs w-14 font-mono text-center" />
+                        <button onClick={addServiceMaterial}
+                          disabled={!addMatId || addMatQty <= 0 || addingMat}
+                          className="admin-btn-primary py-1.5 px-3 disabled:opacity-50 shrink-0">
+                          {addingMat ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                        </button>
+                      </div>
+                      {addMatId && (() => {
+                        const mat = allMaterials.find(m => m.id === addMatId);
+                        if (!mat || mat.customers_per_pack <= 0) return null;
+                        const base = mat.pack_price / mat.customers_per_pack;
+                        const cost = addMatQty * base;
+                        return (
+                          <p className="text-[11px] text-zinc-400 px-1">
+                            {formatRp(mat.pack_price)} ÷ {mat.customers_per_pack}
+                            {addMatQty > 1 && <span className="text-amber-500"> × {addMatQty}</span>}
+                            {' = '}
+                            <span className="font-mono font-semibold text-earth-primary">{formatRp(Math.round(cost))}/customer</span>
+                          </p>
+                        );
+                      })()}
                     </div>
-                    {/* Preview cost hint */}
-                    {addMatId && (() => {
-                      const mat = allMaterials.find(m => m.id === addMatId);
-                      if (!mat) return null;
-                      const baseCost = mat.customers_per_pack > 0 ? mat.pack_price / mat.customers_per_pack : 0;
-                      const cost = addMatQty * baseCost;
-                      return (
-                        <p className="text-[11px] text-zinc-400 px-4 pb-2">
-                          {formatRp(mat.pack_price)} ÷ {mat.customers_per_pack} customer
-                          {addMatQty !== 1 && <span className="text-amber-500"> × {addMatQty}x</span>} =&nbsp;
-                          <span className="font-mono font-semibold text-earth-primary">{formatRp(cost)}/customer</span>
-                        </p>
-                      );
-                    })()}
                   </div>
                 </div>
               ) : (

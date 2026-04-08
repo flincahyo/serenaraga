@@ -17,6 +17,20 @@
 :root {
   --background: var(--color-bg-cream);
   --foreground: var(--color-text-primary);
+  /* Admin tokens */
+  --admin-bg: #F4F4F5;
+  --admin-surface: #FFFFFF;
+  --admin-border: #E4E4E7;
+  --admin-text: #18181B;
+  --admin-muted: #71717A;
+}
+
+.dark {
+  --admin-bg: #09090B;
+  --admin-surface: #18181B;
+  --admin-border: #27272A;
+  --admin-text: #FAFAFA;
+  --admin-muted: #A1A1AA;
 }
 
 body {
@@ -49,4 +63,72 @@ h1, h2, h3, h4, .font-serif {
     margin-inline: auto;
     padding: 0 1.5rem;
   }
+
+  /* Admin Panel Utilities */
+  .admin-card {
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .admin-input {
+    width: 100%;
+    background: var(--admin-bg);
+    border: 1px solid var(--admin-border);
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    outline: none;
+    color: var(--admin-text);
+    transition: border-color 0.15s;
+  }
+
+  .admin-input:focus {
+    border-color: #8B5E3C;
+    box-shadow: 0 0 0 3px rgba(139,94,60,0.08);
+  }
+
+  .admin-btn-primary {
+    background: #8B5E3C;
+    color: white;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: background 0.15s, transform 0.1s;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .admin-btn-primary:hover {
+    background: #5D4037;
+  }
+
+  .admin-btn-ghost {
+    background: transparent;
+    color: var(--admin-muted);
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--admin-border);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .admin-btn-ghost:hover {
+    background: var(--admin-bg);
+    color: var(--admin-text);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
 }

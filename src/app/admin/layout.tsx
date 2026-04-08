@@ -1,38 +1,43 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/admin/Sidebar';
-import { motion } from 'framer-motion';
+import { Menu } from 'lucide-react';
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  
-  // Halaman Login tidak menampilkan Sidebar
-  const isLoginPage = pathname === '/admin';
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (isLoginPage) {
+  // Login page — no sidebar
+  if (pathname === '/admin') {
     return <>{children}</>;
   }
 
   return (
-    <div className="min-h-screen bg-bg-cream dark:bg-zinc-900 flex transition-colors duration-300">
-      <Sidebar />
-      <main className="flex-grow pl-72">
-        <div className="p-8 md:p-12 min-h-screen">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Main Content */}
+      <div className="lg:pl-64 flex flex-col min-h-screen">
+        {/* Top Bar (mobile only) */}
+        <header className="sticky top-0 z-20 lg:hidden flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
           >
-            {children}
-          </motion.div>
-        </div>
-      </main>
+            <Menu size={20} />
+          </button>
+          <span className="text-sm font-semibold dark:text-white font-sans">
+            Serena<span className="text-earth-primary">Raga</span>
+          </span>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 p-6 md:p-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

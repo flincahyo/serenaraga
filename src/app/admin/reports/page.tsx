@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase';
 type Booking = {
   id: string; customer_name?: string; service_name: string; booking_date: string;
   price: number; final_price?: number; discount_total?: number;
+  shared_discount_total?: number;
   status: string; bhp_cost?: number;
 };
 
@@ -28,7 +29,7 @@ export default function ReportsPage() {
     setLoading(true);
     const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
-        .select('id, customer_name, service_name, booking_date, price, final_price, discount_total, status, bhp_cost')
+        .select('id, customer_name, service_name, booking_date, price, final_price, discount_total, shared_discount_total, status, bhp_cost')
         .eq('status', 'Completed')
         .order('booking_date'),
       supabase.from('settings').select('key, value').eq('key', 'terapis_commission_pct'),
@@ -57,20 +58,22 @@ export default function ReportsPage() {
     const originalGross = mb.reduce((s, b) => s + (b.price ?? 0), 0);
     const gross    = mb.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
     const discount = mb.reduce((s, b) => s + (b.discount_total ?? 0), 0);
-    const terapis  = Math.round(originalGross * commissionPct / 100);
+    const sumShared = mb.reduce((s, b) => s + (b.shared_discount_total ?? 0), 0);
+    const terapis  = Math.round((originalGross - sumShared) * commissionPct / 100);
     const bhp      = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
     const net      = gross - terapis - bhp;
     return { month: MONTHS_ID[m], bookings: mb.length, gross, discount, terapis, bhp, net };
   });
 
   // ── Service breakdown ──
-  const serviceMap: Record<string, { count: number; gross: number; discount: number; bhp: number }> = {};
+  const serviceMap: Record<string, { count: number; gross: number; discount: number; shared_discount: number; bhp: number }> = {};
   bookings.forEach(b => {
     if (!b.service_name) return;
-    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, discount: 0, bhp: 0 };
+    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, discount: 0, shared_discount: 0, bhp: 0 };
     serviceMap[b.service_name].count += 1;
     serviceMap[b.service_name].gross += b.price ?? 0;
     serviceMap[b.service_name].discount += b.discount_total ?? 0;
+    serviceMap[b.service_name].shared_discount += b.shared_discount_total ?? 0;
     serviceMap[b.service_name].bhp   += b.bhp_cost ?? 0;
   });
   const serviceBreakdown = Object.entries(serviceMap)
@@ -79,18 +82,19 @@ export default function ReportsPage() {
       count:   v.count,
       gross:   v.gross,
       discount: v.discount,
-      terapis: Math.round(v.gross * commissionPct / 100),
+      terapis: Math.round((v.gross - v.shared_discount) * commissionPct / 100),
       bhp:     Math.round(v.bhp),
-      net:     Math.round((v.gross - v.discount) - (v.gross * commissionPct / 100) - v.bhp),
+      net:     Math.round((v.gross - v.discount) - ((v.gross - v.shared_discount) * commissionPct / 100) - v.bhp),
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
   const totalOriginalGross = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
+  const totalShared   = bookings.reduce((s, b) => s + (b.shared_discount_total ?? 0), 0);
   const totalGross    = bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
   const totalDiscount = bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const totalBhp      = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const totalTerapis  = Math.round(totalOriginalGross * commissionPct / 100);
+  const totalTerapis  = Math.round((totalOriginalGross - totalShared) * commissionPct / 100);
   const totalNet      = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
@@ -289,7 +293,8 @@ export default function ReportsPage() {
                       const gross = b.price ?? 0;
                       const finalPrice = b.final_price ?? gross;
                       const discount = b.discount_total ?? 0;
-                      const terapis = Math.round(gross * commissionPct / 100);
+                      const sharedDiscount = b.shared_discount_total ?? 0;
+                      const terapis = Math.round((gross - sharedDiscount) * commissionPct / 100);
                       const bhp = b.bhp_cost ?? 0;
                       const net = finalPrice - terapis - bhp;
                       return (

@@ -42,7 +42,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, .font-serif {
+.font-serif {
   font-family: var(--font-serif);
 }
 

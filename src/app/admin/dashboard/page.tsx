@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase';
 type Booking = {
   id: string; customer_name: string; service_name: string;
   booking_date: string; booking_time: string; price: number;
-  final_price?: number; discount_total?: number;
+  final_price?: number; discount_total?: number; shared_discount_total?: number;
   status: string; phone?: string; notes?: string; bhp_cost?: number;
 };
 
@@ -106,7 +106,9 @@ export default function DashboardPage() {
   const grossRevenue   = completedMonth.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
   const totalDiscount  = completedMonth.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const originalGross  = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
-  const terapisCut     = Math.round(originalGross * commissionPct / 100);
+  const sharedDiscount = completedMonth.reduce((s, b) => s + (b.shared_discount_total ?? 0), 0);
+  const terapisBase    = Math.max(0, originalGross - sharedDiscount);
+  const terapisCut     = Math.round(terapisBase * commissionPct / 100);
 
   // BHP: gunakan bhp_cost aktual dari per-booking
   const bhpActual  = completedMonth.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);

@@ -15,6 +15,7 @@ type Discount = {
   type: DiscountType; value_type: ValueType; value: number;
   min_orders: number | null; valid_from: string | null; valid_to: string | null;
   max_uses: number | null; uses_count: number; is_active: boolean; created_at: string;
+  is_owner_borne: boolean;
 };
 
 type DiscountForm = Omit<Discount, 'id' | 'uses_count' | 'created_at'>;
@@ -22,7 +23,7 @@ type DiscountForm = Omit<Discount, 'id' | 'uses_count' | 'created_at'>;
 const EMPTY_FORM: DiscountForm = {
   name: '', description: null, type: 'loyal', value_type: 'percentage',
   value: 10, min_orders: 5, valid_from: null, valid_to: null,
-  max_uses: null, is_active: true,
+  max_uses: null, is_active: true, is_owner_borne: true,
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -138,14 +139,29 @@ function DiscountFormPanel({
         </div>
       </div>
 
-      {/* Max uses */}
-      <div>
-        <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-1">
-          <Users size={11} /> Maksimum Penggunaan (kosongkan = unlimited)
-        </label>
-        <input type="number" min={1} className="admin-input w-32 font-mono"
-          value={data.max_uses ?? ''}
-          onChange={e => onChange({ ...data, max_uses: Number(e.target.value) || null })} />
+      <div className="grid grid-cols-2 gap-3">
+        {/* Max uses */}
+        <div>
+          <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+            <Users size={11} /> Maks. Pakai (kosong: unlimited)
+          </label>
+          <input type="number" min={1} className="admin-input font-mono"
+            value={data.max_uses ?? ''}
+            onChange={e => onChange({ ...data, max_uses: Number(e.target.value) || null })} />
+        </div>
+        
+        {/* Owner Borne Flag */}
+        <div>
+          <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+            Tanggungan Diskon
+          </label>
+          <select className="admin-input" value={data.is_owner_borne ? 'true' : 'false'}
+            onChange={e => onChange({ ...data, is_owner_borne: e.target.value === 'true' })}>
+            <option value="true">Owner (Potong bersih)</option>
+            <option value="false">Shared (Potong gabungan)</option>
+          </select>
+          <p className="text-[10px] text-zinc-400 mt-1">Shared = Komisi terapis ikut berkurang.</p>
+        </div>
       </div>
 
       <div className="flex gap-2 pt-1">
@@ -288,6 +304,9 @@ export default function DiscountsPage() {
                         <Users size={11} /> {d.uses_count}x dipakai
                         {d.max_uses && ` / max ${d.max_uses}`}
                       </span>
+                      <span className="flex items-center gap-1 text-xs text-zinc-400">
+                        <BadgeDollarSign size={11} /> {d.is_owner_borne ? 'Ditanggung Owner' : 'Shared (Owner+Terapis)'}
+                      </span>
                       {(d.valid_from || d.valid_to) && (
                         <span className="flex items-center gap-1 text-xs text-zinc-400">
                           <CalendarRange size={11} />
@@ -301,7 +320,7 @@ export default function DiscountsPage() {
                       className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400" title={d.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
                       {d.is_active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} />}
                     </button>
-                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active }); setShowAdd(false); }}
+                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true }); setShowAdd(false); }}
                       className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400">
                       <Pencil size={14} />
                     </button>

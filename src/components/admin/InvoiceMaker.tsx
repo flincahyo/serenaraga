@@ -17,11 +17,11 @@ type Booking = {
 type Discount = {
   id: string; name: string; type: string; value_type: string; value: number;
   min_orders: number | null; is_active: boolean; valid_from: string | null; valid_to: string | null;
-  uses_count: number;
+  uses_count: number; is_owner_borne?: boolean;
 };
 type AppliedDiscount = {
   discountId: string; label: string; value_type: string;
-  value: number; amount: number; // Rp computed
+  value: number; amount: number; is_owner_borne: boolean; // Rp computed
 };
 type Customer = {
   id: string; wa_number: string; name: string | null; visit_count_base: number;
@@ -203,6 +203,7 @@ const InvoiceMaker = () => {
       setAppliedDiscounts(prev => [...prev, {
         discountId: d.id, label: d.name, value_type: d.value_type,
         value: d.value, amount: computeAmount(d, grossTotal),
+        is_owner_borne: d.is_owner_borne ?? true,
       }]);
     }
   };
@@ -214,6 +215,7 @@ const InvoiceMaker = () => {
     setAppliedDiscounts(prev => [...prev, {
       discountId: d.id, label: d.name, value_type: d.value_type,
       value: d.value, amount: computeAmount(d, grossTotal),
+      is_owner_borne: d.is_owner_borne ?? true,
     }]);
     setAddDiscountId('');
   };
@@ -226,6 +228,7 @@ const InvoiceMaker = () => {
       value_type: 'flat',
       value: Number(customDiscountAmount),
       amount: Number(customDiscountAmount),
+      is_owner_borne: true,
     }]);
     setCustomDiscountName('');
     setCustomDiscountAmount('');
@@ -235,8 +238,10 @@ const InvoiceMaker = () => {
     setAppliedDiscounts(prev => prev.filter(a => a.discountId !== discountId));
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
+  const sharedDiscountAmount = appliedDiscounts.filter(a => !a.is_owner_borne).reduce((s, a) => s + a.amount, 0);
   const finalTotal    = Math.max(0, grossTotal - totalDiscount);
-  const commission    = Math.round(grossTotal * commissionPct / 100);
+  const terapisBase   = Math.max(0, grossTotal - sharedDiscountAmount);
+  const commission    = Math.round(terapisBase * commissionPct / 100);
   const ownerNet      = finalTotal - commission;
 
   // ── Tier badge helper ──
@@ -288,6 +293,7 @@ const InvoiceMaker = () => {
       status: 'Completed',
       customer_id: customerId,
       discount_total: totalDiscount,
+      shared_discount_total: sharedDiscountAmount,
       final_price: finalTotal,
     }).eq('id', selectedBookingId);
 
@@ -301,6 +307,7 @@ const InvoiceMaker = () => {
           discount_value_type: a.value_type,
           discount_value: a.value,
           discount_amount: a.amount,
+          is_owner_borne: a.is_owner_borne,
         }))
       );
       // Increment uses_count (manual update — no RPC needed)

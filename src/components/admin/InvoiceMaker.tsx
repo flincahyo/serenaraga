@@ -79,6 +79,8 @@ const InvoiceMaker = () => {
   const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
   const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
   const [addDiscountId, setAddDiscountId]         = useState('');
+  const [customDiscountName, setCustomDiscountName] = useState('');
+  const [customDiscountAmount, setCustomDiscountAmount] = useState('');
 
   const supabase = createClient();
 
@@ -212,12 +214,25 @@ const InvoiceMaker = () => {
     setAddDiscountId('');
   };
 
+  const addCustomDiscount = () => {
+    if (!customDiscountName || !customDiscountAmount) return;
+    setAppliedDiscounts(prev => [...prev, {
+      discountId: `custom_${Date.now()}`,
+      label: customDiscountName,
+      value_type: 'flat',
+      value: Number(customDiscountAmount),
+      amount: Number(customDiscountAmount),
+    }]);
+    setCustomDiscountName('');
+    setCustomDiscountAmount('');
+  };
+
   const removeApplied = (discountId: string) =>
     setAppliedDiscounts(prev => prev.filter(a => a.discountId !== discountId));
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
   const finalTotal    = Math.max(0, grossTotal - totalDiscount);
-  const commission    = Math.round(finalTotal * commissionPct / 100);
+  const commission    = Math.round(grossTotal * commissionPct / 100);
   const ownerNet      = finalTotal - commission;
 
   // ── Tier badge helper ──
@@ -277,7 +292,7 @@ const InvoiceMaker = () => {
       await supabase.from('booking_discounts').insert(
         appliedDiscounts.map(a => ({
           booking_id: selectedBookingId,
-          discount_id: a.discountId,
+          discount_id: a.discountId.startsWith('custom_') ? null : a.discountId,
           discount_label: a.label,
           discount_value_type: a.value_type,
           discount_value: a.value,
@@ -286,6 +301,7 @@ const InvoiceMaker = () => {
       );
       // Increment uses_count (manual update — no RPC needed)
       for (const a of appliedDiscounts) {
+        if (a.discountId.startsWith('custom_')) continue;
         const current = allDiscounts.find(d => d.id === a.discountId)?.uses_count ?? 0;
         await supabase.from('discounts')
           .update({ uses_count: current + 1 })
@@ -450,6 +466,18 @@ const InvoiceMaker = () => {
                 </button>
               )}
             </div>
+
+            {/* Custom Manual Discount */}
+            <div className="pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-700/50">
+              <p className="text-[10px] font-medium text-zinc-500 mb-1.5">+ Custom Diskon (manual/kasus khusus)</p>
+              <div className="flex gap-2">
+                <input placeholder="Nama/Detail diskon..." value={customDiscountName} onChange={e => setCustomDiscountName(e.target.value)} className="admin-input text-xs flex-[2]" />
+                <input type="number" placeholder="Rp potongan..." value={customDiscountAmount} onChange={e => setCustomDiscountAmount(e.target.value)} className="admin-input text-xs flex-[1] font-mono" />
+                <button onClick={addCustomDiscount} disabled={!customDiscountName || !customDiscountAmount} className="admin-btn-primary py-1.5 px-3 shrink-0 disabled:opacity-50">
+                  <Check size={13} />
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -598,8 +626,13 @@ const InvoiceMaker = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: appliedDiscounts.length > 0 ? 6 : 10 }}>
                   <span>Subtotal</span><span>Rp {grossTotal.toLocaleString('id-ID')}</span>
                 </div>
+                {appliedDiscounts.length > 0 && (
+                   <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#059669', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                     <Tag size={10} /> <span>Discount Applied</span>
+                   </div>
+                )}
                 {appliedDiscounts.map(a => (
-                  <div key={a.discountId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#059669', marginBottom: 6 }}>
+                  <div key={a.discountId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#059669', marginBottom: 6, paddingLeft: 14 }}>
                     <span>↳ {a.label} {a.value_type === 'percentage' ? `(${a.value}%)` : ''}</span>
                     <span style={{ fontWeight: 700 }}>-Rp {a.amount.toLocaleString('id-ID')}</span>
                   </div>

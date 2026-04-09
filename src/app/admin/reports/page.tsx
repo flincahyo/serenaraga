@@ -54,9 +54,10 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
+    const originalGross = mb.reduce((s, b) => s + (b.price ?? 0), 0);
     const gross    = mb.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
     const discount = mb.reduce((s, b) => s + (b.discount_total ?? 0), 0);
-    const terapis  = Math.round(gross * commissionPct / 100);
+    const terapis  = Math.round(originalGross * commissionPct / 100);
     const bhp      = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
     const net      = gross - terapis - bhp;
     return { month: MONTHS_ID[m], bookings: mb.length, gross, discount, terapis, bhp, net };
@@ -83,10 +84,11 @@ export default function ReportsPage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
+  const totalOriginalGross = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
   const totalGross    = bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
   const totalDiscount = bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const totalBhp      = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const totalTerapis  = Math.round(totalGross * commissionPct / 100);
+  const totalTerapis  = Math.round(totalOriginalGross * commissionPct / 100);
   const totalNet      = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];

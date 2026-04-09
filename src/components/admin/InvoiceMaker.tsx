@@ -17,6 +17,7 @@ type Booking = {
 type Discount = {
   id: string; name: string; type: string; value_type: string; value: number;
   min_orders: number | null; is_active: boolean; valid_from: string | null; valid_to: string | null;
+  uses_count: number;
 };
 type AppliedDiscount = {
   discountId: string; label: string; value_type: string;
@@ -283,12 +284,12 @@ const InvoiceMaker = () => {
           discount_amount: a.amount,
         }))
       );
-      // Increment uses_count
+      // Increment uses_count (manual update — no RPC needed)
       for (const a of appliedDiscounts) {
-        await supabase.rpc('increment_discount_uses', { discount_id: a.discountId }).catch(() => {
-          // fallback manual increment
-          supabase.from('discounts').update({ uses_count: allDiscounts.find(d => d.id === a.discountId)!.uses_count + 1 }).eq('id', a.discountId);
-        });
+        const current = allDiscounts.find(d => d.id === a.discountId)?.uses_count ?? 0;
+        await supabase.from('discounts')
+          .update({ uses_count: current + 1 })
+          .eq('id', a.discountId);
       }
     }
     setCompleting(false);

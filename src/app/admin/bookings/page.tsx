@@ -5,19 +5,14 @@ import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Tr
 import { createClient } from '@/lib/supabase';
 
 type Booking = {
-  id: string;
-  created_at: string;
-  customer_name: string;
-  phone: string;
-  service_name: string;
-  booking_date: string;
-  booking_time: string;
-  price: number;
-  status: string;
-  notes: string;
+  id: string; created_at: string; customer_name: string; phone: string;
+  service_name: string; booking_date: string; booking_time: string;
+  price: number; status: string; notes: string; bhp_cost?: number;
+  discount_total?: number; final_price?: number; customer_id?: string;
 };
 
 type Service = { id: string; name: string; price: number; category: string; };
+type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; };
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
 const STATUS_STYLES: Record<string, string> = {
@@ -26,8 +21,13 @@ const STATUS_STYLES: Record<string, string> = {
   Completed: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
   Canceled:  'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
+const CATEGORY_LABELS: Record<string, string> = {
+  packages: 'Paket Massage', services: 'Massage Services',
+  reflexology: 'Refleksi', addons: 'Add-On',
+};
 
-const EMPTY_FORM = { customer_name: '', phone: '62', service_name: '', booking_date: '', booking_time: '', price: 0, status: 'Pending', notes: '' };
+const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '' };
+const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '' });
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -45,6 +45,7 @@ export default function BookingsPage() {
   const [deleting, setDeleting]       = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [bookingItems, setBookingItems] = useState<BookingItem[]>([EMPTY_ITEM()]);
 
   const supabase = createClient();
 
@@ -63,6 +64,40 @@ export default function BookingsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Hitung BHP aktual per layanan
+  const calculateBhpCost = async (serviceName: string): Promise<number> => {
+    const svc = services.find(s => s.name === serviceName);
+    if (!svc) return 0;
+    const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
+      supabase.from('service_materials')
+        .select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)')
+        .eq('service_id', svc.id),
+      supabase.from('materials').select('id, pack_price, customers_per_pack').eq('is_global', true),
+    ]);
+    type MatObj = { id: string; pack_price: number; customers_per_pack: number; is_global: boolean };
+    type SvcMatRow = { qty_multiplier: number; material: MatObj | MatObj[] | null };
+    type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
+    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => {
+      if (!raw) return null;
+      return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+    };
+    const rows = (svcMats ?? []) as unknown as SvcMatRow[];
+    const assignedGlobalIds = new Set(
+      rows.map(sm => getMat(sm.material)).filter((m): m is MatObj => m !== null && m.is_global).map(m => m.id)
+    );
+    let total = 0;
+    for (const sm of rows) {
+      const m = getMat(sm.material);
+      if (!m || m.customers_per_pack <= 0) continue;
+      total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
+    }
+    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) {
+      if (assignedGlobalIds.has(gm.id) || gm.customers_per_pack <= 0) continue;
+      total += gm.pack_price / gm.customers_per_pack;
+    }
+    return Math.round(total);
+  };
+
   const updateStatus = async (id: string, status: string) => {
     await supabase.from('bookings').update({ status }).eq('id', id);
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
@@ -71,93 +106,116 @@ export default function BookingsPage() {
   const openAdd = () => {
     setEditId(null);
     setForm(EMPTY_FORM);
+    setBookingItems([EMPTY_ITEM()]);
     setShowForm(true);
   };
 
-  const openEdit = (b: Booking) => {
+  const openEdit = async (b: Booking) => {
     setEditId(b.id);
     setForm({
-      customer_name: b.customer_name,
-      phone: b.phone,
-      service_name: b.service_name,
-      booking_date: b.booking_date,
-      booking_time: b.booking_time,
-      price: b.price,
-      status: b.status,
+      customer_name: b.customer_name ?? '',
+      phone: b.phone ?? '62',
+      booking_date: b.booking_date ?? '',
+      booking_time: b.booking_time ?? '',
+      status: b.status ?? 'Pending',
       notes: b.notes ?? '',
     });
+    // Load existing booking_items
+    const { data: items } = await supabase
+      .from('booking_items').select('*').eq('booking_id', b.id).order('sort_order');
+    if (items && items.length > 0) {
+      setBookingItems(items.map((it, i) => ({
+        tempId: i, service_id: it.service_id ?? '', service_name: it.service_name,
+        price: it.price, duration: it.duration ?? '',
+      })));
+    } else {
+      // Fallback for old single-service bookings
+      setBookingItems([{
+        tempId: 0, service_id: '', service_name: b.service_name ?? '',
+        price: b.price ?? 0, duration: '',
+      }]);
+    }
     setShowForm(true);
-  };
-
-  // Hitung BHP aktual berdasarkan service_materials + global materials
-  const calculateBhpCost = async (serviceName: string): Promise<number> => {
-    const svc = services.find(s => s.name === serviceName);
-    if (!svc) return 0;
-
-    const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
-      supabase
-        .from('service_materials')
-        .select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)')
-        .eq('service_id', svc.id),
-      supabase
-        .from('materials')
-        .select('id, pack_price, customers_per_pack')
-        .eq('is_global', true),
-    ]);
-
-    // Supabase returns joined relations as arrays — cast via unknown to correct type
-    type MatObj = { id: string; pack_price: number; customers_per_pack: number; is_global: boolean };
-    type SvcMatRow = { qty_multiplier: number; material: MatObj | MatObj[] | null };
-    type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
-
-    // Helper: normalize material (single or array) → single object or null
-    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => {
-      if (!raw) return null;
-      return Array.isArray(raw) ? (raw[0] ?? null) : raw;
-    };
-
-    const rows = (svcMats ?? []) as unknown as SvcMatRow[];
-
-    // Collect IDs of global materials already included via service_materials
-    const assignedGlobalIds = new Set(
-      rows
-        .map(sm => getMat(sm.material))
-        .filter((m): m is MatObj => m !== null && m.is_global)
-        .map(m => m.id)
-    );
-
-    let total = 0;
-
-    // Bahan spesifik layanan (termasuk jika ada global yang di-assign manual)
-    for (const sm of rows) {
-      const m = getMat(sm.material);
-      if (!m || m.customers_per_pack <= 0) continue;
-      total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
-    }
-
-    // Tambah bahan global yang belum ter-include (hindari hitung dobel)
-    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) {
-      if (assignedGlobalIds.has(gm.id)) continue;
-      if (gm.customers_per_pack <= 0) continue;
-      total += gm.pack_price / gm.customers_per_pack;
-    }
-
-    return Math.round(total);
   };
 
   const saveBooking = async () => {
+    const validItems = bookingItems.filter(i => i.service_name.trim());
+    if (!form.customer_name || validItems.length === 0) return;
     setSaving(true);
-    const bhp_cost = form.service_name ? await calculateBhpCost(form.service_name) : 0;
-    const payload = { ...form, bhp_cost };
+
+    // BHP per item
+    const itemsWithBhp = await Promise.all(
+      validItems.map(async item => ({
+        ...item,
+        bhp_cost: await calculateBhpCost(item.service_name),
+      }))
+    );
+
+    const totalPrice = itemsWithBhp.reduce((s, i) => s + Number(i.price), 0);
+    const totalBhp   = itemsWithBhp.reduce((s, i) => s + i.bhp_cost, 0);
+    const displayName = itemsWithBhp.length === 1
+      ? itemsWithBhp[0].service_name
+      : `Multiple (${itemsWithBhp.length} layanan)`;
+
+    // Upsert customer by WA (ignores duplicate — nama tidak di-overwrite)
+    let customerId: string | null = null;
+    const phone = form.phone.replace(/\D/g, '');
+    if (phone && phone.length > 5) {
+      const { data: customer } = await supabase
+        .from('customers')
+        .upsert(
+          { wa_number: phone, name: form.customer_name },
+          { onConflict: 'wa_number', ignoreDuplicates: true }
+        )
+        .select('id').single();
+      if (!customer) {
+        // ignoreDuplicates returns nothing if conflict; fetch existing
+        const { data: existing } = await supabase
+          .from('customers').select('id').eq('wa_number', phone).single();
+        customerId = existing?.id ?? null;
+      } else {
+        customerId = customer.id;
+      }
+    }
+
+    const payload = {
+      ...form,
+      service_name: displayName,
+      price: totalPrice,
+      bhp_cost: totalBhp,
+      final_price: totalPrice,   // discount_total = 0 saat booking dibuat
+      discount_total: 0,
+      customer_id: customerId,
+    };
+
+    let bookingId: string;
     if (editId) {
       await supabase.from('bookings').update(payload).eq('id', editId);
+      bookingId = editId;
     } else {
-      await supabase.from('bookings').insert(payload);
+      const { data: newBooking } = await supabase.from('bookings').insert(payload).select('id').single();
+      bookingId = newBooking!.id;
     }
+
+    // Replace booking_items
+    await supabase.from('booking_items').delete().eq('booking_id', bookingId);
+    await supabase.from('booking_items').insert(
+      itemsWithBhp.map((item, idx) => ({
+        booking_id:   bookingId,
+        service_id:   item.service_id || null,
+        service_name: item.service_name,
+        price:        Number(item.price),
+        bhp_cost:     item.bhp_cost,
+        duration:     item.duration || null,
+        sort_order:   idx,
+      }))
+    );
+
     await fetchData();
     setShowForm(false);
     setEditId(null);
     setForm(EMPTY_FORM);
+    setBookingItems([EMPTY_ITEM()]);
     setSaving(false);
   };
 
@@ -170,10 +228,24 @@ export default function BookingsPage() {
     setDeleting(false);
   };
 
-  const onServiceSelect = (name: string) => {
+  // Booking items helpers
+  const addItem = () => setBookingItems(prev => [...prev, EMPTY_ITEM()]);
+  const removeItem = (tempId: number) => setBookingItems(prev => prev.filter(i => i.tempId !== tempId));
+  const updateItem = (tempId: number, patch: Partial<BookingItem>) =>
+    setBookingItems(prev => prev.map(i => i.tempId === tempId ? { ...i, ...patch } : i));
+
+  const onServiceSelect = (tempId: number, name: string) => {
     const svc = services.find(s => s.name === name);
-    setForm(f => ({ ...f, service_name: name, price: svc?.price ?? 0 }));
+    const durationMatch = (svc as { details?: string } | undefined)?.details?.match(/(\d+)\s*m(?:enit)?/i);
+    updateItem(tempId, {
+      service_id: svc?.id ?? '',
+      service_name: name,
+      price: svc?.price ?? 0,
+      duration: durationMatch ? `${durationMatch[1]}m` : '',
+    });
   };
+
+  const totalItemsPrice = bookingItems.reduce((s, i) => s + Number(i.price), 0);
 
   const sendWA = (b: Booking) => {
     const template = reminderTemplate ||
@@ -189,7 +261,9 @@ export default function BookingsPage() {
 
   const filtered = bookings
     .filter(b => filterStatus === 'Semua' || b.status === filterStatus)
-    .filter(b => !search || b.customer_name.toLowerCase().includes(search.toLowerCase()) || b.service_name?.toLowerCase().includes(search.toLowerCase()));
+    .filter(b => !search ||
+      b.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
+      b.service_name?.toLowerCase().includes(search.toLowerCase()));
 
   const counts = STATUS_OPTIONS.reduce((acc, s) => ({ ...acc, [s]: bookings.filter(b => b.status === s).length }), {} as Record<string, number>);
 
@@ -209,15 +283,12 @@ export default function BookingsPage() {
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {['Semua', ...STATUS_OPTIONS].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
+          <button key={s} onClick={() => setFilterStatus(s)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filterStatus === s
                 ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
                 : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-            }`}
-          >
+            }`}>
             {s} {s !== 'Semua' && counts[s] !== undefined ? `(${counts[s]})` : s === 'Semua' ? `(${bookings.length})` : ''}
           </button>
         ))}
@@ -226,15 +297,11 @@ export default function BookingsPage() {
       {/* Search */}
       <div className="relative">
         <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-        <input
-          className="admin-input pl-10"
-          placeholder="Cari nama atau layanan..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <input className="admin-input pl-10" placeholder="Cari nama atau layanan..."
+          value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      {/* Bookings Table */}
+      {/* Bookings List */}
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
       ) : (
@@ -248,17 +315,21 @@ export default function BookingsPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-zinc-900 dark:text-white">{b.customer_name}</p>
                     <p className="text-xs text-zinc-400 mt-0.5">{b.phone}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ? b.booking_time.slice(0, 5) : ''}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ? b.booking_time.slice(0, 5) : ''}
+                    </p>
                   </div>
-                  <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300 shrink-0 hidden md:block">{formatRp(b.price ?? 0)}</p>
+                  <div className="text-right hidden md:block shrink-0">
+                    <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300">{formatRp(b.final_price ?? b.price ?? 0)}</p>
+                    {(b.discount_total ?? 0) > 0 && (
+                      <p className="text-[10px] text-emerald-600 font-medium">-{formatRp(b.discount_total ?? 0)}</p>
+                    )}
+                  </div>
 
-                  {/* Status Dropdown */}
+                  {/* Status */}
                   <div className="relative shrink-0">
-                    <select
-                      value={b.status}
-                      onChange={e => updateStatus(b.id, e.target.value)}
-                      className={`appearance-none pl-3 pr-7 py-1 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${STATUS_STYLES[b.status] ?? STATUS_STYLES.Pending}`}
-                    >
+                    <select value={b.status} onChange={e => updateStatus(b.id, e.target.value)}
+                      className={`appearance-none pl-3 pr-7 py-1 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${STATUS_STYLES[b.status] ?? STATUS_STYLES.Pending}`}>
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
@@ -281,45 +352,90 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {/* Add / Edit Booking Modal */}
+      {/* Add / Edit Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
-          <div className="relative w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-2xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-3 z-10 max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-2xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-3 z-10 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-zinc-900 dark:text-white">
-                {editId ? 'Edit Booking' : 'Tambah Booking'}
-              </h3>
+              <h3 className="font-semibold text-zinc-900 dark:text-white">{editId ? 'Edit Booking' : 'Tambah Booking'}</h3>
               <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"><X size={16} /></button>
             </div>
 
-            <input className="admin-input" placeholder="Nama Pelanggan" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} />
-            <input className="admin-input" placeholder="Nomor WhatsApp (62xxx)" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+            {/* Customer info */}
+            <input className="admin-input" placeholder="Nama Pelanggan" value={form.customer_name}
+              onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} />
+            <input className="admin-input" placeholder="Nomor WhatsApp (62xxx)" value={form.phone}
+              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
 
-            <select className="admin-input" value={form.service_name} onChange={e => onServiceSelect(e.target.value)}>
-              <option value="">-- Pilih Layanan --</option>
-              {['packages', 'services', 'reflexology', 'addons'].map(cat => (
-                <optgroup key={cat} label={cat.charAt(0).toUpperCase() + cat.slice(1)}>
-                  {services.filter(s => s.category === cat).map(s => (
-                    <option key={s.id} value={s.name}>{s.name} — {formatRp(s.price)}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-
-            <div className="grid grid-cols-2 gap-3">
-              <input type="date" className="admin-input" value={form.booking_date} onChange={e => setForm(f => ({ ...f, booking_date: e.target.value }))} />
-              <input type="time" className="admin-input" value={form.booking_time} onChange={e => setForm(f => ({ ...f, booking_time: e.target.value }))} />
+            {/* Multi-service items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-zinc-500">Layanan yang Dipesan</label>
+                <button onClick={addItem} className="text-xs text-earth-primary font-semibold hover:underline flex items-center gap-1">
+                  <Plus size={11} /> Tambah Layanan
+                </button>
+              </div>
+              <div className="space-y-2">
+                {bookingItems.map((item, idx) => (
+                  <div key={item.tempId} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-zinc-400 w-4">{idx + 1}</span>
+                      <select className="admin-input text-xs flex-1"
+                        value={item.service_name}
+                        onChange={e => onServiceSelect(item.tempId, e.target.value)}>
+                        <option value="">-- Pilih Layanan --</option>
+                        {['packages', 'services', 'reflexology', 'addons'].map(cat => (
+                          <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
+                            {services.filter(s => s.category === cat).map(s => (
+                              <option key={s.id} value={s.name}>{s.name} — {formatRp(s.price)}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      {bookingItems.length > 1 && (
+                        <button onClick={() => removeItem(item.tempId)} className="text-red-400 hover:text-red-500 p-1 shrink-0">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 pl-6">
+                      <input className="admin-input text-xs font-mono" placeholder="Nama layanan" value={item.service_name}
+                        onChange={e => updateItem(item.tempId, { service_name: e.target.value })} />
+                      <input type="number" className="admin-input text-xs font-mono text-right" placeholder="Harga"
+                        value={item.price || ''}
+                        onChange={e => updateItem(item.tempId, { price: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {bookingItems.length > 1 && (
+                <div className="flex justify-between items-center mt-2 px-1">
+                  <span className="text-xs text-zinc-400">{bookingItems.length} layanan · 1 kunjungan</span>
+                  <span className="text-sm font-mono font-semibold text-earth-primary">{formatRp(totalItemsPrice)}</span>
+                </div>
+              )}
             </div>
-            <input type="number" className="admin-input font-mono" placeholder="Harga (Rp)" value={form.price || ''} onChange={e => setForm(f => ({ ...f, price: Number(e.target.value) }))} />
+
+            {/* Date / Time */}
+            <div className="grid grid-cols-2 gap-3">
+              <input type="date" className="admin-input" value={form.booking_date}
+                onChange={e => setForm(f => ({ ...f, booking_date: e.target.value }))} />
+              <input type="time" className="admin-input" value={form.booking_time}
+                onChange={e => setForm(f => ({ ...f, booking_time: e.target.value }))} />
+            </div>
+
             <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <textarea className="admin-input resize-none" rows={2} placeholder="Catatan (opsional)" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <textarea className="admin-input resize-none" rows={2} placeholder="Catatan (opsional)"
+              value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
 
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowForm(false)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
-              <button onClick={saveBooking} disabled={saving || !form.customer_name} className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
+              <button onClick={saveBooking}
+                disabled={saving || !form.customer_name || bookingItems.every(i => !i.service_name)}
+                className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {editId ? 'Update' : 'Simpan'}
               </button>
@@ -328,7 +444,7 @@ export default function BookingsPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteId(null)} />
@@ -343,13 +459,9 @@ export default function BookingsPage() {
               </p>
               <div className="flex gap-3 w-full pt-2">
                 <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
-                <button
-                  onClick={confirmDelete}
-                  disabled={deleting}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-60"
-                >
-                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  Hapus
+                <button onClick={confirmDelete} disabled={deleting}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-60">
+                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Hapus
                 </button>
               </div>
             </div>

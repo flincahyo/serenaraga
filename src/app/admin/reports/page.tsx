@@ -10,7 +10,8 @@ import { createClient } from '@/lib/supabase';
 
 type Booking = {
   id: string; service_name: string; booking_date: string;
-  price: number; status: string; bhp_cost?: number;
+  price: number; final_price?: number; discount_total?: number;
+  status: string; bhp_cost?: number;
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -27,7 +28,7 @@ export default function ReportsPage() {
     setLoading(true);
     const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
-        .select('id, service_name, booking_date, price, status, bhp_cost')
+        .select('id, service_name, booking_date, price, final_price, discount_total, status, bhp_cost')
         .eq('status', 'Completed')
         .order('booking_date'),
       supabase.from('settings').select('key, value').eq('key', 'terapis_commission_pct'),
@@ -53,11 +54,12 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
-    const gross   = mb.reduce((s, b) => s + (b.price ?? 0), 0);
-    const terapis = Math.round(gross * commissionPct / 100);
-    const bhp     = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-    const net     = gross - terapis - bhp;
-    return { month: MONTHS_ID[m], bookings: mb.length, gross, terapis, bhp, net };
+    const gross    = mb.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
+    const discount = mb.reduce((s, b) => s + (b.discount_total ?? 0), 0);
+    const terapis  = Math.round(gross * commissionPct / 100);
+    const bhp      = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
+    const net      = gross - terapis - bhp;
+    return { month: MONTHS_ID[m], bookings: mb.length, gross, discount, terapis, bhp, net };
   });
 
   // ── Service breakdown ──
@@ -81,17 +83,18 @@ export default function ReportsPage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
-  const totalGross   = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
-  const totalBhp     = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const totalTerapis = Math.round(totalGross * commissionPct / 100);
-  const totalNet     = totalGross - totalTerapis - totalBhp;
+  const totalGross    = bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
+  const totalDiscount = bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0);
+  const totalBhp      = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
+  const totalTerapis  = Math.round(totalGross * commissionPct / 100);
+  const totalNet      = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
   const hasBhpData    = totalBhp > 0;
 
   const exportCSV = () => {
-    const headers = ['Bulan','Total Booking','Pendapatan Kotor','Bagian Terapis','Modal BHP (aktual)','Penghasilan Bersih'];
-    const rows = monthlyData.map(d => [d.month, d.bookings, d.gross, d.terapis, d.bhp, d.net]);
+    const headers = ['Bulan','Total Booking','Diskon','Pendapatan (after diskon)','Bagian Terapis','Modal BHP (aktual)','Penghasilan Bersih'];
+    const rows = monthlyData.map(d => [d.month, d.bookings, d.discount ?? 0, d.gross, d.terapis, d.bhp, d.net]);
     const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
@@ -134,9 +137,9 @@ export default function ReportsPage() {
               <p className="text-xs text-zinc-400 mt-1">Semua waktu (Completed)</p>
             </div>
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Pendapatan Kotor</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1">Pendapatan (after diskon)</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(totalGross)}</p>
-              <p className="text-xs text-zinc-400 mt-1">Sebelum potongan</p>
+              {totalDiscount > 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Diskon: -{formatRp(totalDiscount)}</p>}
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
               <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Terapis ({commissionPct}%) + BHP</p>

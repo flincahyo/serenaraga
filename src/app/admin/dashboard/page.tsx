@@ -10,8 +10,9 @@ import { createClient } from '@/lib/supabase';
 
 type Booking = {
   id: string; customer_name: string; service_name: string;
-  booking_date: string; booking_time: string; price: number; status: string;
-  phone?: string; notes?: string; bhp_cost?: number;
+  booking_date: string; booking_time: string; price: number;
+  final_price?: number; discount_total?: number;
+  status: string; phone?: string; notes?: string; bhp_cost?: number;
 };
 
 const statusColor: Record<string, string> = {
@@ -102,10 +103,11 @@ export default function DashboardPage() {
 
   const monthBookings  = bookings.filter(b => b.booking_date >= startOfMonth);
   const completedMonth = monthBookings.filter(b => b.status === 'Completed');
-  const grossRevenue   = completedMonth.reduce((s, b) => s + (b.price ?? 0), 0);
+  const grossRevenue   = completedMonth.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
+  const totalDiscount  = completedMonth.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const terapisCut     = Math.round(grossRevenue * commissionPct / 100);
 
-  // BHP: gunakan bhp_cost aktual dari per-booking (tidak pakai % lagi)
+  // BHP: gunakan bhp_cost aktual dari per-booking
   const bhpActual  = completedMonth.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
   const bhpCut     = bhpActual;
   const netRevenue = grossRevenue - terapisCut - bhpCut;

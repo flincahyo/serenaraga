@@ -9,7 +9,7 @@ import {
 import { createClient } from '@/lib/supabase';
 
 type Booking = {
-  id: string; service_name: string; booking_date: string;
+  id: string; customer_name?: string; service_name: string; booking_date: string;
   price: number; final_price?: number; discount_total?: number;
   status: string; bhp_cost?: number;
 };
@@ -28,7 +28,7 @@ export default function ReportsPage() {
     setLoading(true);
     const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
-        .select('id, service_name, booking_date, price, final_price, discount_total, status, bhp_cost')
+        .select('id, customer_name, service_name, booking_date, price, final_price, discount_total, status, bhp_cost')
         .eq('status', 'Completed')
         .order('booking_date'),
       supabase.from('settings').select('key, value').eq('key', 'terapis_commission_pct'),
@@ -64,12 +64,13 @@ export default function ReportsPage() {
   });
 
   // ── Service breakdown ──
-  const serviceMap: Record<string, { count: number; gross: number; bhp: number }> = {};
+  const serviceMap: Record<string, { count: number; gross: number; discount: number; bhp: number }> = {};
   bookings.forEach(b => {
     if (!b.service_name) return;
-    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, bhp: 0 };
+    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, discount: 0, bhp: 0 };
     serviceMap[b.service_name].count += 1;
     serviceMap[b.service_name].gross += b.price ?? 0;
+    serviceMap[b.service_name].discount += b.discount_total ?? 0;
     serviceMap[b.service_name].bhp   += b.bhp_cost ?? 0;
   });
   const serviceBreakdown = Object.entries(serviceMap)
@@ -77,9 +78,10 @@ export default function ReportsPage() {
       name,
       count:   v.count,
       gross:   v.gross,
+      discount: v.discount,
       terapis: Math.round(v.gross * commissionPct / 100),
       bhp:     Math.round(v.bhp),
-      net:     Math.round(v.gross - (v.gross * commissionPct / 100) - v.bhp),
+      net:     Math.round((v.gross - v.discount) - (v.gross * commissionPct / 100) - v.bhp),
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
@@ -255,6 +257,56 @@ export default function ReportsPage() {
                       <td className="px-4 py-3 text-right tabular-nums font-mono text-xs font-bold text-emerald-600">{formatRp(totalNet)}</td>
                     </tr>
                   </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* History / Detail Tiap Order */}
+          {bookings.length > 0 && (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden mt-6">
+              <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Riwayat Transaksi (Completed)</h2>
+                <p className="text-xs text-zinc-500 mt-1">Detail pendapatan tiap order</p>
+              </div>
+              <div className="overflow-x-auto max-h-[500px]">
+                <table className="w-full text-sm relative">
+                  <thead className="sticky top-0 bg-white dark:bg-zinc-900 shadow-sm">
+                    <tr className="text-left border-b border-zinc-100 dark:border-zinc-800">
+                      <th className="px-6 py-3 text-xs font-medium text-zinc-500 whitespace-nowrap">Tanggal</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 whitespace-nowrap">Customer</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500">Layanan</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right whitespace-nowrap">Harga Kotor</th>
+                      <th className="px-4 py-3 text-xs font-medium text-emerald-600 text-right whitespace-nowrap">Diskon</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-700 dark:text-zinc-300 text-right whitespace-nowrap">Dibayar</th>
+                      <th className="px-4 py-3 text-xs font-medium text-amber-600 text-right whitespace-nowrap">Terapis</th>
+                      <th className="px-4 py-3 text-xs font-medium text-blue-500 text-right whitespace-nowrap">BHP</th>
+                      <th className="px-4 py-3 text-xs font-medium text-emerald-700 dark:text-emerald-400 text-right whitespace-nowrap">Bersih Owner</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {[...bookings].reverse().map(b => {
+                      const gross = b.price ?? 0;
+                      const finalPrice = b.final_price ?? gross;
+                      const discount = b.discount_total ?? 0;
+                      const terapis = Math.round(gross * commissionPct / 100);
+                      const bhp = b.bhp_cost ?? 0;
+                      const net = finalPrice - terapis - bhp;
+                      return (
+                        <tr key={b.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                          <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 text-xs whitespace-nowrap">{new Date(b.booking_date).toLocaleDateString('id-ID')}</td>
+                          <td className="px-4 py-3 text-zinc-800 dark:text-zinc-200 text-xs">{b.customer_name || '-'}</td>
+                          <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-xs max-w-[200px] truncate" title={b.service_name}>{b.service_name}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{formatRp(gross)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs">{discount > 0 ? `-${formatRp(discount)}` : '-'}</td>
+                          <td className="px-4 py-3 text-right tabular-nums font-semibold text-zinc-800 dark:text-zinc-200 font-mono text-xs">{formatRp(finalPrice)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-amber-600 font-mono text-xs">{formatRp(terapis)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-blue-500 font-mono text-xs">{bhp > 0 ? formatRp(bhp) : '-'}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400 font-bold font-mono text-xs">{formatRp(net)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
                 </table>
               </div>
             </div>

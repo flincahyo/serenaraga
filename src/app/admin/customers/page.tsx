@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Plus, Pencil, Check, X, Loader2, ChevronDown, ChevronUp,
-  Phone, CalendarCheck, Award, Hash,
+  Phone, CalendarCheck, Award, Hash, Trash2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
@@ -165,6 +165,12 @@ export default function CustomersPage() {
     setSaving(false);
   };
 
+  const deleteCustomer = async (id: string, name: string | null) => {
+    if (!confirm(`Hapus customer ${name || '(tanpa nama)'}? Data booking terkait tidak akan terhapus tapi referensi pelanggannya akan hilang.`)) return;
+    await supabase.from('customers').delete().eq('id', id);
+    await fetchData();
+  };
+
   const addCustomer = async () => {
     if (!newCust.wa_number) return;
     setSaving(true);
@@ -281,6 +287,9 @@ export default function CustomersPage() {
                       </button>
                       <button onClick={() => startEdit(c)} className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400">
                         <Pencil size={14} />
+                      </button>
+                      <button onClick={() => deleteCustomer(c.id, c.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400">
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
-type Item = { id: number; name: string; duration: string; price: number };
+type Item = { id: number; name: string; duration: string; price: number; details?: string };
 type Service = { id: string; name: string; price: number; details: string; category: string };
 type Booking = {
   id: string; customer_name: string; phone: string;
@@ -162,17 +162,21 @@ const InvoiceMaker = () => {
       .from('booking_items').select('*').eq('booking_id', bookingId).order('sort_order');
 
     if (bkItems && bkItems.length > 0) {
-      setItems(bkItems.map((bi, i) => ({
-        id: Date.now() + i,
-        name: bi.service_name,
-        duration: bi.duration ?? '',
-        price: bi.price,
-      })));
+      setItems(bkItems.map((bi, i) => {
+        const svc = services.find(s => s.name === bi.service_name);
+        return {
+          id: Date.now() + i,
+          name: bi.service_name,
+          duration: bi.duration ?? '',
+          price: bi.price,
+          details: svc?.details ?? '',
+        };
+      }));
     } else {
       // Fallback for old single-service bookings
       const svc = services.find(s => s.name === bk.service_name);
       const durationMatch = svc?.details?.match(/(\d+)\s*m(?:enit)?/i);
-      setItems([{ id: Date.now(), name: bk.service_name ?? '', duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', price: bk.price ?? svc?.price ?? 0 }]);
+      setItems([{ id: Date.now(), name: bk.service_name ?? '', duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', price: bk.price ?? svc?.price ?? 0, details: svc?.details ?? '' }]);
     }
     setAppliedDiscounts([]);
   };
@@ -185,7 +189,7 @@ const InvoiceMaker = () => {
     const svc = services.find(s => s.name === serviceName);
     if (!svc) return;
     const durationMatch = svc.details?.match(/(\d+)\s*m(?:enit)?/i);
-    setItems(p => p.map(i => i.id === itemId ? { ...i, name: svc.name, price: svc.price, duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '' } : i));
+    setItems(p => p.map(i => i.id === itemId ? { ...i, name: svc.name, price: svc.price, duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', details: svc.details } : i));
   };
 
   // ── Discount ops ──
@@ -614,8 +618,9 @@ const InvoiceMaker = () => {
               {items.map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13 }}>{item.name || 'Pilih Layanan...'}</p>
-                    {item.duration && <p style={{ fontSize: 10, color: '#a1a1aa', fontStyle: 'italic' }}>{item.duration}</p>}
+                    <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>
+                    {item.details && <p style={{ fontSize: 9, color: '#71717a', lineHeight: 1.3, maxWidth: 260 }}>{item.details}</p>}
+                    {item.duration && <p style={{ fontSize: 9, color: '#a1a1aa', fontStyle: 'italic', marginTop: 2 }}>Durasi: {item.duration}</p>}
                   </div>
                   <p style={{ fontWeight: 700, fontSize: 13 }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
                 </div>

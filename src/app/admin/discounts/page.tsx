@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Tag, Plus, Pencil, Check, X, Loader2, ToggleLeft, ToggleRight,
-  Percent, BadgeDollarSign, Users, CalendarRange, Hash,
+  Percent, BadgeDollarSign, Users, CalendarRange, Hash, Trash2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
@@ -197,6 +197,12 @@ export default function DiscountsPage() {
     setSaving(false);
   };
 
+  const deleteDiscount = async (id: string, name: string) => {
+    if (!confirm(`Hapus promo "${name}" secara permanen? Histori pemakaian di booking tetap ada.`)) return;
+    await supabase.from('discounts').delete().eq('id', id);
+    await fetchData();
+  };
+
   const toggleActive = async (id: string, current: boolean) => {
     await supabase.from('discounts').update({ is_active: !current }).eq('id', id);
     setDiscounts(prev => prev.map(d => d.id === id ? { ...d, is_active: !current } : d));
@@ -298,6 +304,9 @@ export default function DiscountsPage() {
                     <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active }); setShowAdd(false); }}
                       className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400">
                       <Pencil size={14} />
+                    </button>
+                    <button onClick={() => deleteDiscount(d.id, d.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400">
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>

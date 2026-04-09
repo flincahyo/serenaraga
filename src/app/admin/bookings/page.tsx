@@ -12,7 +12,7 @@ type Booking = {
 };
 
 type Service = { id: string; name: string; price: number; category: string; };
-type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; };
+type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; therapist_id?: string; };
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
 const STATUS_STYLES: Record<string, string> = {
@@ -35,6 +35,7 @@ const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 export default function BookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [services, setServices]       = useState<Service[]>([]);
+  const [therapists, setTherapists]   = useState<{id: string; name: string; commission_pct: number}[]>([]);
   const [loading, setLoading]         = useState(true);
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [search, setSearch]           = useState('');
@@ -51,13 +52,15 @@ export default function BookingsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: b }, { data: s }, { data: settingsData }] = await Promise.all([
+    const [{ data: b }, { data: s }, { data: settingsData }, { data: t }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('services').select('id, name, price, category').order('category').order('sort_order'),
       supabase.from('settings').select('value').eq('key', 'whatsapp_reminder_message').single(),
+      supabase.from('therapists').select('id, name, commission_pct').eq('is_active', true).order('name'),
     ]);
     if (b) setBookings(b);
     if (s) setServices(s);
+    if (t) setTherapists(t);
     if (settingsData) setReminderTemplate(settingsData.value);
     setLoading(false);
   }, []);
@@ -126,7 +129,7 @@ export default function BookingsPage() {
     if (items && items.length > 0) {
       setBookingItems(items.map((it, i) => ({
         tempId: i, service_id: it.service_id ?? '', service_name: it.service_name,
-        price: it.price, duration: it.duration ?? '',
+        price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '',
       })));
     } else {
       // Fallback for old single-service bookings
@@ -207,6 +210,7 @@ export default function BookingsPage() {
         price:        Number(item.price),
         bhp_cost:     item.bhp_cost,
         duration:     item.duration || null,
+        therapist_id: item.therapist_id || null,
         sort_order:   idx,
       }))
     );
@@ -405,6 +409,16 @@ export default function BookingsPage() {
                       <input type="number" className="admin-input text-xs font-mono text-right" placeholder="Harga"
                         value={item.price || ''}
                         onChange={e => updateItem(item.tempId, { price: Number(e.target.value) })} />
+                    </div>
+                    <div className="pl-6 pt-1">
+                      <select className="admin-input text-xs bg-white dark:bg-zinc-900 border-dashed"
+                        value={item.therapist_id ?? ''}
+                        onChange={e => updateItem(item.tempId, { therapist_id: e.target.value })}>
+                        <option value="">-- Assign Terapis (opsional) --</option>
+                        {therapists.map(t => (
+                          <option key={t.id} value={t.id}>{t.name} (Fee {t.commission_pct}%)</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 ))}

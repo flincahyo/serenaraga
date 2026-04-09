@@ -8,11 +8,13 @@ import {
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
 
+type BookingItemLinked = { commission_earned: number; service_name: string; price: number; therapist_id: string; therapists?: any };
 type Booking = {
   id: string; customer_name?: string; service_name: string; booking_date: string;
   price: number; final_price?: number; discount_total?: number;
   shared_discount_total?: number;
   status: string; bhp_cost?: number;
+  booking_items?: BookingItemLinked[];
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -29,7 +31,8 @@ export default function ReportsPage() {
     setLoading(true);
     const [{ data }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings')
-        .select('id, customer_name, service_name, booking_date, price, final_price, discount_total, shared_discount_total, status, bhp_cost')
+        .select(`id, customer_name, service_name, booking_date, price, final_price, discount_total, shared_discount_total, status, bhp_cost,
+          booking_items(commission_earned, service_name, price, therapist_id, therapists(name))`)
         .eq('status', 'Completed')
         .order('booking_date'),
       supabase.from('settings').select('key, value').eq('key', 'terapis_commission_pct'),
@@ -58,23 +61,22 @@ export default function ReportsPage() {
     const originalGross = mb.reduce((s, b) => s + (b.price ?? 0), 0);
     const gross    = mb.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
     const discount = mb.reduce((s, b) => s + (b.discount_total ?? 0), 0);
-    const sumShared = mb.reduce((s, b) => s + (b.shared_discount_total ?? 0), 0);
-    const terapis  = Math.round((originalGross - sumShared) * commissionPct / 100);
+    const terapis  = mb.reduce((s, b) => s + (b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0), 0);
     const bhp      = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
     const net      = gross - terapis - bhp;
     return { month: MONTHS_ID[m], bookings: mb.length, gross, discount, terapis, bhp, net };
   });
 
   // ── Service breakdown ──
-  const serviceMap: Record<string, { count: number; gross: number; discount: number; shared_discount: number; bhp: number }> = {};
+  const serviceMap: Record<string, { count: number; gross: number; discount: number; terapis: number; bhp: number }> = {};
   bookings.forEach(b => {
     if (!b.service_name) return;
-    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, discount: 0, shared_discount: 0, bhp: 0 };
+    if (!serviceMap[b.service_name]) serviceMap[b.service_name] = { count: 0, gross: 0, discount: 0, terapis: 0, bhp: 0 };
     serviceMap[b.service_name].count += 1;
     serviceMap[b.service_name].gross += b.price ?? 0;
     serviceMap[b.service_name].discount += b.discount_total ?? 0;
-    serviceMap[b.service_name].shared_discount += b.shared_discount_total ?? 0;
     serviceMap[b.service_name].bhp   += b.bhp_cost ?? 0;
+    serviceMap[b.service_name].terapis += b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0;
   });
   const serviceBreakdown = Object.entries(serviceMap)
     .map(([name, v]) => ({
@@ -82,19 +84,18 @@ export default function ReportsPage() {
       count:   v.count,
       gross:   v.gross,
       discount: v.discount,
-      terapis: Math.round((v.gross - v.shared_discount) * commissionPct / 100),
+      terapis: v.terapis,
       bhp:     Math.round(v.bhp),
-      net:     Math.round((v.gross - v.discount) - ((v.gross - v.shared_discount) * commissionPct / 100) - v.bhp),
+      net:     Math.round((v.gross - v.discount) - v.terapis - v.bhp),
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
   const totalOriginalGross = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
-  const totalShared   = bookings.reduce((s, b) => s + (b.shared_discount_total ?? 0), 0);
   const totalGross    = bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
   const totalDiscount = bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const totalBhp      = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const totalTerapis  = Math.round((totalOriginalGross - totalShared) * commissionPct / 100);
+  const totalTerapis  = bookings.reduce((s, b) => s + (b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0), 0);
   const totalNet      = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
@@ -293,8 +294,8 @@ export default function ReportsPage() {
                       const gross = b.price ?? 0;
                       const finalPrice = b.final_price ?? gross;
                       const discount = b.discount_total ?? 0;
-                      const sharedDiscount = b.shared_discount_total ?? 0;
-                      const terapis = Math.round((gross - sharedDiscount) * commissionPct / 100);
+                      const terapis = b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0;
+                      const therapistNames = [...new Set(b.booking_items?.map(i => i.therapists?.name).filter(Boolean))].join(', ');
                       const bhp = b.bhp_cost ?? 0;
                       const net = finalPrice - terapis - bhp;
                       return (
@@ -305,7 +306,12 @@ export default function ReportsPage() {
                           <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{formatRp(gross)}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs">{discount > 0 ? `-${formatRp(discount)}` : '-'}</td>
                           <td className="px-4 py-3 text-right tabular-nums font-semibold text-zinc-800 dark:text-zinc-200 font-mono text-xs">{formatRp(finalPrice)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-amber-600 font-mono text-xs">{formatRp(terapis)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className="tabular-nums text-amber-600 font-mono text-xs">{formatRp(terapis)}</span>
+                              {therapistNames && <span className="text-[10px] text-zinc-400 mt-0.5">{therapistNames}</span>}
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-right tabular-nums text-blue-500 font-mono text-xs">{bhp > 0 ? formatRp(bhp) : '-'}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400 font-bold font-mono text-xs">{formatRp(net)}</td>
                         </tr>

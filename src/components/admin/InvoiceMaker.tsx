@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
-type Item = { id: number; name: string; duration: string; price: number; details?: string };
+type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string };
 type Service = { id: string; name: string; price: number; details: string; category: string };
 type Booking = {
   id: string; customer_name: string; phone: string;
@@ -81,20 +81,23 @@ const InvoiceMaker = () => {
   const [addDiscountId, setAddDiscountId]         = useState('');
   const [customDiscountName, setCustomDiscountName] = useState('');
   const [customDiscountAmount, setCustomDiscountAmount] = useState('');
+  const [therapists, setTherapists] = useState<{id: string; name: string; commission_pct: number}[]>([]);
 
   const supabase = createClient();
 
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }] = await Promise.all([
+    const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }, { data: therapistData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
       supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct']),
       supabase.from('discounts').select('*').eq('is_active', true),
+      supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
     if (discData) setAllDiscounts(discData);
+    if (therapistData) setTherapists(therapistData);
     if (settingsData) {
       settingsData.forEach(({ key, value }) => {
         if (key === 'invoice_footer_text') setInvoiceFooter(value);
@@ -165,7 +168,9 @@ const InvoiceMaker = () => {
       setItems(bkItems.map((bi, i) => {
         const svc = services.find(s => s.name === bi.service_name);
         return {
-          id: Date.now() + i,
+          id: bi.id ?? (Date.now() + i),
+          db_id: bi.id,
+          therapist_id: bi.therapist_id || '',
           name: bi.service_name,
           duration: bi.duration ?? '',
           price: bi.price,
@@ -181,11 +186,11 @@ const InvoiceMaker = () => {
     setAppliedDiscounts([]);
   };
 
-  const addItem = () => setItems(p => [...p, { id: Date.now(), name: '', duration: '', price: 0 }]);
-  const removeItem = (id: number) => setItems(p => p.filter(i => i.id !== id));
-  const updateItem = (id: number, field: keyof Item, value: string | number) =>
+  const addItem = () => setItems(p => [...p, { id: Date.now(), name: '', duration: '', price: 0, therapist_id: '' }]);
+  const removeItem = (id: string | number) => setItems(p => p.filter(i => i.id !== id));
+  const updateItem = (id: string | number, field: keyof Item, value: string | number) =>
     setItems(p => p.map(i => i.id === id ? { ...i, [field]: value } : i));
-  const onServiceSelect = (itemId: number, serviceName: string) => {
+  const onServiceSelect = (itemId: string | number, serviceName: string) => {
     const svc = services.find(s => s.name === serviceName);
     if (!svc) return;
     const durationMatch = svc.details?.match(/(\d+)\s*m(?:enit)?/i);
@@ -297,7 +302,26 @@ const InvoiceMaker = () => {
       final_price: finalTotal,
     }).eq('id', selectedBookingId);
 
-    // 3. Insert booking_discounts
+    // 3. Update booking_items per item
+    const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
+    for (const item of items) {
+      if (item.db_id) {
+        const itemSharedDiscount = item.price * sharedDiscountPerGross;
+        const itemTerapisBase = Math.max(0, item.price - itemSharedDiscount);
+        let pct = commissionPct;
+        if (item.therapist_id) {
+          const t = therapists.find(x => x.id === item.therapist_id);
+          if (t) pct = t.commission_pct;
+        }
+        const itemCommission = Math.round(itemTerapisBase * pct / 100);
+        await supabase.from('booking_items').update({
+          therapist_id: item.therapist_id || null,
+          commission_earned: itemCommission
+        }).eq('id', item.db_id);
+      }
+    }
+
+    // 4. Insert booking_discounts
     if (appliedDiscounts.length > 0) {
       await supabase.from('booking_discounts').insert(
         appliedDiscounts.map(a => ({
@@ -513,17 +537,23 @@ const InvoiceMaker = () => {
                 </select>
                 <div className="grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-5">
-                    <input placeholder="Nama layanan" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} className="admin-input text-xs" />
+                    <input placeholder="Nama layanan" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} className="admin-input text-xs w-full" />
                   </div>
                   <div className="col-span-3">
-                    <input placeholder="Durasi" value={item.duration} onChange={e => updateItem(item.id, 'duration', e.target.value)} className="admin-input text-xs text-center" />
+                    <input placeholder="Durasi" value={item.duration} onChange={e => updateItem(item.id, 'duration', e.target.value)} className="admin-input text-xs w-full text-center" />
                   </div>
                   <div className="col-span-3">
-                    <input type="number" placeholder="Harga" value={item.price || ''} onChange={e => updateItem(item.id, 'price', Number(e.target.value))} className="admin-input text-xs text-right font-mono" />
+                    <input type="number" placeholder="Harga" value={item.price || ''} onChange={e => updateItem(item.id, 'price', Number(e.target.value))} className="admin-input text-xs w-full text-right font-mono" />
                   </div>
                   <div className="col-span-1 flex justify-center">
                     <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
                   </div>
+                </div>
+                <div className="mt-2">
+                  <select className="admin-input text-xs bg-white dark:bg-zinc-900 border-dashed" value={item.therapist_id || ''} onChange={e => updateItem(item.id, 'therapist_id', e.target.value)}>
+                    <option value="">-- Assign Terapis (opsional) --</option>
+                    {therapists.map(t => <option key={t.id} value={t.id}>{t.name} (Fee {t.commission_pct}%)</option>)}
+                  </select>
                 </div>
               </div>
             ))}

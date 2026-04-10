@@ -8,7 +8,7 @@ type Booking = {
   id: string; created_at: string; customer_name: string; phone: string;
   service_name: string; booking_date: string; booking_time: string;
   price: number; status: string; notes: string; bhp_cost?: number;
-  discount_total?: number; final_price?: number; customer_id?: string;
+  discount_total?: number; shared_discount_total?: number; final_price?: number; customer_id?: string;
 };
 
 type Service = { id: string; name: string; price: number; category: string; };
@@ -26,7 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   reflexology: 'Refleksi', addons: 'Add-On',
 };
 
-const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '' };
+const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, final_price_override: null as number | null };
 const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '' });
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -122,6 +122,9 @@ export default function BookingsPage() {
       booking_time: b.booking_time ?? '',
       status: b.status ?? 'Pending',
       notes: b.notes ?? '',
+      discount_total: b.discount_total ?? 0,
+      shared_discount_total: b.shared_discount_total ?? 0,
+      final_price_override: b.final_price ?? null,
     });
     // Load existing booking_items
     const { data: items } = await supabase
@@ -182,12 +185,18 @@ export default function BookingsPage() {
     }
 
     const payload = {
-      ...form,
+      customer_name: form.customer_name,
+      phone: form.phone,
+      booking_date: form.booking_date,
+      booking_time: form.booking_time,
+      status: form.status,
+      notes: form.notes,
       service_name: displayName,
       price: totalPrice,
       bhp_cost: totalBhp,
-      final_price: totalPrice,   // discount_total = 0 saat booking dibuat
-      discount_total: 0,
+      final_price: form.final_price_override ?? totalPrice,
+      discount_total: form.discount_total,
+      shared_discount_total: form.shared_discount_total,
       customer_id: customerId,
     };
 
@@ -203,16 +212,29 @@ export default function BookingsPage() {
     // Replace booking_items
     await supabase.from('booking_items').delete().eq('booking_id', bookingId);
     await supabase.from('booking_items').insert(
-      itemsWithBhp.map((item, idx) => ({
-        booking_id:   bookingId,
-        service_id:   item.service_id || null,
-        service_name: item.service_name,
-        price:        Number(item.price),
-        bhp_cost:     item.bhp_cost,
-        duration:     item.duration || null,
-        therapist_id: item.therapist_id || null,
-        sort_order:   idx,
-      }))
+      itemsWithBhp.map((item, idx) => {
+        let earned = 0;
+        if (form.status === 'Completed' && item.therapist_id) {
+          const t = therapists.find(x => x.id === item.therapist_id);
+          const pct = t ? t.commission_pct : 30; // fallback default
+          const sharedDiscountPerGross = totalPrice > 0 ? (form.shared_discount_total || 0) / totalPrice : 0;
+          const itemSharedDiscount = Number(item.price) * sharedDiscountPerGross;
+          const terapisBase = Math.max(0, Number(item.price) - itemSharedDiscount);
+          earned = Math.round(terapisBase * pct / 100);
+        }
+
+        return {
+          booking_id:   bookingId,
+          service_id:   item.service_id || null,
+          service_name: item.service_name,
+          price:        Number(item.price),
+          bhp_cost:     item.bhp_cost,
+          duration:     item.duration || null,
+          therapist_id: item.therapist_id || null,
+          commission_earned: earned,
+          sort_order:   idx,
+        };
+      })
     );
 
     await fetchData();

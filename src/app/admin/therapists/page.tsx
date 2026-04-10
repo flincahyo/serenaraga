@@ -140,12 +140,11 @@ export default function TherapistsPage() {
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `Slip_${payoutTherapist?.name}_${payoutStart}.png`, { type: 'image/png' });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: `Slip Gaji ${payoutTherapist?.name}`, text: `Slip Gaji untuk ${payoutTherapist?.name}` }); return; }
+        try { await navigator.share({ files: [file] }); return; }
         catch (e) { if ((e as Error).name === 'AbortError') return; }
       }
-      const msg = `Slip Bagi Hasil untuk ${payoutTherapist?.name}\nPeriode: ${payoutStart} s/d ${payoutEnd}\nTotal: ${formatRp(totalPayout)}\n*(Gambar slip dilampirkan)*`;
       const phone = payoutTherapist?.phone?.replace(/\D/g, '') || '';
-      if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      if (phone) window.open(`https://wa.me/${phone}`, '_blank');
       // Always fallback download
       const link = document.createElement('a');
       link.download = file.name;

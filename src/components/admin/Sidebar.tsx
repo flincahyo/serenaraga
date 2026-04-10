@@ -2,40 +2,47 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2,
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
-import { createClient } from '@/lib/supabase';
+import { useUser } from '@/lib/user-context';
 
-const navItems = [
+// Nav items per role
+const OWNER_ITEMS = [
   { name: 'Dashboard',      icon: LayoutDashboard, href: '/admin/dashboard' },
   { name: 'Bookings',       icon: CalendarCheck,   href: '/admin/bookings' },
+  { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
   { name: 'Services',       icon: ClipboardList,   href: '/admin/services' },
   { name: 'Bahan (BHP)',    icon: FlaskConical,    href: '/admin/materials' },
   { name: 'Customers',      icon: Users,           href: '/admin/customers' },
   { name: 'Terapis',        icon: UserSquare2,     href: '/admin/therapists' },
   { name: 'Diskon & Promo', icon: Tag,             href: '/admin/discounts' },
-  { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
   { name: 'Reports',        icon: BarChart3,       href: '/admin/reports' },
   { name: 'Konten',         icon: Image,           href: '/admin/content' },
+  { name: 'Staff & Kasir',  icon: UserCog,         href: '/admin/staff' },
   { name: 'Settings',       icon: Settings2,       href: '/admin/settings' },
+];
+
+const CASHIER_ITEMS = [
+  { name: 'Bookings',       icon: CalendarCheck,   href: '/admin/bookings' },
+  { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
+  { name: 'Customers',      icon: Users,           href: '/admin/customers' },
 ];
 
 interface SidebarProps { open: boolean; onClose: () => void; }
 
 const Sidebar = ({ open, onClose }: SidebarProps) => {
   const pathname = usePathname();
-  const router = useRouter();
+  const { user, logout } = useUser();
 
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push('/admin');
-    router.refresh();
-  };
+  const navItems = user?.role === 'cashier' ? CASHIER_ITEMS : OWNER_ITEMS;
+  const roleBadge = user?.role === 'cashier' ? 'Kasir' : 'Owner';
+  const roleColor = user?.role === 'cashier'
+    ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
+    : 'bg-earth-primary/10 text-earth-primary';
 
   return (
     <>
@@ -59,7 +66,7 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
               Serena<span className="text-earth-primary">Raga</span>
             </span>
             <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">
-              Admin Panel
+              {user?.role === 'cashier' ? 'Kasir Panel' : 'Owner Panel'}
             </span>
           </Link>
           <button
@@ -97,19 +104,26 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
         {/* Footer */}
         <div className="px-3 py-4 border-t border-zinc-100 dark:border-zinc-800 space-y-1">
           <div className="flex items-center justify-between px-3 py-2">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-earth-primary/10 flex items-center justify-center">
-                <span className="text-xs font-bold text-earth-primary">SR</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-earth-primary">
+                  {user?.displayName?.charAt(0)?.toUpperCase() ?? 'A'}
+                </span>
               </div>
-              <div className="leading-tight">
-                <p className="text-xs font-semibold dark:text-white">Admin</p>
-                <p className="text-[10px] text-zinc-400">SerenaRaga</p>
+              <div className="leading-tight min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs font-semibold dark:text-white truncate">{user?.displayName ?? 'Admin'}</p>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${roleColor}`}>
+                    {roleBadge}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-400 truncate">{user?.email ?? user?.username ?? ''}</p>
               </div>
             </div>
             <ThemeToggle />
           </div>
           <button
-            onClick={handleLogout}
+            onClick={logout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
           >
             <LogOut size={17} />

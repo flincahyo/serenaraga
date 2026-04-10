@@ -688,7 +688,20 @@ const InvoiceMaker = () => {
                 items.reduce((acc, item) => {
                   const key = item.parent_bundle_name || String(item.id);
                   if (!acc[key]) {
-                    acc[key] = { ...item, name: item.parent_bundle_name || item.name, price: 0, duration: item.parent_bundle_name ? '' : (item.duration || ''), details: item.parent_bundle_name ? '' : (item.details || '') };
+                    let parentDetails = item.details;
+                    let parentDuration = item.duration;
+                    if (item.parent_bundle_name) {
+                      const parentSvc = services.find(s => s.name === item.parent_bundle_name);
+                      if (parentSvc) {
+                        parentDetails = parentSvc.details || '';
+                        const dMatch = parentSvc.details?.match(/(\d+)\s*m(?:enit)?/i);
+                        parentDuration = dMatch?.[1] ? `${dMatch[1]}m` : '';
+                      } else {
+                        parentDetails = '';
+                        parentDuration = '';
+                      }
+                    }
+                    acc[key] = { ...item, name: item.parent_bundle_name || item.name, price: 0, duration: parentDuration || '', details: parentDetails || '' };
                   }
                   acc[key].price += Number(item.price);
                   return acc;

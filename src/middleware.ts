@@ -12,13 +12,22 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const isAdminPage = pathname === '/admin';
+  const isAdminRoute = pathname.startsWith('/admin/');
+  const isApiRoute = pathname.startsWith('/api/');
+
+  // API routes — always allow through (they do their own auth)
+  if (isApiRoute) return NextResponse.next();
+
+  // Check staff session cookie (for cashier login)
+  const staffCookie = request.cookies.get('sr_staff_session');
+  const hasStaffSession = !!staffCookie?.value;
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
+      getAll() { return request.cookies.getAll(); },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         supabaseResponse = NextResponse.next({ request });
@@ -30,17 +39,15 @@ export async function middleware(request: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
+  const isAuthenticated = !!user || hasStaffSession;
 
-  const isAdminPage = pathname === '/admin';
-  const isAdminRoute = pathname.startsWith('/admin/');
-
-  // Redirect to login if accessing protected routes without session
-  if (isAdminRoute && !user) {
+  // Redirect to login if accessing protected routes without any session
+  if (isAdminRoute && !isAuthenticated) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
-  // Redirect logged-in user away from login page
-  if (isAdminPage && user) {
+  // Redirect authenticated user away from login page
+  if (isAdminPage && isAuthenticated) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 

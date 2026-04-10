@@ -327,18 +327,27 @@ export default function TherapistsPage() {
                     
                     {payoutItems.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {payoutItems.map((item, idx) => (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
-                              <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
-                              <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • {formatRp(item.price)} × {payoutTherapist.commission_pct}%</p>
+                        {payoutItems.map((item, idx) => {
+                          const expectedCom = Math.round(item.price * payoutTherapist.commission_pct / 100);
+                          const hasDiscount = item.commission_earned < expectedCom && expectedCom > 0;
+                          const derivedBase = item.commission_earned === 0 ? 0 : Math.round(item.commission_earned / (payoutTherapist.commission_pct / 100));
+                          
+                          return (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div>
+                                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
+                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • 
+                                  {hasDiscount ? ` ${formatRp(derivedBase)} (setelah diskon)` : ` ${formatRp(item.price)}`} × {payoutTherapist.commission_pct}%
+                                </p>
+                              </div>
+                              <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>
+                                {formatRp(item.commission_earned)}
+                              </p>
                             </div>
-                            <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>
-                              {formatRp(item.commission_earned)}
-                            </p>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <p style={{ fontSize: '12px', color: '#a1a1aa', textAlign: 'center', margin: '24px 0' }}>Tidak ada job terekam di periode ini.</p>

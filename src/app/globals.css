@@ -78,7 +78,9 @@ body {
     background: var(--admin-bg);
     border: 1px solid var(--admin-border);
     border-radius: 0.5rem;
-    padding: 0.625rem 0.875rem;
+    padding-block: 0.625rem;
+    padding-inline-start: 0.875rem;
+    padding-inline-end: 0.875rem;
     font-size: 0.875rem;
     outline: none;
     color: var(--admin-text);

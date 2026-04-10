@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
 type Booking = {
@@ -47,6 +47,7 @@ export default function BookingsPage() {
   const [reminderTemplate, setReminderTemplate] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [bookingItems, setBookingItems] = useState<BookingItem[]>([EMPTY_ITEM()]);
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
   const supabase = createClient();
 
@@ -328,9 +329,22 @@ export default function BookingsPage() {
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Bookings</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{bookings.length} total pesanan</p>
         </div>
-        <button onClick={openAdd} className="admin-btn-primary">
-          <Plus size={16} /> Tambah Booking
-        </button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 gap-0.5">
+            <button onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-md transition-colors ${ viewMode === 'list' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600' }`}>
+              <List size={15} />
+            </button>
+            <button onClick={() => setViewMode('kanban')}
+              className={`p-1.5 rounded-md transition-colors ${ viewMode === 'kanban' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600' }`}>
+              <LayoutGrid size={15} />
+            </button>
+          </div>
+          <button onClick={openAdd} className="admin-btn-primary">
+            <Plus size={16} /> Tambah Booking
+          </button>
+        </div>
       </div>
 
       {/* Filter Tabs */}
@@ -347,17 +361,84 @@ export default function BookingsPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-        <input className="admin-input pl-10" placeholder="Cari nama atau layanan..."
-          value={search} onChange={e => setSearch(e.target.value)} />
-      </div>
+      {/* Search — only in list mode */}
+      {viewMode === 'list' && (
+        <div className="relative">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <input className="admin-input pl-10" placeholder="Cari nama atau layanan..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+      )}
 
-      {/* Bookings List */}
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
+      ) : viewMode === 'kanban' ? (
+        // ── Kanban Board ──
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+          {STATUS_OPTIONS.map(status => {
+            const KANBAN_HEADER: Record<string, string> = {
+              Pending:   'border-amber-400 bg-amber-50 dark:bg-amber-950/20',
+              Confirmed: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20',
+              Completed: 'border-blue-400 bg-blue-50 dark:bg-blue-950/20',
+              Canceled:  'border-zinc-400 bg-zinc-100 dark:bg-zinc-800/50',
+            };
+            const KANBAN_DOT: Record<string, string> = {
+              Pending: 'bg-amber-400', Confirmed: 'bg-emerald-400',
+              Completed: 'bg-blue-400', Canceled: 'bg-zinc-400',
+            };
+            const colBookings = bookings
+              .filter(b => b.status === status)
+              .sort((a, b) => a.booking_date?.localeCompare(b.booking_date ?? '') ?? 0);
+            return (
+              <div key={status} className="space-y-2">
+                {/* Column header */}
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-l-4 ${KANBAN_HEADER[status]}`}>
+                  <span className={`w-2 h-2 rounded-full ${KANBAN_DOT[status]}`} />
+                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{status}</span>
+                  <span className="ml-auto text-[10px] font-bold text-zinc-400">{colBookings.length}</span>
+                </div>
+                {/* Cards */}
+                <div className="space-y-2 min-h-[80px]">
+                  {colBookings.length === 0 && (
+                    <div className="text-center py-6 text-[11px] text-zinc-300 dark:text-zinc-600">Kosong</div>
+                  )}
+                  {colBookings.map(b => (
+                    <div key={b.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 shadow-sm hover:border-earth-primary/30 transition-colors group">
+                      <div className="flex items-start justify-between gap-1 mb-2">
+                        <p className="text-xs font-semibold text-zinc-900 dark:text-white leading-tight">{b.customer_name}</p>
+                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <button onClick={() => openEdit(b)} className="p-1 rounded text-blue-400 hover:text-blue-600"><Pencil size={11} /></button>
+                          <button onClick={() => setDeleteId(b.id)} className="p-1 rounded text-red-300 hover:text-red-500"><Trash2 size={11} /></button>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mb-1 line-clamp-2">{b.service_name}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-zinc-400">
+                          {b.booking_date ? formatDate(b.booking_date) : '-'}
+                          {b.booking_time ? ` · ${b.booking_time.slice(0,5)}` : ''}
+                        </span>
+                        <span className="text-[10px] font-bold text-earth-primary">
+                          {formatRp(b.final_price ?? b.price ?? 0)}
+                        </span>
+                      </div>
+                      {/* Move status buttons */}
+                      <div className="flex gap-1 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                        {STATUS_OPTIONS.filter(s => s !== status).map(s => (
+                          <button key={s} onClick={() => updateStatus(b.id, s)}
+                            className="flex-1 text-[9px] font-semibold py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors truncate">
+                            → {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        // ── List View (original) ──
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
           {filtered.length === 0 ? (
             <div className="text-center py-12 text-sm text-zinc-400">Tidak ada booking ditemukan.</div>
@@ -378,7 +459,6 @@ export default function BookingsPage() {
                       <p className="text-[10px] text-emerald-600 font-medium">-{formatRp(b.discount_total ?? 0)}</p>
                     )}
                   </div>
-
                   {/* Status */}
                   <div className="relative shrink-0">
                     <select value={b.status} onChange={e => updateStatus(b.id, e.target.value)}
@@ -387,15 +467,14 @@ export default function BookingsPage() {
                     </select>
                     <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                   </div>
-
                   {/* Actions */}
-                  <button onClick={() => sendWA(b)} className="shrink-0 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500" title="Kirim Reminder WA">
+                  <button onClick={() => sendWA(b)} className="shrink-0 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500">
                     <MessageCircle size={16} />
                   </button>
-                  <button onClick={() => openEdit(b)} className="shrink-0 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-500" title="Edit Booking">
+                  <button onClick={() => openEdit(b)} className="shrink-0 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-500">
                     <Pencil size={15} />
                   </button>
-                  <button onClick={() => setDeleteId(b.id)} className="shrink-0 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400" title="Hapus Booking">
+                  <button onClick={() => setDeleteId(b.id)} className="shrink-0 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400">
                     <Trash2 size={15} />
                   </button>
                 </div>

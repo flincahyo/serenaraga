@@ -682,7 +682,7 @@ const InvoiceMaker = () => {
             {/* Items */}
             <div style={{ marginBottom: 40 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f4f4f5', paddingBottom: 10, marginBottom: 14, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
-                <span>Layanan &amp; Durasi</span><span>Harga</span>
+                <span>Item &amp; Layanan</span><span>Harga</span>
               </div>
               {Object.values(
                 items.reduce((acc, item) => {
@@ -711,7 +711,6 @@ const InvoiceMaker = () => {
                   <div>
                     <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>
                     {item.details && <p style={{ fontSize: 9, color: '#71717a', lineHeight: 1.3, maxWidth: 260 }}>{item.details}</p>}
-                    {item.duration && <p style={{ fontSize: 9, color: '#a1a1aa', fontStyle: 'italic', marginTop: 2 }}>Durasi: {item.duration}</p>}
                   </div>
                   <p style={{ fontWeight: 700, fontSize: 13 }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
                 </div>

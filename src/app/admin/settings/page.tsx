@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Loader2, Check, Clock, MapPin, Phone, MessageSquare, FileText, Percent, Info } from 'lucide-react';
+import { Save, Loader2, Check, Clock, MapPin, Phone, MessageSquare, FileText, Percent, Info, RefreshCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
 type Settings = Record<string, string>;
@@ -12,6 +12,7 @@ const ALL_KEYS = [
   'whatsapp_reminder_message',
   'invoice_footer_text', 'invoice_social_text',
   'terapis_commission_pct',
+  're_engagement_days', 're_engagement_template',
 ];
 
 export default function SettingsPage() {
@@ -198,6 +199,52 @@ export default function SettingsPage() {
             <span className="font-mono font-bold text-emerald-600">Rp {(EXAMPLE * (100 - commission) / 100).toLocaleString('id-ID')} − BHP</span>
           </div>
         </div>
+      </SectionCard>
+
+      {/* ── CRM Re-engagement ── */}
+      <SectionCard
+        id="crm" title="CRM: Re-engagement Pelanggan"
+        icon={<RefreshCcw size={15} className="text-earth-primary" />}
+        saving={saving === 'crm'} saved={saved === 'crm'}
+        onSave={() => saveSection('crm', ['re_engagement_days', 're_engagement_template'])}
+      >
+        <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+          <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+            Sistem akan menandai pelanggan yang tidak order lebih dari batas hari yang ditentukan.
+            Gunakan variabel{' '}
+            {['{nama}', '{hari}'].map(v => (
+              <code key={v} className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded mx-0.5">{v}</code>
+            ))}{' '}
+            di template pesan WA.
+          </p>
+        </div>
+
+        <Field label="Batas Hari Tidak Order" hint="Pelanggan yang tidak order lebih dari ini akan di-highlight di halaman Customers">
+          <div className="flex items-center gap-3">
+            <input
+              type="number" min={7} max={365} step={1}
+              value={settings['re_engagement_days'] ?? '60'}
+              onChange={e => set('re_engagement_days', e.target.value)}
+              className="admin-input w-28 font-mono text-center"
+            />
+            <span className="text-sm text-zinc-500">hari</span>
+          </div>
+          <p className="text-[10px] text-zinc-400 mt-1">Contoh: 60 = pelanggan yang terakhir order lebih dari 60 hari lalu akan di-flag</p>
+        </Field>
+
+        <Field label="Template Pesan WA Re-engagement">
+          <textarea
+            className="admin-input resize-none font-mono text-xs" rows={6}
+            placeholder={'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu...\nKangen? Yuk book sesi relaksasi di SerenaRaga!\nAda promo spesial untuk kamu. Hubungi kami ya! 🌿'}
+            value={settings['re_engagement_template'] ?? ''}
+            onChange={e => set('re_engagement_template', e.target.value)}
+          />
+          <p className="text-[10px] text-zinc-400 mt-1">
+            <code className="font-mono">{'{nama}'}</code> → nama pelanggan &nbsp;·&nbsp;
+            <code className="font-mono">{'{hari}'}</code> → jumlah hari sejak kunjungan terakhir
+          </p>
+        </Field>
       </SectionCard>
     </div>
   );

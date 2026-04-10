@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
-type DiscountType = 'first_customer' | 'loyal' | 'manual';
+type DiscountType = 'first_customer' | 'loyal' | 'manual' | 'returning_customer';
 type ValueType    = 'percentage' | 'flat';
 
 type Discount = {
@@ -29,14 +29,16 @@ const EMPTY_FORM: DiscountForm = {
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
 const TYPE_LABELS: Record<DiscountType, string> = {
-  first_customer: 'Pelanggan Pertama',
-  loyal:          'Loyal (Kunjungan)',
-  manual:         'Manual / Promo',
+  first_customer:     'Pelanggan Pertama',
+  loyal:              'Loyal (Kunjungan)',
+  manual:             'Manual / Promo',
+  returning_customer: 'Returning Customer',
 };
 const TYPE_COLORS: Record<DiscountType, string> = {
-  first_customer: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-  loyal:          'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-  manual:         'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  first_customer:     'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+  loyal:              'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+  manual:             'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  returning_customer: 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400',
 };
 
 // DiscountForm component outside parent to prevent cursor loss
@@ -118,6 +120,28 @@ function DiscountFormPanel({
             value={data.min_orders ?? ''}
             onChange={e => onChange({ ...data, min_orders: Number(e.target.value) || null })} />
           <p className="text-[11px] text-zinc-400 mt-1">Customer eligible jika total kunjungan ≥ angka ini</p>
+        </div>
+      )}
+
+      {/* Min inactive days (returning_customer only) */}
+      {data.type === 'returning_customer' && (
+        <div className="p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl space-y-2">
+          <p className="text-xs font-semibold text-orange-700 dark:text-orange-400">Konfigurasi Returning Customer</p>
+          <p className="text-[11px] text-orange-600 dark:text-orange-400 leading-relaxed">
+            Promo ini akan di-suggest otomatis di Invoice saat pelanggan terdeteksi sudah lama tidak order.
+            Batas hari dikontrol dari <strong>Settings → CRM Re-engagement</strong>.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-1">
+              <Hash size={11} /> Minimal Tidak Order (hari)
+            </label>
+            <input type="number" min={1} className="admin-input w-32 font-mono"
+              value={data.min_orders ?? ''}
+              onChange={e => onChange({ ...data, min_orders: Number(e.target.value) || null })} />
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Promo eligible jika pelanggan tidak order ≥ hari ini (0 = ikuti setting global)
+            </p>
+          </div>
         </div>
       )}
 

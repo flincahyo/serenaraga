@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Plus, Pencil, Check, X, Loader2, ChevronDown, ChevronUp,
-  Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star,
+  Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star, MessageCircle, AlertCircle,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
@@ -99,30 +99,40 @@ export default function CustomersPage() {
   const { user } = useUser();
   const isOwner = user?.role !== 'cashier';
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [discounts, setDiscounts]  = useState<Discount[]>([]);
-  const [loading, setLoading]      = useState(true);
-  const [search, setSearch]        = useState('');
-  const [editId, setEditId]        = useState<string | null>(null);
-  const [editData, setEditData]    = useState<Partial<Customer>>({});
-  const [showAdd, setShowAdd]      = useState(false);
-  const [newCust, setNewCust]      = useState<Partial<Customer>>({ wa_number: '62', visit_count_base: 0 });
-  const [saving, setSaving]        = useState(false);
-  const [expandId, setExpandId]    = useState<string | null>(null);
+  const [customers, setCustomers]   = useState<Customer[]>([]);
+  const [discounts, setDiscounts]   = useState<Discount[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState('');
+  const [filterMode, setFilterMode] = useState<'all' | 'followup'>('all');
+  const [editId, setEditId]         = useState<string | null>(null);
+  const [editData, setEditData]     = useState<Partial<Customer>>({});
+  const [showAdd, setShowAdd]       = useState(false);
+  const [newCust, setNewCust]       = useState<Partial<Customer>>({ wa_number: '62', visit_count_base: 0 });
+  const [saving, setSaving]         = useState(false);
+  const [expandId, setExpandId]     = useState<string | null>(null);
   const [bookingHistory, setBookingHistory] = useState<Record<string, unknown[]>>({});
+  const [reEngageDays, setReEngageDays]   = useState(60);
+  const [reEngageTemplate, setReEngageTemplate] = useState('');
 
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: custs }, { data: discs }, { data: allBkg }] = await Promise.all([
+    const [{ data: custs }, { data: discs }, { data: allBkg }, { data: settingsData }] = await Promise.all([
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('discounts').select('id, type, value, value_type, min_orders, name, is_active').eq('type', 'loyal'),
       supabase.from('bookings')
         .select('customer_id, status, final_price, price, booking_date')
         .not('customer_id', 'is', null),
+      supabase.from('settings').select('key, value').in('key', ['re_engagement_days', 're_engagement_template']),
     ]);
     if (discs) setDiscounts(discs);
+    if (settingsData) {
+      settingsData.forEach(({ key, value }) => {
+        if (key === 're_engagement_days') setReEngageDays(Number(value) || 60);
+        if (key === 're_engagement_template') setReEngageTemplate(value);
+      });
+    }
     if (custs && allBkg) {
       const countMap: Record<string, number> = {};
       const spendMap: Record<string, number> = {};
@@ -204,11 +214,33 @@ export default function CustomersPage() {
     setSaving(false);
   };
 
-  const filtered = customers.filter(c =>
-    !search ||
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.wa_number.includes(search)
-  );
+  const sendReEngageWA = (c: Customer) => {
+    const days = c.last_visit
+      ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
+      : reEngageDays;
+    const template = reEngageTemplate ||
+      'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu... Kangen? Yuk book sesi relaksasi di SerenaRaga! Ada promo spesial untuk kamu. 🌿';
+    const msg = template
+      .replace('{nama}', c.name ?? 'Kak')
+      .replace('{hari}', String(days));
+    window.open(`https://wa.me/${c.wa_number.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  const isDormant = (c: Customer) => {
+    if (!c.last_visit) return false;
+    const days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+    return days >= reEngageDays;
+  };
+
+  const filtered = customers
+    .filter(c => filterMode === 'followup' ? isDormant(c) : true)
+    .filter(c =>
+      !search ||
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.wa_number.includes(search)
+    );
+
+  const followUpCount = customers.filter(isDormant).length;
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -266,11 +298,38 @@ export default function CustomersPage() {
         />
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-        <input className="admin-input pl-10" placeholder="Cari nama atau nomor WA..."
-          value={search} onChange={e => setSearch(e.target.value)} />
+      {/* Filter Tabs + Search */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        {/* All / Follow-up tabs — owner only */}
+        {isOwner && (
+          <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 shrink-0">
+            <button onClick={() => setFilterMode('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                filterMode === 'all' ? 'bg-white dark:bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+              }`}>
+              Semua ({customers.length})
+            </button>
+            <button onClick={() => setFilterMode('followup')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                filterMode === 'followup'
+                  ? 'bg-orange-500 text-white shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-700'
+              }`}>
+              <AlertCircle size={11} />
+              Perlu Follow-up
+              {followUpCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                  filterMode === 'followup' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-600'
+                }`}>{followUpCount}</span>
+              )}
+            </button>
+          </div>
+        )}
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <input className="admin-input pl-10" placeholder="Cari nama atau nomor WA..."
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
       </div>
 
       {/* List */}
@@ -290,7 +349,20 @@ export default function CustomersPage() {
                     onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
                 </div>
               ) : (
-                <div className="px-4 py-3">
+                <div className={`px-4 py-3 ${ isOwner && isDormant(c) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
+                  {/* Dormant banner */}
+                  {isOwner && isDormant(c) && (
+                    <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg">
+                      <AlertCircle size={11} className="text-orange-500 shrink-0" />
+                      <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
+                        ⚠ Sudah {Math.floor((Date.now() - new Date(c.last_visit!).getTime()) / 86400000)} hari tidak order
+                      </span>
+                      <button onClick={() => sendReEngageWA(c)}
+                        className="flex items-center gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
+                        <MessageCircle size={10} /> Kirim WA
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
                     <div className="w-9 h-9 rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0 mt-0.5">
@@ -329,6 +401,12 @@ export default function CustomersPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 shrink-0">
+                      {isOwner && isDormant(c) && (
+                        <button onClick={() => sendReEngageWA(c)}
+                          className="p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/30 text-orange-400" title="Kirim WA Re-engagement">
+                          <MessageCircle size={14} />
+                        </button>
+                      )}
                       <button onClick={() => loadHistory(c.id)}
                         className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400" title="Riwayat Booking">
                         {expandId === c.id ? <ChevronUp size={14} /> : <CalendarCheck size={14} />}

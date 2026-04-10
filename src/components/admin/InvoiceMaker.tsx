@@ -82,6 +82,8 @@ const InvoiceMaker = () => {
   const [customDiscountName, setCustomDiscountName] = useState('');
   const [customDiscountAmount, setCustomDiscountAmount] = useState('');
   const [therapists, setTherapists] = useState<{id: string; name: string; commission_pct: number}[]>([]);
+  const [reEngageDays, setReEngageDays]           = useState(60);
+  const [returningPromos, setReturningPromos]     = useState<Discount[]>([]); // suggested returning customer promos
 
   const supabase = createClient();
 
@@ -90,7 +92,7 @@ const InvoiceMaker = () => {
       supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
-      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct']),
+    supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days']),
       supabase.from('discounts').select('*').eq('is_active', true),
       supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
     ]);
@@ -103,6 +105,7 @@ const InvoiceMaker = () => {
         if (key === 'invoice_footer_text') setInvoiceFooter(value);
         if (key === 'invoice_social_text') setInvoiceSocial(value);
         if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
+        if (key === 're_engagement_days') setReEngageDays(Number(value) || 60);
       });
     }
   }, []);
@@ -130,8 +133,29 @@ const InvoiceMaker = () => {
       if (!isDiscountValid(d)) return false;
       if (d.type === 'first_customer') return eff === 0;
       if (d.type === 'loyal') return d.min_orders !== null && eff >= d.min_orders;
-      return false; // manual not auto-suggested
+      return false; // manual / returning_customer not auto-suggested here
     });
+
+    // Check if returning customer (last booking date)
+    setReturningPromos([]);
+    const { data: lastBkg } = await supabase
+      .from('bookings')
+      .select('booking_date')
+      .eq('phone', clean)
+      .eq('status', 'Completed')
+      .order('booking_date', { ascending: false })
+      .limit(1);
+    if (lastBkg && lastBkg.length > 0) {
+      const daysSince = Math.floor((Date.now() - new Date(lastBkg[0].booking_date).getTime()) / 86400000);
+      if (daysSince >= reEngageDays) {
+        const returningDiscs = allDiscounts.filter(d =>
+          d.is_active && d.type === 'returning_customer' &&
+          isDiscountValid(d) &&
+          (d.min_orders === null || daysSince >= d.min_orders)
+        );
+        setReturningPromos(returningDiscs);
+      }
+    }
 
     // For loyal: keep only the highest tier eligible
     const loyalEligible = eligible
@@ -489,6 +513,30 @@ const InvoiceMaker = () => {
                       </span>
                       <span className={`text-xs font-mono font-semibold ${applied ? 'text-earth-primary' : 'text-zinc-400'}`}>
                         -{formatRp(amt)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 🔄 Returning Customer Promo Suggestion */}
+            {returningPromos.length > 0 && (
+              <div className="rounded-lg border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/20 p-3 space-y-2">
+                <p className="text-[11px] font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
+                  🔄 Pelanggan Returning — Promo Tersedia
+                </p>
+                {returningPromos.map(d => {
+                  const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
+                  return (
+                    <label key={d.id} className="flex items-center gap-2.5 cursor-pointer">
+                      <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
+                        className="accent-orange-500 w-4 h-4" />
+                      <span className="text-xs text-orange-700 dark:text-orange-300 flex-1">
+                        {d.name} — {d.value_type === 'percentage' ? `${d.value}%` : formatRp(d.value)}
+                      </span>
+                      <span className={`text-xs font-mono font-semibold ${applied ? 'text-orange-500' : 'text-orange-300'}`}>
+                        -{formatRp(computeAmount(d, grossTotal))}
                       </span>
                     </label>
                   );

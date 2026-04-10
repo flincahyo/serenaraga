@@ -6,6 +6,7 @@ import {
   Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useUser } from '@/lib/user-context';
 
 
 type Customer = {
@@ -95,6 +96,9 @@ function CustomerForm({
 }
 
 export default function CustomersPage() {
+  const { user } = useUser();
+  const isOwner = user?.role !== 'cashier';
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [discounts, setDiscounts]  = useState<Discount[]>([]);
   const [loading, setLoading]      = useState(true);
@@ -222,8 +226,8 @@ export default function CustomersPage() {
         </button>
       </div>
 
-      {/* LTV Summary Bar — Owner only, shown above list */}
-      {(() => {
+      {/* LTV Summary Bar — Owner only */}
+      {isOwner && (() => {
         const totalLTV    = customers.reduce((s, c) => s + (c.total_spending ?? 0), 0);
         const avgLTV      = customers.length ? Math.round(totalLTV / customers.length) : 0;
         const topCust     = [...customers].sort((a,b) => (b.total_spending??0)-(a.total_spending??0))[0];
@@ -311,7 +315,7 @@ export default function CustomersPage() {
                             <span className="text-zinc-400 font-normal">({c.visit_count_base} offline)</span>
                           )}
                         </span>
-                        {(c.total_spending ?? 0) > 0 && (
+                        {isOwner && (c.total_spending ?? 0) > 0 && (
                           <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                             <Wallet size={11} /> {formatRp(c.total_spending ?? 0)} LTV
                           </span>

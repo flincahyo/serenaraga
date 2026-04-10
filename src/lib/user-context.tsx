@@ -10,7 +10,6 @@ export type AppUser = {
   displayName: string;
   email?: string;
   username?: string;
-  staffId?: string;
 };
 
 type UserContextType = {
@@ -28,48 +27,41 @@ const UserContext = createContext<UserContextType>({
 });
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser]     = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   const refreshUser = useCallback(async () => {
     setLoading(true);
 
-    // 1. Cek Supabase Auth session (Owner)
     const { data: { user: authUser } } = await supabase.auth.getUser();
+
     if (authUser) {
-      setUser({ role: 'owner', displayName: 'Owner', email: authUser.email });
-      setLoading(false);
-      return;
+      const isStaff = authUser.user_metadata?.is_staff === true;
+      if (isStaff) {
+        // Kasir: role dari Supabase user_metadata
+        setUser({
+          role: 'cashier',
+          displayName: authUser.user_metadata?.display_name ?? 'Kasir',
+          username: authUser.user_metadata?.username,
+        });
+      } else {
+        // Owner: login dengan email asli
+        setUser({
+          role: 'owner',
+          displayName: 'Owner',
+          email: authUser.email,
+        });
+      }
+    } else {
+      setUser(null);
     }
 
-    // 2. Cek staff session via API (membaca httpOnly cookie)
-    try {
-      const res = await fetch('/api/staff/session');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.staff) {
-          setUser({
-            role: 'cashier',
-            displayName: data.staff.display_name,
-            username: data.staff.username,
-            staffId: data.staff.staff_id,
-          });
-          setLoading(false);
-          return;
-        }
-      }
-    } catch { /* ignore */ }
-
-    setUser(null);
     setLoading(false);
   }, [supabase]);
 
   const logout = async () => {
-    // Logout owner
     await supabase.auth.signOut();
-    // Logout kasir — hapus cookie via API
-    await fetch('/api/staff/logout', { method: 'POST' });
     setUser(null);
     window.location.href = '/admin';
   };

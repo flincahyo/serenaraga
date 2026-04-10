@@ -12,16 +12,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const isAdminPage = pathname === '/admin';
+  const isAdminPage  = pathname === '/admin';
   const isAdminRoute = pathname.startsWith('/admin/');
-  const isApiRoute = pathname.startsWith('/api/');
-
-  // API routes — always allow through (they do their own auth)
-  if (isApiRoute) return NextResponse.next();
-
-  // Check staff session cookie (for cashier login)
-  const staffCookie = request.cookies.get('sr_staff_session');
-  const hasStaffSession = !!staffCookie?.value;
 
   let supabaseResponse = NextResponse.next({ request });
 
@@ -39,15 +31,14 @@ export async function middleware(request: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
-  const isAuthenticated = !!user || hasStaffSession;
 
-  // Redirect to login if accessing protected routes without any session
-  if (isAdminRoute && !isAuthenticated) {
+  // Redirect ke login jika mengakses halaman admin tanpa sesi
+  if (isAdminRoute && !user) {
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
-  // Redirect authenticated user away from login page
-  if (isAdminPage && isAuthenticated) {
+  // Redirect user yang sudah login menjauh dari halaman login
+  if (isAdminPage && user) {
     return NextResponse.redirect(new URL('/admin/dashboard', request.url));
   }
 

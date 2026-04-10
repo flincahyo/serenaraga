@@ -10,21 +10,18 @@ export default function AdminLogin() {
   const router = useRouter();
   const { refreshUser } = useUser();
 
-  // Tab: 'owner' | 'cashier'
   const [tab, setTab] = useState<'owner' | 'cashier'>('owner');
 
-  // Owner fields
-  const [email, setEmail]       = useState('');
-  const [ownerPw, setOwnerPw]   = useState('');
+  const [email, setEmail]         = useState('');
+  const [ownerPw, setOwnerPw]     = useState('');
   const [showOwnerPw, setShowOwnerPw] = useState(false);
 
-  // Kasir fields
-  const [username, setUsername] = useState('');
-  const [staffPw, setStaffPw]   = useState('');
+  const [username, setUsername]   = useState('');
+  const [staffPw, setStaffPw]     = useState('');
   const [showStaffPw, setShowStaffPw] = useState(false);
 
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
 
   const handleOwnerLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +42,7 @@ export default function AdminLogin() {
     e.preventDefault();
     setLoading(true); setError('');
 
+    // Step 1: validasi username + bcrypt di server
     const res = await fetch('/api/staff/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,12 +53,25 @@ export default function AdminLogin() {
     if (!res.ok || !data.success) {
       setError(data.error ?? 'Login gagal.');
       setLoading(false);
-    } else {
-      localStorage.setItem('sr_staff_session', JSON.stringify(data.session));
-      await refreshUser();
-      router.push('/admin/dashboard');
-      router.refresh();
+      return;
     }
+
+    // Step 2: sign in ke Supabase Auth dengan pseudo-email agar akses DB normal
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email: data.pseudo_email,
+      password: data.plaintext_password,
+    });
+
+    if (authError) {
+      setError('Akun kasir belum terdaftar di sistem auth. Hubungi Owner untuk membuat ulang akun.');
+      setLoading(false);
+      return;
+    }
+
+    await refreshUser();
+    router.push('/admin/dashboard');
+    router.refresh();
   };
 
   return (
@@ -85,8 +96,7 @@ export default function AdminLogin() {
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
             }`}
           >
-            <ShieldCheck size={15} />
-            Owner
+            <ShieldCheck size={15} /> Owner
           </button>
           <button
             onClick={() => { setTab('cashier'); setError(''); }}
@@ -96,33 +106,27 @@ export default function AdminLogin() {
                 : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
             }`}
           >
-            <UserCog size={15} />
-            Kasir / Staff
+            <UserCog size={15} /> Kasir / Staff
           </button>
         </div>
 
         {/* Card */}
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm space-y-5">
 
-          {/* Owner Form */}
           {tab === 'owner' && (
             <form onSubmit={handleOwnerLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Email</label>
-                <input
-                  type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="owner@serenaraga.com" className="admin-input"
-                />
+                <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="owner@serenaraga.com" className="admin-input" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
                 <div className="relative">
-                  <input
-                    type={showOwnerPw ? 'text' : 'password'} required value={ownerPw}
-                    onChange={e => setOwnerPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10"
-                  />
+                  <input type={showOwnerPw ? 'text' : 'password'} required value={ownerPw}
+                    onChange={e => setOwnerPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
                   <button type="button" onClick={() => setShowOwnerPw(!showOwnerPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
                     {showOwnerPw ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
@@ -135,25 +139,20 @@ export default function AdminLogin() {
             </form>
           )}
 
-          {/* Kasir Form */}
           {tab === 'cashier' && (
             <form onSubmit={handleCashierLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Username</label>
-                <input
-                  type="text" required value={username} onChange={e => setUsername(e.target.value)}
-                  placeholder="contoh: putri_kasir" className="admin-input" autoCapitalize="none" autoCorrect="off"
-                />
+                <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
+                  placeholder="contoh: putri_kasir" className="admin-input" autoCapitalize="none" autoCorrect="off" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
                 <div className="relative">
-                  <input
-                    type={showStaffPw ? 'text' : 'password'} required value={staffPw}
-                    onChange={e => setStaffPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10"
-                  />
+                  <input type={showStaffPw ? 'text' : 'password'} required value={staffPw}
+                    onChange={e => setStaffPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
                   <button type="button" onClick={() => setShowStaffPw(!showStaffPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
                     {showStaffPw ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>

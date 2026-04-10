@@ -114,7 +114,9 @@ const InvoiceMaker = () => {
 
   // ── Customer lookup by WA ──
   const lookupCustomer = useCallback(async (phone: string) => {
-    const clean = phone.replace(/\D/g, '');
+    let clean = phone.replace(/\D/g, '');
+    if (clean.startsWith('0')) clean = '62' + clean.substring(1);
+    
     if (clean.length < 6) { setCustomerRecord(null); setEffectiveCount(null); setEligibleDiscounts([]); return; }
     setLookingUpCustomer(true);
     const [{ data: cust }, { data: completedB }] = await Promise.all([
@@ -329,7 +331,8 @@ const InvoiceMaker = () => {
   const completeAndSave = async () => {
     if (!selectedBookingId) return;
     setCompleting(true);
-    const clean = customerPhone.replace(/\D/g, '');
+    let clean = customerPhone.replace(/\D/g, '');
+    if (clean.startsWith('0')) clean = '62' + clean.substring(1);
 
     // 1. Upsert customer
     let customerId = customerRecord?.id ?? null;

@@ -52,7 +52,7 @@ export default function SettingsPage() {
   };
 
   const commission = Number(settings['terapis_commission_pct'] ?? 30);
-  const EXAMPLE    = 400000;
+  const EXAMPLE = 400000;
 
   if (loading) return (
     <div className="flex justify-center py-20">
@@ -236,7 +236,7 @@ export default function SettingsPage() {
         <Field label="Template Pesan WA Re-engagement">
           <textarea
             className="admin-input resize-none font-mono text-xs" rows={9}
-            placeholder={`Halo {nama}, semoga harinya menyenangkan. 🌿\n\nSudah {hari} hari berlalu semenjak kunjungan terakhir kamu. Jangan lupa luangkan waktu sejenak untuk merawat diri, karena tubuh yang rileks adalah kunci produktivitas.\n\nKami memiliki promo spesial "Welcome Back" khusus untuk kamu. Balas pesan ini untuk reservasi sesi relaksasimu selanjutnya. ✨\n\nSalam hangat,\nSerenaRaga`}
+            placeholder={`Halo {nama}, semoga harinya menyenangkan. 🌿\n\nSudah {hari} hari berlalu semenjak relaksasi terakhir kamu. Jangan lupa luangkan waktu sejenak untuk rehat, karena tubuh yang rileks adalah kunci produktivitas.\n\nKami memiliki promo spesial "Welcome Back" khusus untuk kamu. Balas pesan ini untuk reservasi sesi relaksasimu selanjutnya. ✨\n\nSalam hangat,\nSerenaRaga`}
             value={settings['re_engagement_template'] ?? ''}
             onChange={e => set('re_engagement_template', e.target.value)}
           />

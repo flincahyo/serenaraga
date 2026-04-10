@@ -165,7 +165,9 @@ export default function BookingsPage() {
 
     // Upsert customer by WA (ignores duplicate — nama tidak di-overwrite)
     let customerId: string | null = null;
-    const phone = form.phone.replace(/\D/g, '');
+    let phone = form.phone.replace(/\D/g, '');
+    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+    
     if (phone && phone.length > 5) {
       const { data: customer } = await supabase
         .from('customers')
@@ -186,7 +188,7 @@ export default function BookingsPage() {
 
     const payload = {
       customer_name: form.customer_name,
-      phone: form.phone,
+      phone: phone || form.phone,
       booking_date: form.booking_date,
       booking_time: form.booking_time,
       status: form.status,

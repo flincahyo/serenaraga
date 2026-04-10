@@ -200,8 +200,11 @@ export default function CustomersPage() {
   const addCustomer = async () => {
     if (!newCust.wa_number) return;
     setSaving(true);
+    let wa = (newCust.wa_number ?? '').replace(/\D/g, '');
+    if (wa.startsWith('0')) wa = '62' + wa.substring(1);
+
     const { error } = await supabase.from('customers').insert({
-      wa_number: (newCust.wa_number ?? '').replace(/\D/g, ''),
+      wa_number: wa,
       name: newCust.name ?? null,
       visit_count_base: newCust.visit_count_base ?? 0,
       notes: newCust.notes ?? null,
@@ -300,10 +303,9 @@ export default function CustomersPage() {
 
       {/* Filter Tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-2">
-        {/* All / Follow-up tabs — owner only */}
-        {isOwner && (
-          <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 shrink-0">
-            <button onClick={() => setFilterMode('all')}
+        {/* All / Follow-up tabs */}
+        <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 shrink-0">
+          <button onClick={() => setFilterMode('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                 filterMode === 'all' ? 'bg-white dark:bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
               }`}>
@@ -323,8 +325,7 @@ export default function CustomersPage() {
                 }`}>{followUpCount}</span>
               )}
             </button>
-          </div>
-        )}
+        </div>
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
           <input className="admin-input pl-10" placeholder="Cari nama atau nomor WA..."
@@ -349,9 +350,9 @@ export default function CustomersPage() {
                     onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
                 </div>
               ) : (
-                <div className={`px-4 py-3 ${ isOwner && isDormant(c) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
+                <div className={`px-4 py-3 ${ isDormant(c) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
                   {/* Dormant banner */}
-                  {isOwner && isDormant(c) && (
+                  {isDormant(c) && (
                     <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg">
                       <AlertCircle size={11} className="text-orange-500 shrink-0" />
                       <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
@@ -401,7 +402,7 @@ export default function CustomersPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-1 shrink-0">
-                      {isOwner && isDormant(c) && (
+                      {isDormant(c) && (
                         <button onClick={() => sendReEngageWA(c)}
                           className="p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/30 text-orange-400" title="Kirim WA Re-engagement">
                           <MessageCircle size={14} />

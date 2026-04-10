@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Search, Trash2, Pencil, CalendarDays, Download, ToggleLeft, ToggleRight, Check, X, Loader2, Users } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, CalendarDays, Download, ToggleLeft, ToggleRight, Check, X, Loader2, Users, MessageCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { toPng } from 'html-to-image';
 
@@ -14,6 +14,7 @@ type PayoutItem = {
   date: string;
   customer_name: string;
   service_name: string;
+  price: number;
   commission_earned: number;
 };
 
@@ -93,6 +94,7 @@ export default function TherapistsPage() {
       .from('booking_items')
       .select(`
         service_name,
+        price,
         commission_earned,
         bookings!inner(booking_date, customer_name, status)
       `)
@@ -107,6 +109,7 @@ export default function TherapistsPage() {
         date: row.bookings.booking_date,
         customer_name: row.bookings.customer_name || '-',
         service_name: row.service_name,
+        price: Number(row.price) || 0,
         commission_earned: Number(row.commission_earned) || 0,
       }));
       setPayoutItems(items);
@@ -121,6 +124,31 @@ export default function TherapistsPage() {
       const dataUrl = await toPng(slipRef.current, { cacheBust: true, pixelRatio: 2 });
       const link = document.createElement('a');
       link.download = `Slip_${payoutTherapist?.name}_${payoutStart}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error('Error generating image', e);
+    }
+    setGeneratingSlip(false);
+  };
+
+  const shareToWhatsApp = async () => {
+    if (!slipRef.current) return;
+    setGeneratingSlip(true);
+    try {
+      const dataUrl = await toPng(slipRef.current, { cacheBust: true, pixelRatio: 2 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `Slip_${payoutTherapist?.name}_${payoutStart}.png`, { type: 'image/png' });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: `Slip Gaji ${payoutTherapist?.name}`, text: `Slip Gaji untuk ${payoutTherapist?.name}` }); return; }
+        catch (e) { if ((e as Error).name === 'AbortError') return; }
+      }
+      const msg = `Slip Bagi Hasil untuk ${payoutTherapist?.name}\nPeriode: ${payoutStart} s/d ${payoutEnd}\nTotal: ${formatRp(totalPayout)}\n*(Gambar slip dilampirkan)*`;
+      const phone = payoutTherapist?.phone?.replace(/\D/g, '') || '';
+      if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      // Always fallback download
+      const link = document.createElement('a');
+      link.download = file.name;
       link.href = dataUrl;
       link.click();
     } catch (e) {
@@ -277,9 +305,9 @@ export default function TherapistsPage() {
                   className="bg-white"
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
-                  <div style={{ backgroundColor: '#27272a', color: 'white', padding: '24px', textAlign: 'center' }}>
-                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 600, letterSpacing: '2px' }}>SERENARAGA</h2>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#a1a1aa' }}>STATEMENT OF EARNINGS</p>
+                  <div style={{ backgroundColor: '#fcfaf6', color: '#18181b', padding: '24px', textAlign: 'center', borderBottom: '1px solid #f4e8d3' }}>
+                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, letterSpacing: '-0.5px', fontFamily: 'Inter, sans-serif' }}>Serena<span style={{ color: '#9d8063' }}>Raga</span></h2>
+                    <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#a1a1aa', letterSpacing: '2px' }}>STATEMENT OF EARNINGS</p>
                   </div>
                   
                   <div style={{ padding: '24px' }}>
@@ -305,7 +333,7 @@ export default function TherapistsPage() {
                             <div>
                               <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
                               <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
-                              <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>Tanggal: {new Date(item.date).toLocaleDateString('id-ID')}</p>
+                              <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • {formatRp(item.price)} × {payoutTherapist.commission_pct}%</p>
                             </div>
                             <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>
                               {formatRp(item.commission_earned)}
@@ -337,8 +365,14 @@ export default function TherapistsPage() {
               <button 
                 onClick={generateSlipImage}
                 disabled={payoutItems.length === 0 || generatingSlip}
-                className="admin-btn-primary flex items-center gap-2 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed">
-                {generatingSlip ? <><Loader2 size={16} className="animate-spin" /> Memproses...</> : <><Download size={16} /> Unduh Card & Share</>}
+                className="bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50">
+                {generatingSlip ? <><Loader2 size={16} className="animate-spin" /> Proses...</> : <><Download size={16} /> Unduh Card</>}
+              </button>
+              <button 
+                onClick={shareToWhatsApp}
+                disabled={payoutItems.length === 0 || generatingSlip}
+                className="bg-[#25D366] hover:bg-[#1da851] text-white flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {generatingSlip ? <><Loader2 size={16} className="animate-spin" /> Proses...</> : <><MessageCircle size={16} /> Share ke WA</>}
               </button>
             </div>
 

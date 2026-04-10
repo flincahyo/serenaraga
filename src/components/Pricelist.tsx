@@ -40,6 +40,7 @@ const Pricelist = () => {
       const { data, error } = await supabase
         .from('services')
         .select('*')
+        .neq('category', 'split_items')
         .order('category')
         .order('sort_order');
       if (!error && data) setServices(data);

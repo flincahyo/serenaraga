@@ -35,7 +35,7 @@ const genInvoiceNo = () => {
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 const CATEGORY_LABELS: Record<string, string> = {
   packages: 'Paket Massage', services: 'Massage Services',
-  reflexology: 'Refleksi', addons: 'Add-On',
+  reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split Item'
 };
 
 // ──────────────────────────────────────────
@@ -527,7 +527,7 @@ const InvoiceMaker = () => {
               <div key={item.id} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-2 border border-zinc-200 dark:border-zinc-700">
                 <select value={item.name} onChange={e => onServiceSelect(item.id, e.target.value)} className="admin-input text-xs">
                   <option value="">-- Pilih dari pricelist (opsional) --</option>
-                  {['packages', 'services', 'reflexology', 'addons'].map(cat => (
+                  {['packages', 'services', 'reflexology', 'addons', 'split_items'].map(cat => (
                     <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
                       {services.filter(s => s.category === cat).map(s => (
                         <option key={s.id} value={s.name}>{s.name} — Rp {s.price.toLocaleString('id-ID')}</option>

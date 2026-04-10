@@ -55,6 +55,7 @@ const CATEGORIES = [
   { id: 'services',   label: 'Massage Services' },
   { id: 'reflexology',label: 'Refleksi Service' },
   { id: 'addons',     label: 'Add-On Service' },
+  { id: 'split_items',label: 'Internal Split Item' },
 ];
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;

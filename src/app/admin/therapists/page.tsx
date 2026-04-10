@@ -87,7 +87,7 @@ export default function TherapistsPage() {
   const loadPayoutData = async () => {
     if (!payoutTherapist) return;
     setFetchingPayout(true);
-    
+
     // Fetch all completed bookings from start to end date
     // Then join booking_items where therapist_id matches
     const { data, error } = await supabase
@@ -214,7 +214,7 @@ export default function TherapistsPage() {
                         </button>
                         <button onClick={() => toggleActive(t)}
                           className="p-2 rounded-lg hover:bg-zinc-100 text-zinc-400">
-                          {t.is_active ? <ToggleRight size={18} className="text-emerald-500"/> : <ToggleLeft size={18} />}
+                          {t.is_active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} />}
                         </button>
                         <button onClick={() => { setEditId(t.id); setFormData({ name: t.name, phone: t.phone || '', commission_pct: t.commission_pct, is_active: t.is_active }); setShowAdd(true); }}
                           className="p-2 rounded-lg hover:bg-blue-50 text-blue-500">
@@ -243,7 +243,7 @@ export default function TherapistsPage() {
           <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-md shadow-xl border border-zinc-100 dark:border-zinc-800 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h3 className="font-semibold text-zinc-900 dark:text-white">{editId ? 'Edit Terapis' : 'Tambah Terapis'}</h3>
-              <button onClick={() => setShowAdd(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20}/></button>
+              <button onClick={() => setShowAdd(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20} /></button>
             </div>
             <div className="space-y-4">
               <div>
@@ -278,7 +278,7 @@ export default function TherapistsPage() {
                 </h3>
                 <p className="text-xs text-zinc-500 mt-1">Terapis: <span className="font-semibold">{payoutTherapist.name}</span></p>
               </div>
-              <button onClick={() => setShowPayout(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20}/></button>
+              <button onClick={() => setShowPayout(false)} className="text-zinc-400 hover:text-zinc-600"><X size={20} /></button>
             </div>
 
             {/* Filter */}
@@ -299,7 +299,7 @@ export default function TherapistsPage() {
             <div className="flex-1 overflow-visible relative flex flex-col lg:flex-row gap-6 min-h-0">
               {/* Slip Preview off-screen block that gets generated */}
               <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center items-start">
-                <div 
+                <div
                   ref={slipRef}
                   className="bg-white"
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
@@ -308,7 +308,7 @@ export default function TherapistsPage() {
                     <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, letterSpacing: '-0.5px', fontFamily: 'Inter, sans-serif' }}>Serena<span style={{ color: '#9d8063' }}>Raga</span></h2>
                     <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#a1a1aa', letterSpacing: '2px' }}>STATEMENT OF EARNINGS</p>
                   </div>
-                  
+
                   <div style={{ padding: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', borderBottom: '1px dashed #e4e4e7', paddingBottom: '16px' }}>
                       <div>
@@ -318,27 +318,27 @@ export default function TherapistsPage() {
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: '10px', color: '#71717a', margin: '0 0 2px' }}>PERIODE</p>
                         <p style={{ fontSize: '12px', fontWeight: 600, margin: 0 }}>
-                          {payoutStart === payoutEnd ? new Date(payoutStart).toLocaleDateString('id-ID') : `${new Date(payoutStart).toLocaleDateString('id-ID', {day:'numeric', month:'short'})} - ${new Date(payoutEnd).toLocaleDateString('id-ID', {day:'numeric', month:'short'})}`}
+                          {payoutStart === payoutEnd ? new Date(payoutStart).toLocaleDateString('id-ID') : `${new Date(payoutStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(payoutEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`}
                         </p>
                       </div>
                     </div>
 
                     <p style={{ fontSize: '11px', fontWeight: 600, color: '#3f3f46', marginBottom: '12px' }}>RINCIAN KUNJUNGAN / JOB</p>
-                    
+
                     {payoutItems.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {payoutItems.map((item, idx) => {
                           const expectedCom = Math.round(item.price * payoutTherapist.commission_pct / 100);
                           const hasDiscount = item.commission_earned < expectedCom && expectedCom > 0;
                           const derivedBase = item.commission_earned === 0 ? 0 : Math.round(item.commission_earned / (payoutTherapist.commission_pct / 100));
-                          
+
                           return (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div>
                                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
                                 <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
-                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • 
+                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} •
                                   {hasDiscount ? ` ${formatRp(derivedBase)} (setelah diskon)` : ` ${formatRp(item.price)}`} × {payoutTherapist.commission_pct}%
                                 </p>
                               </div>
@@ -360,9 +360,9 @@ export default function TherapistsPage() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div style={{ backgroundColor: '#fdfdfd', padding: '16px', textAlign: 'center', borderTop: '1px solid #f4f4f5' }}>
-                    <p style={{ margin: 0, fontSize: '9px', color: '#a1a1aa' }}>*Nilai komisi bersifat bersih setelah penyesuaian diskon (jika applicable). Biaya bahan medis/BHP murni ditanggung oleh owner.</p>
+                    <p style={{ margin: 0, fontSize: '9px', color: '#a1a1aa' }}>*Nilai komisi bersifat bersih setelah penyesuaian. Biaya bahan habis pakai/BHP murni ditanggung oleh owner.</p>
                   </div>
                 </div>
               </div>
@@ -370,13 +370,13 @@ export default function TherapistsPage() {
 
             <div className="pt-6 mt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
               <button onClick={() => setShowPayout(false)} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors">Tutup</button>
-              <button 
+              <button
                 onClick={generateSlipImage}
                 disabled={payoutItems.length === 0 || generatingSlip}
                 className="bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-50 flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all disabled:opacity-50">
                 {generatingSlip ? <><Loader2 size={16} className="animate-spin" /> Proses...</> : <><Download size={16} /> Unduh Card</>}
               </button>
-              <button 
+              <button
                 onClick={shareToWhatsApp}
                 disabled={payoutItems.length === 0 || generatingSlip}
                 className="bg-[#25D366] hover:bg-[#1da851] text-white flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">

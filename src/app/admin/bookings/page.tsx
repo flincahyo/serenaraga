@@ -23,7 +23,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 const CATEGORY_LABELS: Record<string, string> = {
   packages: 'Paket Massage', services: 'Massage Services',
-  reflexology: 'Refleksi', addons: 'Add-On',
+  reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split Item'
 };
 
 const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, final_price_override: null as number | null };
@@ -411,7 +411,7 @@ export default function BookingsPage() {
                         value={item.service_name}
                         onChange={e => onServiceSelect(item.tempId, e.target.value)}>
                         <option value="">-- Pilih Layanan --</option>
-                        {['packages', 'services', 'reflexology', 'addons'].map(cat => (
+                        {['packages', 'services', 'reflexology', 'addons', 'split_items'].map(cat => (
                           <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
                             {services.filter(s => s.category === cat).map(s => (
                               <option key={s.id} value={s.name}>{s.name} — {formatRp(s.price)}</option>

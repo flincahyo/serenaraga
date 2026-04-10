@@ -64,8 +64,10 @@ body {
     margin-inline: auto;
     padding: 0 1.5rem;
   }
+}
 
-  /* Admin Panel Utilities */
+/* Admin Panel — must be in @layer components so Tailwind utilities (pl-*, pr-*) can always override */
+@layer components {
   .admin-card {
     background: var(--admin-surface);
     border: 1px solid var(--admin-border);
@@ -78,9 +80,11 @@ body {
     background: var(--admin-bg);
     border: 1px solid var(--admin-border);
     border-radius: 0.5rem;
-    padding-block: 0.625rem;
-    padding-inline-start: 0.875rem;
-    padding-inline-end: 0.875rem;
+    /* Use separate properties — Tailwind pl-*/pr-* utilities will override these */
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+    padding-left: 0.875rem;
+    padding-right: 0.875rem;
     font-size: 0.875rem;
     outline: none;
     color: var(--admin-text);
@@ -131,6 +135,7 @@ body {
     color: var(--admin-text);
   }
 }
+
 
 html {
   scroll-behavior: smooth;

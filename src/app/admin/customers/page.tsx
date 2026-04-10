@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, Search, Plus, Pencil, Check, X, Loader2, ChevronDown, ChevronUp,
-  Phone, CalendarCheck, Award, Hash, Trash2,
+  Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+
 
 type Customer = {
   id: string;
@@ -14,11 +15,13 @@ type Customer = {
   visit_count_base: number;
   notes: string | null;
   created_at: string;
-  effective_count?: number;   // computed: visit_count_base + completed bookings
+  effective_count?: number;   // computed
+  total_spending?: number;    // computed LTV
+  last_visit?: string;        // computed
 };
 
 type Discount = { id: string; type: string; value: number; value_type: string; min_orders: number | null; name: string; is_active: boolean; };
-type CompletedCount = { customer_id: string; count: number };
+type BookingRow = { customer_id: string; status: string; final_price: number | null; price: number | null; booking_date: string; };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -108,24 +111,33 @@ export default function CustomersPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: custs }, { data: discs }, { data: counts }] = await Promise.all([
+    const [{ data: custs }, { data: discs }, { data: allBkg }] = await Promise.all([
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('discounts').select('id, type, value, value_type, min_orders, name, is_active').eq('type', 'loyal'),
       supabase.from('bookings')
-        .select('customer_id')
-        .eq('status', 'Completed')
+        .select('customer_id, status, final_price, price, booking_date')
         .not('customer_id', 'is', null),
     ]);
     if (discs) setDiscounts(discs);
-    if (custs && counts) {
-      // Compute effective count per customer
+    if (custs && allBkg) {
       const countMap: Record<string, number> = {};
-      (counts as { customer_id: string }[]).forEach(r => {
-        countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + 1;
+      const spendMap: Record<string, number> = {};
+      const lastMap:  Record<string, string>  = {};
+      (allBkg as BookingRow[]).forEach(r => {
+        if (!r.customer_id) return;
+        countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + (r.status === 'Completed' ? 1 : 0);
+        if (r.status === 'Completed') {
+          spendMap[r.customer_id] = (spendMap[r.customer_id] ?? 0) + (r.final_price ?? r.price ?? 0);
+        }
+        if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
+          lastMap[r.customer_id] = r.booking_date;
+        }
       });
       setCustomers(custs.map(c => ({
         ...c,
         effective_count: (c.visit_count_base ?? 0) + (countMap[c.id] ?? 0),
+        total_spending:  spendMap[c.id] ?? 0,
+        last_visit:      lastMap[c.id] ?? null,
       })));
     }
     setLoading(false);
@@ -210,6 +222,30 @@ export default function CustomersPage() {
         </button>
       </div>
 
+      {/* LTV Summary Bar — Owner only, shown above list */}
+      {(() => {
+        const totalLTV    = customers.reduce((s, c) => s + (c.total_spending ?? 0), 0);
+        const avgLTV      = customers.length ? Math.round(totalLTV / customers.length) : 0;
+        const topCust     = [...customers].sort((a,b) => (b.total_spending??0)-(a.total_spending??0))[0];
+        const returning   = customers.filter(c => (c.effective_count ?? 0) >= 2).length;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { icon: Users,     label: 'Total Pelanggan', value: customers.length.toString(),                       color: 'text-zinc-500' },
+              { icon: TrendingUp,label: 'Total LTV',       value: totalLTV >= 1000000 ? `Rp ${(totalLTV/1000000).toFixed(1)}JT` : formatRp(totalLTV), color: 'text-emerald-500' },
+              { icon: Wallet,    label: 'Rata-rata LTV',   value: formatRp(avgLTV),                                  color: 'text-blue-500' },
+              { icon: Star,      label: 'Pelanggan Setia', value: `${returning}x`,                                   color: 'text-amber-500' },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+                <Icon size={14} className={`mb-2 ${color}`} />
+                <p className="text-lg font-bold text-zinc-900 dark:text-white">{value}</p>
+                <p className="text-[10px] text-zinc-400 mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Info */}
       <div className="rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 text-xs text-blue-700 dark:text-blue-300">
         <p className="font-semibold mb-1">Cara Kerja Total Kunjungan</p>
@@ -275,6 +311,14 @@ export default function CustomersPage() {
                             <span className="text-zinc-400 font-normal">({c.visit_count_base} offline)</span>
                           )}
                         </span>
+                        {(c.total_spending ?? 0) > 0 && (
+                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <Wallet size={11} /> {formatRp(c.total_spending ?? 0)} LTV
+                          </span>
+                        )}
+                        {c.last_visit && (
+                          <span className="text-[10px] text-zinc-400">Terakhir: {formatDate(c.last_visit)}</span>
+                        )}
                       </div>
                       {c.notes && <p className="text-[11px] text-zinc-400 italic mt-0.5">{c.notes}</p>}
                     </div>

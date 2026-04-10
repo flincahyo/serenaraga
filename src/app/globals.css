@@ -80,7 +80,7 @@ body {
     background: var(--admin-bg);
     border: 1px solid var(--admin-border);
     border-radius: 0.5rem;
-    /* Use separate properties — Tailwind pl-*/pr-* utilities will override these */
+    /* Use separate properties so Tailwind pl-N and pr-N utilities can override */
     padding-top: 0.625rem;
     padding-bottom: 0.625rem;
     padding-left: 0.875rem;

@@ -9,7 +9,7 @@ import {
 import { createClient } from '@/lib/supabase';
 
 type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string; parent_bundle_name?: string };
-type Service = { id: string; name: string; price: number; details: string; category: string };
+type Service = { id: string; name: string; price: number; details: string; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
 type Booking = {
   id: string; customer_name: string; phone: string;
   service_name: string; booking_date: string; price: number; status: string;
@@ -87,7 +87,7 @@ const InvoiceMaker = () => {
 
   const fetchAll = useCallback(async () => {
     const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }, { data: therapistData }] = await Promise.all([
-      supabase.from('services').select('id,name,price,details,category').order('category').order('sort_order'),
+      supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
       supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct']),
@@ -175,13 +175,14 @@ const InvoiceMaker = () => {
           duration: bi.duration ?? '',
           price: bi.price,
           details: svc?.details ?? '',
+          parent_bundle_name: bi.parent_bundle_name ?? '',
         };
       }));
     } else {
       // Fallback for old single-service bookings
       const svc = services.find(s => s.name === bk.service_name);
       const durationMatch = svc?.details?.match(/(\d+)\s*m(?:enit)?/i);
-      setItems([{ id: Date.now(), name: bk.service_name ?? '', duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', price: bk.price ?? svc?.price ?? 0, details: svc?.details ?? '' }]);
+      setItems([{ id: Date.now(), name: bk.service_name ?? '', duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', price: bk.price ?? svc?.price ?? 0, details: svc?.details ?? '', parent_bundle_name: '' }]);
     }
     setAppliedDiscounts([]);
   };
@@ -191,10 +192,39 @@ const InvoiceMaker = () => {
   const updateItem = (id: string | number, field: keyof Item, value: string | number) =>
     setItems(p => p.map(i => i.id === id ? { ...i, [field]: value } : i));
   const onServiceSelect = (itemId: string | number, serviceName: string) => {
-    const svc = services.find(s => s.name === serviceName);
-    if (!svc) return;
-    const durationMatch = svc.details?.match(/(\d+)\s*m(?:enit)?/i);
-    setItems(p => p.map(i => i.id === itemId ? { ...i, name: svc.name, price: svc.price, duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', details: svc.details } : i));
+    const s = services.find(x => x.name === serviceName);
+    if (!s) { updateItem(itemId, 'name', serviceName); return; }
+
+    if (s.is_bundle && s.bundle_child_ids && s.bundle_child_ids.length > 0) {
+      const children = s.bundle_child_ids.map(cid => services.find(x => x.id === cid)).filter(Boolean) as Service[];
+      if (children.length > 0) {
+        setItems(prev => {
+          const newItems = [...prev];
+          const idx = newItems.findIndex(i => i.id === itemId);
+          if (idx > -1) {
+            newItems[idx] = { ...newItems[idx], name: children[0].name, price: children[0].price, details: children[0].details || '', parent_bundle_name: s.name };
+            for (let i = 1; i < children.length; i++) {
+              newItems.splice(idx + i, 0, {
+                id: Date.now() + i,
+                therapist_id: '',
+                name: children[i].name,
+                price: children[i].price,
+                duration: '',
+                details: children[i].details || '',
+                parent_bundle_name: s.name
+              });
+            }
+          }
+          return newItems;
+        });
+        return;
+      }
+    }
+
+    const durationMatch = s.details?.match(/(\d+)\s*m(?:enit)?/i);
+    setItems(p => p.map(i => i.id === itemId ? {
+      ...i, name: s.name, price: s.price, duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', details: s.details, parent_bundle_name: ''
+    } : i));
   };
 
   // ── Discount ops ──

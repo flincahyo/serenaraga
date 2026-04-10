@@ -298,13 +298,13 @@ export default function TherapistsPage() {
 
             <div className="flex-1 overflow-visible relative flex flex-col lg:flex-row gap-6 min-h-0">
               {/* Slip Preview off-screen block that gets generated */}
-              <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center">
+              <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center items-start">
                 <div 
                   ref={slipRef}
                   className="bg-white"
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
-                  <div style={{ backgroundColor: '#fcfaf6', color: '#18181b', padding: '24px', textAlign: 'center', borderBottom: '1px solid #f4e8d3' }}>
+                  <div style={{ backgroundColor: '#f0e3cc', color: '#18181b', padding: '24px', textAlign: 'center', borderBottom: '1px solid #e1ceb1' }}>
                     <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, letterSpacing: '-0.5px', fontFamily: 'Inter, sans-serif' }}>Serena<span style={{ color: '#9d8063' }}>Raga</span></h2>
                     <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#a1a1aa', letterSpacing: '2px' }}>STATEMENT OF EARNINGS</p>
                   </div>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 
-type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string };
+type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string; parent_bundle_name?: string };
 type Service = { id: string; name: string; price: number; details: string; category: string };
 type Booking = {
   id: string; customer_name: string; phone: string;
@@ -294,8 +294,10 @@ const InvoiceMaker = () => {
     }
 
     // 2. Update booking
+    const displayName = items.map(i => i.name).join(' + ');
     await supabase.from('bookings').update({
       status: 'Completed',
+      service_name: displayName,
       customer_id: customerId,
       discount_total: totalDiscount,
       shared_discount_total: sharedDiscountAmount,
@@ -652,7 +654,16 @@ const InvoiceMaker = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f4f4f5', paddingBottom: 10, marginBottom: 14, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
                 <span>Layanan &amp; Durasi</span><span>Harga</span>
               </div>
-              {items.map((item, idx) => (
+              {Object.values(
+                items.reduce((acc, item) => {
+                  const key = item.parent_bundle_name || String(item.id);
+                  if (!acc[key]) {
+                    acc[key] = { ...item, name: item.parent_bundle_name || item.name, price: 0, duration: item.parent_bundle_name ? '' : (item.duration || ''), details: item.parent_bundle_name ? '' : (item.details || '') };
+                  }
+                  acc[key].price += Number(item.price);
+                  return acc;
+                }, {} as Record<string, Item>)
+              ).map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
                     <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>

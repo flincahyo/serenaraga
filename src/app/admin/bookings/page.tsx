@@ -11,8 +11,8 @@ type Booking = {
   discount_total?: number; shared_discount_total?: number; final_price?: number; customer_id?: string;
 };
 
-type Service = { id: string; name: string; price: number; category: string; };
-type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; therapist_id?: string; };
+type Service = { id: string; name: string; price: number; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
+type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; therapist_id?: string; parent_bundle_name?: string; };
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
 const STATUS_STYLES: Record<string, string> = {
@@ -27,7 +27,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, final_price_override: null as number | null };
-const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '' });
+const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '', parent_bundle_name: '' });
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -54,7 +54,7 @@ export default function BookingsPage() {
     setLoading(true);
     const [{ data: b }, { data: s }, { data: settingsData }, { data: t }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('services').select('id, name, price, category').order('category').order('sort_order'),
+      supabase.from('services').select('id, name, price, category, is_bundle, bundle_child_ids').order('category').order('sort_order'),
       supabase.from('settings').select('value').eq('key', 'whatsapp_reminder_message').single(),
       supabase.from('therapists').select('id, name, commission_pct').eq('is_active', true).order('name'),
     ]);
@@ -133,12 +133,13 @@ export default function BookingsPage() {
       setBookingItems(items.map((it, i) => ({
         tempId: i, service_id: it.service_id ?? '', service_name: it.service_name,
         price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '',
+        parent_bundle_name: it.parent_bundle_name ?? ''
       })));
     } else {
       // Fallback for old single-service bookings
       setBookingItems([{
         tempId: 0, service_id: '', service_name: b.service_name ?? '',
-        price: b.price ?? 0, duration: '',
+        price: b.price ?? 0, duration: '', parent_bundle_name: ''
       }]);
     }
     setShowForm(true);
@@ -159,9 +160,7 @@ export default function BookingsPage() {
 
     const totalPrice = itemsWithBhp.reduce((s, i) => s + Number(i.price), 0);
     const totalBhp   = itemsWithBhp.reduce((s, i) => s + i.bhp_cost, 0);
-    const displayName = itemsWithBhp.length === 1
-      ? itemsWithBhp[0].service_name
-      : `Multiple (${itemsWithBhp.length} layanan)`;
+    const displayName = itemsWithBhp.map(i => i.service_name).join(' + ');
 
     // Upsert customer by WA (ignores duplicate — nama tidak di-overwrite)
     let customerId: string | null = null;
@@ -233,6 +232,7 @@ export default function BookingsPage() {
           therapist_id: item.therapist_id || null,
           commission_earned: earned,
           sort_order:   idx,
+          parent_bundle_name: item.parent_bundle_name || null
         };
       })
     );
@@ -256,20 +256,47 @@ export default function BookingsPage() {
 
   // Booking items helpers
   const addItem = () => setBookingItems(prev => [...prev, EMPTY_ITEM()]);
+  const onServiceSelect = (tempId: number, serviceName: string) => {
+    const s = services.find(x => x.name === serviceName);
+    if (!s) {
+      setBookingItems(prev => prev.map(i => i.tempId === tempId ? { ...i, service_name: serviceName, service_id: '' } : i));
+      return;
+    }
+
+    if (s.is_bundle && s.bundle_child_ids && s.bundle_child_ids.length > 0) {
+      const children = s.bundle_child_ids.map(cid => services.find(x => x.id === cid)).filter(Boolean) as Service[];
+      if (children.length > 0) {
+        setBookingItems(prev => {
+          const newItems = [...prev];
+          const idx = newItems.findIndex(i => i.tempId === tempId);
+          if (idx > -1) {
+            newItems[idx] = { ...newItems[idx], service_id: children[0].id, service_name: children[0].name, price: children[0].price, parent_bundle_name: s.name };
+            for (let i = 1; i < children.length; i++) {
+              newItems.splice(idx + i, 0, {
+                tempId: Date.now() + i,
+                service_id: children[i].id,
+                service_name: children[i].name,
+                price: children[i].price,
+                duration: '',
+                parent_bundle_name: s.name
+              });
+            }
+          }
+          return newItems;
+        });
+        return;
+      }
+    }
+
+    setBookingItems(prev => prev.map(i => i.tempId === tempId ? {
+      ...i, service_id: s.id, service_name: s.name, price: s.price, parent_bundle_name: ''
+    } : i));
+  };
   const removeItem = (tempId: number) => setBookingItems(prev => prev.filter(i => i.tempId !== tempId));
   const updateItem = (tempId: number, patch: Partial<BookingItem>) =>
     setBookingItems(prev => prev.map(i => i.tempId === tempId ? { ...i, ...patch } : i));
 
-  const onServiceSelect = (tempId: number, name: string) => {
-    const svc = services.find(s => s.name === name);
-    const durationMatch = (svc as { details?: string } | undefined)?.details?.match(/(\d+)\s*m(?:enit)?/i);
-    updateItem(tempId, {
-      service_id: svc?.id ?? '',
-      service_name: name,
-      price: svc?.price ?? 0,
-      duration: durationMatch ? `${durationMatch[1]}m` : '',
-    });
-  };
+
 
   const totalItemsPrice = bookingItems.reduce((s, i) => s + Number(i.price), 0);
 

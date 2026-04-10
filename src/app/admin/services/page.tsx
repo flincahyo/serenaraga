@@ -18,6 +18,8 @@ type Service = {
   featured_description: string | null;
   featured_duration: string | null;
   sort_order: number;
+  is_bundle: boolean;
+  bundle_child_ids: string[] | null;
 };
 
 type Material = {
@@ -112,9 +114,10 @@ export default function ServicesPage() {
   const [editSplit, setEditSplit] = useState(30);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [newSvc, setNewSvc] = useState({
+  const [newSvc, setNewSvc] = useState<Partial<Service>>({
     name: '', details: '', price: 0, is_bestseller: false,
     is_featured: false, featured_image: '', featured_description: '', featured_duration: '',
+    is_bundle: false, bundle_child_ids: [],
   });
   const [newSplit, setNewSplit] = useState(30);
 
@@ -166,6 +169,8 @@ export default function ServicesPage() {
       featured_image: s.featured_image ?? '',
       featured_description: s.featured_description ?? '',
       featured_duration: s.featured_duration ?? '',
+      is_bundle: s.is_bundle ?? false,
+      bundle_child_ids: s.bundle_child_ids ?? [],
     });
     setEditSvcMats([]);
     setAddMatId('');
@@ -231,7 +236,7 @@ export default function ServicesPage() {
     });
     await fetchServices();
     setShowAdd(false);
-    setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '' });
+    setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '', is_bundle: false, bundle_child_ids: [] });
     setNewSplit(defaultCommission);
     setSaving(false);
   };
@@ -344,6 +349,35 @@ export default function ServicesPage() {
                         onChange={e => setEditData(d => ({ ...d, is_featured: e.target.checked }))} className="accent-blue-500" />
                       Featured
                     </label>
+                  </div>
+
+                  <div className="flex bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900/30 flex-col gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-blue-900 dark:text-blue-300">
+                      <input type="checkbox" checked={editData.is_bundle ?? false}
+                        onChange={e => setEditData(d => ({ ...d, is_bundle: e.target.checked }))} className="accent-blue-600" />
+                      Jadikan Layanan ini sebagai Paket (Auto Split)
+                    </label>
+                    {editData.is_bundle && (
+                      <div className="mt-2">
+                        <label className="text-xs font-medium text-blue-800 dark:text-blue-400 block mb-1">
+                          Pilih Layanan Sub-Bagian (Tekan CTRL/CMD untuk multiple)
+                        </label>
+                        <select
+                          multiple
+                          size={4}
+                          className="admin-input text-xs h-auto py-2 bg-white dark:bg-zinc-900"
+                          value={editData.bundle_child_ids ?? []}
+                          onChange={e => {
+                            const ids = Array.from(e.target.selectedOptions, o => o.value);
+                            setEditData(d => ({ ...d, bundle_child_ids: ids }));
+                          }}
+                        >
+                          {services.filter(s => s.category === 'split_items' && s.id !== editId).map(s => (
+                            <option key={s.id} value={s.id}>{s.name} - {formatRp(s.price)}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-2">
@@ -535,7 +569,7 @@ export default function ServicesPage() {
 
             {/* Commission Calculator */}
             <CommissionCalc
-              price={newSvc.price}
+              price={newSvc.price ?? 0}
               split={newSplit}
               onSplitChange={setNewSplit}
             />
@@ -556,11 +590,11 @@ export default function ServicesPage() {
             {newSvc.is_featured && (
               <div className="space-y-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-100 dark:border-blue-900">
                 <input className="admin-input text-xs" placeholder="Featured description"
-                  value={newSvc.featured_description} onChange={e => setNewSvc(n => ({ ...n, featured_description: e.target.value }))} />
+                  value={newSvc.featured_description ?? ''} onChange={e => setNewSvc(n => ({ ...n, featured_description: e.target.value }))} />
                 <input className="admin-input text-xs" placeholder="Duration (e.g. 145 Min)"
-                  value={newSvc.featured_duration} onChange={e => setNewSvc(n => ({ ...n, featured_duration: e.target.value }))} />
+                  value={newSvc.featured_duration ?? ''} onChange={e => setNewSvc(n => ({ ...n, featured_duration: e.target.value }))} />
                 <input className="admin-input text-xs font-mono" placeholder="Image path (e.g. /featured-refine.png)"
-                  value={newSvc.featured_image} onChange={e => setNewSvc(n => ({ ...n, featured_image: e.target.value }))} />
+                  value={newSvc.featured_image ?? ''} onChange={e => setNewSvc(n => ({ ...n, featured_image: e.target.value }))} />
               </div>
             )}
 

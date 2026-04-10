@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog,
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -27,9 +27,10 @@ const OWNER_ITEMS = [
 ];
 
 const CASHIER_ITEMS = [
-  { name: 'Bookings',       icon: CalendarCheck,   href: '/admin/bookings' },
-  { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
-  { name: 'Customers',      icon: Users,           href: '/admin/customers' },
+  { name: 'POS Kasir',      icon: ShoppingCart,  href: '/admin/pos' },
+  { name: 'Bookings',       icon: CalendarCheck,  href: '/admin/bookings' },
+  { name: 'Invoices',       icon: Receipt,        href: '/admin/invoices' },
+  { name: 'Customers',      icon: Users,          href: '/admin/customers' },
 ];
 
 interface SidebarProps { open: boolean; onClose: () => void; }

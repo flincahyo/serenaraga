@@ -235,8 +235,8 @@ export default function SettingsPage() {
 
         <Field label="Template Pesan WA Re-engagement">
           <textarea
-            className="admin-input resize-none font-mono text-xs" rows={6}
-            placeholder={'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu...\nKangen? Yuk book sesi relaksasi di SerenaRaga!\nAda promo spesial untuk kamu. Hubungi kami ya! 🌿'}
+            className="admin-input resize-none font-mono text-xs" rows={9}
+            placeholder={`Halo {nama}, semoga harinya menyenangkan. 🌿\n\nSudah {hari} hari berlalu semenjak kunjungan terakhir kamu. Jangan lupa luangkan waktu sejenak untuk merawat diri, karena tubuh yang rileks adalah kunci produktivitas.\n\nKami memiliki promo spesial "Welcome Back" khusus untuk kamu. Balas pesan ini untuk reservasi sesi relaksasimu selanjutnya. ✨\n\nSalam hangat,\nSerenaRaga`}
             value={settings['re_engagement_template'] ?? ''}
             onChange={e => set('re_engagement_template', e.target.value)}
           />

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Check, X, Star, Eye, Percent, FlaskConical, Globe2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent, FlaskConical, Globe2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 import { useSettings } from '@/lib/settings';

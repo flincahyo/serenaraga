@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useUser } from '@/lib/user-context';
 
 type Booking = {
   id: string; created_at: string; customer_name: string; phone: string;
@@ -33,6 +34,9 @@ const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day:
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
 export default function BookingsPage() {
+  const { user } = useUser();
+  const isOwner = user?.role !== 'cashier';
+
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [services, setServices]       = useState<Service[]>([]);
   const [therapists, setTherapists]   = useState<{id: string; name: string; commission_pct: number}[]>([]);
@@ -546,7 +550,7 @@ export default function BookingsPage() {
                         onChange={e => updateItem(item.tempId, { therapist_id: e.target.value })}>
                         <option value="">-- Assign Terapis (opsional) --</option>
                         {therapists.map(t => (
-                          <option key={t.id} value={t.id}>{t.name} (Fee {t.commission_pct}%)</option>
+                          <option key={t.id} value={t.id}>{t.name} {isOwner ? `(Fee ${t.commission_pct}%)` : ''}</option>
                         ))}
                       </select>
                     </div>

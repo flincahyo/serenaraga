@@ -7,6 +7,7 @@ import {
   Tag, X, Check, Award, Hash,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { useUser } from '@/lib/user-context';
 
 type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string; parent_bundle_name?: string };
 type Service = { id: string; name: string; price: number; details: string; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
@@ -56,6 +57,9 @@ function isDiscountValid(d: Discount): boolean {
 
 // ──────────────────────────────────────────
 const InvoiceMaker = () => {
+  const { user } = useUser();
+  const isOwner = user?.role !== 'cashier';
+
   const invoiceRef = useRef<HTMLDivElement>(null);
   const [invoiceNumber] = useState(genInvoiceNo);
   const [customerName, setCustomerName]   = useState('');
@@ -127,6 +131,7 @@ const InvoiceMaker = () => {
     const dbCnt = (completedB?.length ?? 0);
     const eff   = base + dbCnt;
     setCustomerRecord(cust ?? null);
+    if (cust?.name && !customerName) setCustomerName(cust.name);
     setEffectiveCount(eff);
 
     // Eligible discounts (valid, within date range)
@@ -635,7 +640,7 @@ const InvoiceMaker = () => {
                 <div className="mt-2">
                   <select className="admin-input text-xs bg-white dark:bg-zinc-900 border-dashed" value={item.therapist_id || ''} onChange={e => updateItem(item.id, 'therapist_id', e.target.value)}>
                     <option value="">-- Assign Terapis (opsional) --</option>
-                    {therapists.map(t => <option key={t.id} value={t.id}>{t.name} (Fee {t.commission_pct}%)</option>)}
+                    {therapists.map(t => <option key={t.id} value={t.id}>{t.name} {isOwner ? `(Fee ${t.commission_pct}%)` : ''}</option>)}
                   </select>
                 </div>
               </div>
@@ -667,7 +672,7 @@ const InvoiceMaker = () => {
               <span className="text-lg font-bold text-earth-primary font-mono">{formatRp(finalTotal)}</span>
             </div>
           )}
-          {commissionPct > 0 && finalTotal > 0 && (
+          {isOwner && commissionPct > 0 && finalTotal > 0 && (
             <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%)</span>

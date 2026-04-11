@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { Download, BarChart3, Loader2, FlaskConical } from 'lucide-react';
+import { Download, BarChart3, FlaskConical } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { createClient } from '@/lib/supabase';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type BookingItemLinked = { commission_earned: number; service_name: string; price: number; therapist_id: string; therapists?: any };
 type Booking = {
@@ -135,7 +136,7 @@ export default function ReportsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-earth-primary" size={28} /></div>
+        <AdminSkeleton rows={6} />
       ) : (
         <>
           {/* Summary Cards */}

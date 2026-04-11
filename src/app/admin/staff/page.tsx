@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, KeyRound, ToggleLeft, ToggleRight, Loader2, UserCog, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { useUser } from '@/lib/user-context';
 import { useRouter } from 'next/navigation';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type StaffUser = {
   id: string;
@@ -194,7 +195,7 @@ export default function StaffPage() {
       {/* Staff List */}
       <div className="admin-card p-0 overflow-hidden">
         {loading ? (
-          <div className="flex justify-center py-12"><Loader2 size={20} className="animate-spin text-zinc-400" /></div>
+          <AdminSkeleton rows={3} />
         ) : staff.length === 0 ? (
           <p className="text-center text-sm text-zinc-400 py-12 italic">Belum ada akun kasir. Tambah lewat tombol di atas.</p>
         ) : (

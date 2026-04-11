@@ -3,12 +3,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   CalendarCheck, Clock, ShoppingBag, TrendingUp, Wallet,
-  ArrowUpRight, Loader2, CalendarDays, ChevronLeft, ChevronRight, X, Star,
+  ArrowUpRight, Loader2, CalendarDays, ChevronLeft, ChevronRight, X, Star, Info,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 
 type Booking = {
@@ -218,7 +219,7 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-earth-primary" size={28} /></div>
+        <AdminSkeleton rows={6} />
       ) : (
         <>
           {/* Stat Cards */}

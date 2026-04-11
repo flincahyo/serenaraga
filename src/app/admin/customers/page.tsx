@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 
 type Customer = {
@@ -335,7 +336,7 @@ export default function CustomersPage() {
 
       {/* List */}
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
+        <AdminSkeleton rows={6} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-sm text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
           {search ? 'Customer tidak ditemukan.' : 'Belum ada customer. Customer akan otomatis terdaftar saat booking dibuat.'}

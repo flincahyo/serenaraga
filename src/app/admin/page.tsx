@@ -114,55 +114,73 @@ export default function AdminLogin() {
         <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-8 shadow-sm space-y-5">
 
           {tab === 'owner' && (
-            <form onSubmit={handleOwnerLogin} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Email</label>
-                <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="owner@serenaraga.com" className="admin-input" />
+            loading ? (
+              <div className="space-y-4 animate-pulse pt-2 pb-1">
+                 <div className="h-12 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl"></div>
+                 <div className="h-12 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl"></div>
+                 <div className="h-12 bg-earth-primary/40 rounded-xl mt-4"></div>
+                 <p className="text-center text-xs text-earth-primary font-medium animate-pulse mt-2">Memverifikasi...</p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
-                <div className="relative">
-                  <input type={showOwnerPw ? 'text' : 'password'} required value={ownerPw}
-                    onChange={e => setOwnerPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
-                  <button type="button" onClick={() => setShowOwnerPw(!showOwnerPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-                    {showOwnerPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
+            ) : (
+              <form onSubmit={handleOwnerLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Email</label>
+                  <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                    placeholder="owner@serenaraga.com" className="admin-input" />
                 </div>
-              </div>
-              {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">{error}</p>}
-              <button type="submit" disabled={loading}
-                className="w-full admin-btn-primary justify-center py-3 mt-2 disabled:opacity-60 disabled:cursor-not-allowed">
-                {loading ? <><Loader2 size={15} className="animate-spin" /> Memproses...</> : 'Masuk sebagai Owner'}
-              </button>
-            </form>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
+                  <div className="relative">
+                    <input type={showOwnerPw ? 'text' : 'password'} required value={ownerPw}
+                      onChange={e => setOwnerPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
+                    <button type="button" onClick={() => setShowOwnerPw(!showOwnerPw)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                      {showOwnerPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">{error}</p>}
+                <button type="submit"
+                  className="w-full admin-btn-primary justify-center py-3 mt-2">
+                  Masuk sebagai Owner
+                </button>
+              </form>
+            )
           )}
 
           {tab === 'cashier' && (
-            <form onSubmit={handleCashierLogin} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Username</label>
-                <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
-                  placeholder="contoh: putri_kasir" className="admin-input" autoCapitalize="none" autoCorrect="off" />
+            loading ? (
+              <div className="space-y-4 animate-pulse pt-2 pb-1">
+                 <div className="h-12 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl"></div>
+                 <div className="h-12 bg-zinc-100 dark:bg-zinc-800/80 rounded-xl"></div>
+                 <div className="h-12 bg-earth-primary/40 rounded-xl mt-4"></div>
+                 <p className="text-center text-xs text-earth-primary font-medium animate-pulse mt-2">Memverifikasi...</p>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
-                <div className="relative">
-                  <input type={showStaffPw ? 'text' : 'password'} required value={staffPw}
-                    onChange={e => setStaffPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
-                  <button type="button" onClick={() => setShowStaffPw(!showStaffPw)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
-                    {showStaffPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
+            ) : (
+              <form onSubmit={handleCashierLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Username</label>
+                  <input type="text" required value={username} onChange={e => setUsername(e.target.value)}
+                    placeholder="contoh: putri_kasir" className="admin-input" autoCapitalize="none" autoCorrect="off" />
                 </div>
-              </div>
-              {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">{error}</p>}
-              <button type="submit" disabled={loading}
-                className="w-full admin-btn-primary justify-center py-3 mt-2 disabled:opacity-60 disabled:cursor-not-allowed">
-                {loading ? <><Loader2 size={15} className="animate-spin" /> Memverifikasi...</> : 'Masuk sebagai Kasir'}
-              </button>
-            </form>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Password</label>
+                  <div className="relative">
+                    <input type={showStaffPw ? 'text' : 'password'} required value={staffPw}
+                      onChange={e => setStaffPw(e.target.value)} placeholder="••••••••" className="admin-input pr-10" />
+                    <button type="button" onClick={() => setShowStaffPw(!showStaffPw)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                      {showStaffPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+                {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/30 px-3 py-2 rounded-lg">{error}</p>}
+                <button type="submit"
+                  className="w-full admin-btn-primary justify-center py-3 mt-2">
+                  Masuk sebagai Kasir
+                </button>
+              </form>
+            )
           )}
         </div>
 

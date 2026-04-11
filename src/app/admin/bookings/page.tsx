@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type Booking = {
   id: string; created_at: string; customer_name: string; phone: string;
@@ -377,7 +378,7 @@ export default function BookingsPage() {
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
+        <AdminSkeleton rows={5} />
       ) : viewMode === 'kanban' ? (
         // ── Kanban Board ──
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-start">

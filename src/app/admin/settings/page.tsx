@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Save, Loader2, Check, Clock, MapPin, Phone, MessageSquare, FileText, Percent, Info, RefreshCcw } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type Settings = Record<string, string>;
 
@@ -54,11 +55,7 @@ export default function SettingsPage() {
   const commission = Number(settings['terapis_commission_pct'] ?? 30);
   const EXAMPLE = 400000;
 
-  if (loading) return (
-    <div className="flex justify-center py-20">
-      <Loader2 className="animate-spin text-earth-primary" size={28} />
-    </div>
-  );
+  if (loading) return <AdminSkeleton rows={4} />;
 
   return (
     <div className="space-y-5 max-w-2xl mx-auto">

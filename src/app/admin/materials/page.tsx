@@ -6,6 +6,7 @@ import {
   FlaskConical, Globe2, Package, AlertTriangle, Users, Layers,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type Material = {
   id: string;
@@ -343,7 +344,7 @@ export default function MaterialsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
+        <AdminSkeleton rows={5} />
       ) : (
         <>
           {/* Global */}

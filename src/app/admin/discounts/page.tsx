@@ -6,6 +6,7 @@ import {
   Percent, BadgeDollarSign, Users, CalendarRange, Hash, Trash2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
 type DiscountType = 'first_customer' | 'loyal' | 'manual' | 'returning_customer';
 type ValueType    = 'percentage' | 'flat';
@@ -291,7 +292,7 @@ export default function DiscountsPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-earth-primary" size={24} /></div>
+        <AdminSkeleton rows={4} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-sm text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
           Belum ada diskon. Klik "Buat Diskon" untuk mulai.

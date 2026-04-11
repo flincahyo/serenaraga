@@ -60,8 +60,33 @@ const Pricelist = () => {
   if (loading) {
     return (
       <section id="menu" className="py-24 bg-bg-cream scroll-mt-24">
-        <div className="container-custom text-center py-20">
-          <div className="w-8 h-8 border-2 border-earth-primary border-t-transparent rounded-full animate-spin mx-auto" />
+        <div className="container-custom">
+          {/* Header Skeleton */}
+          <div className="text-center mb-16 flex flex-col items-center animate-pulse">
+            <div className="h-6 w-32 bg-earth-primary/20 rounded-full mb-4"></div>
+            <div className="h-10 w-64 bg-zinc-200/50 rounded-xl mb-6"></div>
+            <div className="h-4 w-96 max-w-full bg-zinc-200/50 rounded-lg"></div>
+          </div>
+          {/* Grid Skeleton */}
+          <div className="grid md:grid-cols-3 gap-10">
+            {[1, 2, 3].map((key) => (
+              <div key={key} className="bg-white rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-gray-50 flex flex-col animate-pulse h-[400px]">
+                <div className="h-48 sm:h-64 bg-zinc-200/50"></div>
+                <div className="p-6 md:p-8 flex flex-col flex-grow space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div className="w-10 h-10 bg-zinc-100 rounded-lg"></div>
+                    <div className="h-6 w-24 bg-zinc-200/50 rounded-md"></div>
+                  </div>
+                  <div className="h-6 w-3/4 bg-zinc-200/50 rounded-md"></div>
+                  <div className="space-y-2 flex-grow">
+                    <div className="h-3 w-full bg-zinc-100 rounded-md"></div>
+                    <div className="h-3 w-5/6 bg-zinc-100 rounded-md"></div>
+                    <div className="h-3 w-4/6 bg-zinc-100 rounded-md"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     );

@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Check, X, Star, Loader2, Eye, Percent, FlaskConical, Globe2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, Star, Eye, Percent, FlaskConical, Globe2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 import { useSettings } from '@/lib/settings';
 
 type Service = {
@@ -283,9 +284,7 @@ export default function ServicesPage() {
 
       {/* Services List */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="animate-spin text-earth-primary" size={24} />
-        </div>
+        <AdminSkeleton rows={6} />
       ) : (
         <div className="space-y-2">
           {filtered.map(svc => (

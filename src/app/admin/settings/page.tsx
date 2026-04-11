@@ -13,7 +13,7 @@ const ALL_KEYS = [
   'whatsapp_reminder_message',
   'invoice_footer_text', 'invoice_social_text',
   'terapis_commission_pct',
-  're_engagement_days', 're_engagement_template',
+  're_engagement_days', 're_engagement_template', 're_engagement_promo_template',
 ];
 
 export default function SettingsPage() {
@@ -203,7 +203,7 @@ export default function SettingsPage() {
         id="crm" title="CRM: Re-engagement Pelanggan"
         icon={<RefreshCcw size={15} className="text-earth-primary" />}
         saving={saving === 'crm'} saved={saved === 'crm'}
-        onSave={() => saveSection('crm', ['re_engagement_days', 're_engagement_template'])}
+        onSave={() => saveSection('crm', ['re_engagement_days', 're_engagement_template', 're_engagement_promo_template'])}
       >
         <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
           <Info size={14} className="text-blue-600 shrink-0 mt-0.5" />
@@ -230,7 +230,7 @@ export default function SettingsPage() {
           <p className="text-[10px] text-zinc-400 mt-1">Contoh: 60 = pelanggan yang terakhir order lebih dari 60 hari lalu akan di-flag</p>
         </Field>
 
-        <Field label="Template Pesan WA Re-engagement">
+        <Field label="Template Pesan WA Re-engagement (Biasa)">
           <textarea
             className="admin-input resize-none font-mono text-xs" rows={9}
             placeholder={`Halo {nama}, semoga harinya menyenangkan. 🌿\n\nSudah {hari} hari berlalu semenjak relaksasi terakhir kamu. Jangan lupa luangkan waktu sejenak untuk rehat, karena tubuh yang rileks adalah kunci produktivitas.\n\nKami memiliki promo spesial "Welcome Back" khusus untuk kamu. Balas pesan ini untuk reservasi sesi relaksasimu selanjutnya. ✨\n\nSalam hangat,\nSerenaRaga`}
@@ -240,6 +240,20 @@ export default function SettingsPage() {
           <p className="text-[10px] text-zinc-400 mt-1">
             <code className="font-mono">{'{nama}'}</code> → nama pelanggan &nbsp;·&nbsp;
             <code className="font-mono">{'{hari}'}</code> → jumlah hari sejak kunjungan terakhir
+          </p>
+        </Field>
+
+        <Field label="Template Pesan WA Promo/Diskon (Eligible)">
+          <textarea
+            className="admin-input resize-none font-mono text-xs" rows={9}
+            placeholder={`Halo {nama}, kami punya diskon {diskon} spesial untuk kamu!`}
+            value={settings['re_engagement_promo_template'] ?? ''}
+            onChange={e => set('re_engagement_promo_template', e.target.value)}
+          />
+          <p className="text-[10px] text-zinc-400 mt-1">
+            <code className="font-mono">{'{nama}'}</code> → nama &nbsp;·&nbsp;
+            <code className="font-mono">{'{hari}'}</code> → hari sejak terakhir &nbsp;·&nbsp;
+            <code className="font-mono">{'{diskon}'}</code> → nama / nilai diskon
           </p>
         </Field>
       </SectionCard>

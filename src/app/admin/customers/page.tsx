@@ -114,6 +114,7 @@ export default function CustomersPage() {
   const [bookingHistory, setBookingHistory] = useState<Record<string, unknown[]>>({});
   const [reEngageDays, setReEngageDays]   = useState(60);
   const [reEngageTemplate, setReEngageTemplate] = useState('');
+  const [reEngagePromoTemplate, setReEngagePromoTemplate] = useState('');
 
   const supabase = createClient();
 
@@ -121,17 +122,18 @@ export default function CustomersPage() {
     setLoading(true);
     const [{ data: custs }, { data: discs }, { data: allBkg }, { data: settingsData }] = await Promise.all([
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
-      supabase.from('discounts').select('id, type, value, value_type, min_orders, name, is_active').eq('type', 'loyal'),
+      supabase.from('discounts').select('id, type, value, value_type, min_orders, name, is_active').eq('is_active', true),
       supabase.from('bookings')
         .select('customer_id, status, final_price, price, booking_date')
         .not('customer_id', 'is', null),
-      supabase.from('settings').select('key, value').in('key', ['re_engagement_days', 're_engagement_template']),
+      supabase.from('settings').select('key, value').in('key', ['re_engagement_days', 're_engagement_template', 're_engagement_promo_template']),
     ]);
     if (discs) setDiscounts(discs);
     if (settingsData) {
       settingsData.forEach(({ key, value }) => {
         if (key === 're_engagement_days') setReEngageDays(Number(value) || 60);
         if (key === 're_engagement_template') setReEngageTemplate(value);
+        if (key === 're_engagement_promo_template') setReEngagePromoTemplate(value);
       });
     }
     if (custs && allBkg) {
@@ -218,16 +220,21 @@ export default function CustomersPage() {
     setSaving(false);
   };
 
-  const sendReEngageWA = (c: Customer) => {
-    const days = c.last_visit
-      ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
-      : reEngageDays;
-    const template = reEngageTemplate ||
-      'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu... Kangen? Yuk book sesi relaksasi di SerenaRaga! Ada promo spesial untuk kamu. 🌿';
-    const msg = template
-      .replace('{nama}', c.name ?? 'Kak')
-      .replace('{hari}', String(days));
-    window.open(`https://wa.me/${c.wa_number.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+  const getEligiblePromo = (c: Customer): Discount | null => {
+    const nextCount = (c.effective_count ?? 0) + 1;
+    const loyal = discounts
+      .filter(d => d.type === 'loyal' && d.min_orders && nextCount % d.min_orders === 0)
+      .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))[0];
+    if (loyal) return loyal;
+
+    if (c.last_visit) {
+      const days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+      if (days >= reEngageDays) {
+        const rc = discounts.find(d => d.type === 'returning_customer');
+        if (rc) return rc;
+      }
+    }
+    return null;
   };
 
   const isDormant = (c: Customer) => {
@@ -236,15 +243,41 @@ export default function CustomersPage() {
     return days >= reEngageDays;
   };
 
+  const isEligibleForPromo = (c: Customer) => getEligiblePromo(c) !== null;
+
+  const sendReEngageWA = (c: Customer, promo?: Discount | null) => {
+    const days = c.last_visit
+      ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
+      : reEngageDays;
+    
+    let template = reEngageTemplate ||
+      'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu... Kangen? Yuk book sesi relaksasi di SerenaRaga! Ada promo spesial untuk kamu. 🌿';
+      
+    if (promo) {
+      template = reEngagePromoTemplate || 'Halo {nama}, kami punya diskon {diskon} spesial untuk kamu! Yuk book sesi relaksasi di SerenaRaga.';
+    }
+
+    const discountValue = promo 
+      ? (promo.value_type === 'percentage' ? `${promo.value}%` : formatRp(promo.value))
+      : '';
+
+    const msg = template
+      .replace('{nama}', c.name ?? 'Kak')
+      .replace('{hari}', String(days))
+      .replace('{diskon}', promo ? `${promo.name} (${discountValue})` : '');
+      
+    window.open(`https://wa.me/${c.wa_number.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
   const filtered = customers
-    .filter(c => filterMode === 'followup' ? isDormant(c) : true)
+    .filter(c => filterMode === 'followup' ? (isDormant(c) || isEligibleForPromo(c)) : true)
     .filter(c =>
       !search ||
       c.name?.toLowerCase().includes(search.toLowerCase()) ||
       c.wa_number.includes(search)
     );
 
-  const followUpCount = customers.filter(isDormant).length;
+  const followUpCount = customers.filter(c => isDormant(c) || isEligibleForPromo(c)).length;
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -351,20 +384,27 @@ export default function CustomersPage() {
                     onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
                 </div>
               ) : (
-                <div className={`px-4 py-3 ${ isDormant(c) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
+                <div className={`px-4 py-3 ${ (isDormant(c) || isEligibleForPromo(c)) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
                   {/* Dormant banner */}
-                  {isDormant(c) && (
-                    <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg">
-                      <AlertCircle size={11} className="text-orange-500 shrink-0" />
-                      <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
-                        ⚠ Sudah {Math.floor((Date.now() - new Date(c.last_visit!).getTime()) / 86400000)} hari tidak order
-                      </span>
-                      <button onClick={() => sendReEngageWA(c)}
-                        className="flex items-center gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
-                        <MessageCircle size={10} /> Kirim WA
-                      </button>
-                    </div>
-                  )}
+                  {(isDormant(c) || isEligibleForPromo(c)) && (() => {
+                    const promo = getEligiblePromo(c);
+                    let days = 0;
+                    if (c.last_visit) days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+                    return (
+                      <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg">
+                        <AlertCircle size={11} className="text-orange-500 shrink-0" />
+                        <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
+                          {promo 
+                            ? `✨ Eligible untuk diskon ${promo.name} pada kunjungan berikutnya!` 
+                            : `⚠ Sudah ${days} hari tidak order`}
+                        </span>
+                        <button onClick={() => sendReEngageWA(c, promo)}
+                          className="flex items-center shrink-0 gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
+                          <MessageCircle size={10} /> Kirim WA {promo && 'Promo'}
+                        </button>
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
                     <div className="w-9 h-9 rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0 mt-0.5">

@@ -42,7 +42,7 @@ export default function BookingsPage() {
   const [services, setServices]       = useState<Service[]>([]);
   const [therapists, setTherapists]   = useState<{id: string; name: string; commission_pct: number}[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [filterStatus, setFilterStatus] = useState('Semua');
+  const [filterStatus, setFilterStatus] = useState('Hari Ini');
   const [search, setSearch]           = useState('');
   const [showForm, setShowForm]       = useState(false);
   const [saving, setSaving]           = useState(false);
@@ -320,13 +320,20 @@ export default function BookingsPage() {
     window.open(`https://wa.me/${b.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
+  const todayString = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
   const filtered = bookings
-    .filter(b => filterStatus === 'Semua' || b.status === filterStatus)
+    .filter(b => {
+      if (filterStatus === 'Semua') return true;
+      if (filterStatus === 'Hari Ini') return b.booking_date === todayString;
+      return b.status === filterStatus;
+    })
     .filter(b => !search ||
       b.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       b.service_name?.toLowerCase().includes(search.toLowerCase()));
 
   const counts = STATUS_OPTIONS.reduce((acc, s) => ({ ...acc, [s]: bookings.filter(b => b.status === s).length }), {} as Record<string, number>);
+  const todayCount = bookings.filter(b => b.booking_date === todayString).length;
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -356,14 +363,14 @@ export default function BookingsPage() {
 
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {['Semua', ...STATUS_OPTIONS].map(s => (
+        {['Hari Ini', 'Semua', ...STATUS_OPTIONS].map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filterStatus === s
                 ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
                 : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}>
-            {s} {s !== 'Semua' && counts[s] !== undefined ? `(${counts[s]})` : s === 'Semua' ? `(${bookings.length})` : ''}
+            {s} {s === 'Hari Ini' ? `(${todayCount})` : s !== 'Semua' && counts[s] !== undefined ? `(${counts[s]})` : s === 'Semua' ? `(${bookings.length})` : ''}
           </button>
         ))}
       </div>

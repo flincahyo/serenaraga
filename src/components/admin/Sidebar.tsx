@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart,
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -20,6 +20,7 @@ const OWNER_ITEMS = [
   { name: 'Customers',      icon: Users,           href: '/admin/customers' },
   { name: 'Terapis',        icon: UserSquare2,     href: '/admin/therapists' },
   { name: 'Diskon & Promo', icon: Tag,             href: '/admin/discounts' },
+  { name: 'Share Jadwal',   icon: Share2,          href: '/admin/schedule' },
   { name: 'Reports',        icon: BarChart3,       href: '/admin/reports' },
   { name: 'Konten',         icon: Image,           href: '/admin/content' },
   { name: 'Staff & Kasir',  icon: UserCog,         href: '/admin/staff' },
@@ -30,6 +31,7 @@ const CASHIER_ITEMS = [
   { name: 'POS Kasir',      icon: ShoppingCart,  href: '/admin/pos' },
   { name: 'Bookings',       icon: CalendarCheck,  href: '/admin/bookings' },
   { name: 'Invoices',       icon: Receipt,        href: '/admin/invoices' },
+  { name: 'Share Jadwal',   icon: Share2,         href: '/admin/schedule' },
   { name: 'Customers',      icon: Users,          href: '/admin/customers' },
 ];
 
@@ -62,10 +64,14 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
       `}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-100 dark:border-zinc-800">
-          <Link href="/admin/dashboard" className="flex flex-col leading-tight" onClick={onClose}>
-            <span className="text-lg font-bold tracking-tight dark:text-white font-sans">
-              Serena<span className="text-earth-primary">Raga</span>
-            </span>
+          <Link href="/admin/dashboard" className="flex flex-col leading-tight gap-1" onClick={onClose}>
+            <div className="relative flex items-center justify-start h-[32px] w-[140px] overflow-hidden -ml-2">
+              <img 
+                src="/serenalogo2.svg" 
+                alt="SerenaRaga" 
+                className="absolute h-[160px] w-auto max-w-none object-contain -ml-3 dark:brightness-0 dark:invert dark:opacity-90" 
+              />
+            </div>
             <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-medium">
               {user?.role === 'cashier' ? 'Kasir Panel' : 'Owner Panel'}
             </span>

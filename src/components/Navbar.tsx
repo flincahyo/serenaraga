@@ -28,8 +28,12 @@ const Navbar = () => {
       isScrolled ? 'bg-white/80 backdrop-blur-md shadow-sm py-4' : 'bg-transparent py-6'
     }`}>
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center text-text-primary">
-        <Link href="/" className="text-2xl font-serif font-bold tracking-tight">
-          Serena<span className="text-earth-primary">Raga</span>
+        <Link href="/" className="relative flex items-center justify-start h-[50px] w-[200px] overflow-hidden -ml-2">
+          <img 
+            src="/serenalogo2.svg" 
+            alt="SerenaRaga" 
+            className="absolute h-[230px] w-auto max-w-none object-contain -ml-5" 
+          />
         </Link>
 
         {/* Desktop Menu */}

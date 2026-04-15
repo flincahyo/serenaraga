@@ -715,9 +715,13 @@ const InvoiceMaker = () => {
             {/* Header */}
             <div className="flex justify-between items-start mb-14">
               <div>
-                <h1 className="text-2xl font-serif font-black tracking-tighter text-zinc-900">
-                  Serena<span style={{ color: '#8B5E3C' }}>Raga</span>
-                </h1>
+                <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
+                  <img 
+                    src="/serenalogo2.svg" 
+                    alt="SerenaRaga" 
+                    className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
+                  />
+                </div>
                 <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
               </div>
               <div className="text-right">

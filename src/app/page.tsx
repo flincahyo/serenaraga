@@ -28,9 +28,13 @@ export default function Home() {
         <div className="container-custom">
           <div className="flex flex-col md:flex-row justify-between items-center gap-12">
             <div className="text-center md:text-left">
-              <h2 className="text-3xl font-serif font-bold mb-3 tracking-tight">
-                Serena<span className="text-earth-primary">Raga</span>
-              </h2>
+              <div className="relative flex items-center justify-center md:justify-start h-[50px] w-[220px] overflow-hidden mb-4 mx-auto md:mx-0">
+                <img 
+                  src="/serenalogo2.svg" 
+                  alt="SerenaRaga" 
+                  className="absolute h-[250px] w-auto max-w-none object-contain -ml-5 brightness-0 invert opacity-90" 
+                />
+              </div>
               <p className="text-white/40 text-sm max-w-xs">
                 Luxury home massage service that brings tranquility to your doorstep.
               </p>

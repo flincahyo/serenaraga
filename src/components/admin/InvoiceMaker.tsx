@@ -74,6 +74,8 @@ const InvoiceMaker = () => {
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
   const [commissionPct, setCommissionPct] = useState(30);
   const [completing, setCompleting]       = useState(false);
+  const [transportFee, setTransportFee]   = useState<number | ''>('');
+  const [transportPct, setTransportPct]   = useState<number>(100);
 
   // Discount + customer state
   const [allDiscounts, setAllDiscounts]           = useState<Discount[]>([]);
@@ -305,9 +307,13 @@ const InvoiceMaker = () => {
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
   const sharedDiscountAmount = appliedDiscounts.filter(a => !a.is_owner_borne).reduce((s, a) => s + a.amount, 0);
-  const finalTotal    = Math.max(0, grossTotal - totalDiscount);
+  
+  const finalTotal    = Math.max(0, grossTotal - totalDiscount) + Number(transportFee || 0);
   const terapisBase   = Math.max(0, grossTotal - sharedDiscountAmount);
-  const commission    = Math.round(terapisBase * commissionPct / 100);
+  
+  const commissionServices = Math.round(terapisBase * commissionPct / 100);
+  const commissionTransport = Math.round(Number(transportFee || 0) * (transportPct / 100));
+  const commission    = commissionServices + commissionTransport;
   const ownerNet      = finalTotal - commission;
 
   // ── Tier badge helper ──
@@ -648,6 +654,23 @@ const InvoiceMaker = () => {
           </div>
         </div>
 
+        {/* Transport Fee */}
+        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
+          <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2 block">Biaya Transport Tambahan (Rp)</label>
+          <div className="flex gap-3">
+             <input type="number" placeholder="Contoh: 15000" value={transportFee} onChange={e => setTransportFee(e.target.value === '' ? '' : Number(e.target.value))} className="admin-input text-xs font-mono flex-1" />
+             {isOwner && (
+               <div className="w-[180px] flex items-center justify-between gap-1 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                 <span className="text-[10px] text-zinc-500 font-medium whitespace-nowrap">Jatah Terapis:</span>
+                 <div className="flex items-center">
+                   <input type="number" max={100} min={0} value={transportPct} onChange={e => setTransportPct(Number(e.target.value))} className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[32px] outline-none" />
+                   <span className="text-[10px] text-zinc-400 font-bold ml-0.5">%</span>
+                 </div>
+               </div>
+             )}
+          </div>
+        </div>
+
         {/* Summary + Commission breakdown */}
         <div className="rounded-xl bg-earth-primary/5 dark:bg-earth-primary/10 p-4 space-y-2">
           <div className="flex justify-between items-center">
@@ -675,11 +698,11 @@ const InvoiceMaker = () => {
           {isOwner && commissionPct > 0 && finalTotal > 0 && (
             <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%)</span>
+                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%{Number(transportFee) > 0 ? ' + Transport' : ''})</span>
                 <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatRp(commission)}</span>
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
-                <span>Pemilik ({100 - commissionPct}%)</span>
+                <span>Pemilik (Net)</span>
                 <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{formatRp(ownerNet)}</p>
               </div>
             </div>
@@ -792,6 +815,14 @@ const InvoiceMaker = () => {
                     <span style={{ fontWeight: 700 }}>-Rp {a.amount.toLocaleString('id-ID')}</span>
                   </div>
                 ))}
+                
+                {Number(transportFee) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#3f3f46', marginBottom: 6, paddingLeft: 14 }}>
+                    <span>+ Biaya Transport</span>
+                    <span style={{ fontWeight: 700 }}>Rp {Number(transportFee).toLocaleString('id-ID')}</span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: '#8B5E3C', borderRadius: 12, color: '#fff', marginTop: 10 }}>
                   <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Bayar</span>
                   <span style={{ fontSize: 18, fontWeight: 700, fontStyle: 'italic' }}>Rp {finalTotal.toLocaleString('id-ID')}</span>

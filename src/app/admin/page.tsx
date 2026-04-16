@@ -79,10 +79,14 @@ export default function AdminLogin() {
       <div className="w-full max-w-sm">
 
         {/* Logo */}
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold tracking-tight dark:text-white font-sans">
-            Serena<span className="text-earth-primary">Raga</span>
-          </h1>
+        <div className="text-center mb-10 flex flex-col items-center">
+          <div className="relative flex items-center justify-center h-[130px] w-[300px] overflow-hidden mb-1 mx-auto">
+              <img 
+                src="/serenalogo.svg" 
+                alt="SerenaRaga" 
+                className="absolute h-[340px] w-auto max-w-none object-contain dark:brightness-0 dark:invert mt-2" 
+              />
+          </div>
           <p className="text-sm text-zinc-400 mt-1.5 tracking-wide">Point of Sales & Management</p>
         </div>
 

@@ -305,9 +305,11 @@ export default function TherapistsPage() {
                   className="bg-white"
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
-                  <div style={{ backgroundColor: '#f0e3cc', color: '#18181b', padding: '24px', textAlign: 'center', borderBottom: '1px solid #e1ceb1' }}>
-                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, letterSpacing: '-0.5px', fontFamily: 'Inter, sans-serif' }}>Serena<span style={{ color: '#9d8063' }}>Raga</span></h2>
-                    <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#a1a1aa', letterSpacing: '2px' }}>STATEMENT OF EARNINGS</p>
+                  <div style={{ backgroundColor: '#f0e3cc', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #e1ceb1', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ width: '220px', height: '90px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
+                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '280px', width: 'auto', maxWidth: 'none', objectFit: 'contain' }} className="dark:brightness-0 dark:invert-0" />
+                    </div>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#888', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
                   </div>
 
                   <div style={{ padding: '24px' }}>
@@ -330,8 +332,10 @@ export default function TherapistsPage() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {payoutItems.map((item, idx) => {
                           const expectedCom = Math.round(item.price * payoutTherapist.commission_pct / 100);
-                          const hasDiscount = item.commission_earned < expectedCom && expectedCom > 0;
+                          const isTransport = item.service_name === 'Biaya Transport';
+                          const hasDiscount = !isTransport && item.commission_earned < expectedCom && expectedCom > 0;
                           const derivedBase = item.commission_earned === 0 ? 0 : Math.round(item.commission_earned / (payoutTherapist.commission_pct / 100));
+                          const actualPct = item.price > 0 ? Math.round((item.commission_earned / item.price) * 100) : 0;
 
                           return (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -340,7 +344,11 @@ export default function TherapistsPage() {
                                 <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
                                   Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} •
-                                  {hasDiscount ? ` ${formatRp(derivedBase)} (setelah diskon)` : ` ${formatRp(item.price)}`} × {payoutTherapist.commission_pct}%
+                                  {isTransport 
+                                    ? ` ${formatRp(item.price)} × ${actualPct}% (Bagi Hasil Transport)`
+                                    : hasDiscount 
+                                      ? ` ${formatRp(derivedBase)} (setelah diskon) × ${payoutTherapist.commission_pct}%` 
+                                      : ` ${formatRp(item.price)} × ${payoutTherapist.commission_pct}%`}
                                 </p>
                               </div>
                               <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>

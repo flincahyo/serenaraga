@@ -59,10 +59,19 @@ export default function ReportsPage() {
       const bd = new Date(b.booking_date);
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
+    
+    const calcTerapisCut = (b: any) => {
+      if (b.booking_items && b.booking_items.length > 0) {
+        return b.booking_items.reduce((ss: number, i: any) => ss + (Number(i.commission_earned) || 0), 0);
+      }
+      const terapisBase = Math.max(0, (b.price ?? 0) - (b.shared_discount_total ?? 0));
+      return Math.round(terapisBase * commissionPct / 100);
+    };
+
     const originalGross = mb.reduce((s, b) => s + (b.price ?? 0), 0);
     const gross    = mb.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
     const discount = mb.reduce((s, b) => s + (b.discount_total ?? 0), 0);
-    const terapis  = mb.reduce((s, b) => s + (b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0), 0);
+    const terapis  = mb.reduce((s, b) => s + calcTerapisCut(b), 0);
     const bhp      = mb.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
     const net      = gross - terapis - bhp;
     return { month: MONTHS_ID[m], bookings: mb.length, gross, discount, terapis, bhp, net };
@@ -92,11 +101,19 @@ export default function ReportsPage() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
+  const calcTerapisCutForTotal = (b: any) => {
+    if (b.booking_items && b.booking_items.length > 0) {
+      return b.booking_items.reduce((ss: number, i: any) => ss + (Number(i.commission_earned) || 0), 0);
+    }
+    const terapisBase = Math.max(0, (b.price ?? 0) - (b.shared_discount_total ?? 0));
+    return Math.round(terapisBase * commissionPct / 100);
+  };
+
   const totalOriginalGross = bookings.reduce((s, b) => s + (b.price ?? 0), 0);
   const totalGross    = bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0);
   const totalDiscount = bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0);
   const totalBhp      = bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0);
-  const totalTerapis  = bookings.reduce((s, b) => s + (b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0), 0);
+  const totalTerapis  = bookings.reduce((s, b) => s + calcTerapisCutForTotal(b), 0);
   const totalNet      = totalGross - totalTerapis - totalBhp;
   const totalBookings = bookings.length;
   const topService    = serviceBreakdown[0];
@@ -282,7 +299,8 @@ export default function ReportsPage() {
                       <th className="px-6 py-3 text-xs font-medium text-zinc-500 whitespace-nowrap">Tanggal</th>
                       <th className="px-4 py-3 text-xs font-medium text-zinc-500 whitespace-nowrap">Customer</th>
                       <th className="px-4 py-3 text-xs font-medium text-zinc-500">Layanan</th>
-                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right whitespace-nowrap">Harga Kotor</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right whitespace-nowrap">Jasa Kotor</th>
+                      <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right whitespace-nowrap">Transport</th>
                       <th className="px-4 py-3 text-xs font-medium text-emerald-600 text-right whitespace-nowrap">Diskon</th>
                       <th className="px-4 py-3 text-xs font-medium text-zinc-700 dark:text-zinc-300 text-right whitespace-nowrap">Dibayar</th>
                       <th className="px-4 py-3 text-xs font-medium text-amber-600 text-right whitespace-nowrap">Terapis</th>
@@ -292,11 +310,23 @@ export default function ReportsPage() {
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {[...bookings].reverse().map(b => {
-                      const gross = b.price ?? 0;
-                      const finalPrice = b.final_price ?? gross;
+                      const totalGross = b.price ?? 0;
+                      const transportItem = b.booking_items?.find(i => i.service_name === 'Biaya Transport');
+                      const transportPrice = transportItem ? Number(transportItem.price || 0) : 0;
+                      const serviceGross = Math.max(0, totalGross - transportPrice);
+
+                      const finalPrice = b.final_price ?? totalGross;
                       const discount = b.discount_total ?? 0;
-                      const terapis = b.booking_items?.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0) || 0;
-                      const therapistNames = [...new Set(b.booking_items?.map(i => i.therapists?.name).filter(Boolean))].join(', ');
+
+                      let terapis = 0;
+                      if (b.booking_items && b.booking_items.length > 0) {
+                        terapis = b.booking_items.reduce((ss, i) => ss + (Number(i.commission_earned) || 0), 0);
+                      } else {
+                        const terapisBase = Math.max(0, totalGross - (b.shared_discount_total ?? 0));
+                        terapis = Math.round(terapisBase * commissionPct / 100);
+                      }
+
+                      const therapistNames = [...new Set(b.booking_items?.filter(i => i.service_name !== 'Biaya Transport').map(i => i.therapists?.name).filter(Boolean))].join(', ');
                       const bhp = b.bhp_cost ?? 0;
                       const net = finalPrice - terapis - bhp;
                       return (
@@ -304,7 +334,8 @@ export default function ReportsPage() {
                           <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 text-xs whitespace-nowrap">{new Date(b.booking_date).toLocaleDateString('id-ID')}</td>
                           <td className="px-4 py-3 text-zinc-800 dark:text-zinc-200 text-xs">{b.customer_name || '-'}</td>
                           <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-xs max-w-[200px] truncate" title={b.service_name}>{b.service_name}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{formatRp(gross)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{formatRp(serviceGross)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{transportPrice > 0 ? formatRp(transportPrice) : '-'}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-emerald-600 font-mono text-xs">{discount > 0 ? `-${formatRp(discount)}` : '-'}</td>
                           <td className="px-4 py-3 text-right tabular-nums font-semibold text-zinc-800 dark:text-zinc-200 font-mono text-xs">{formatRp(finalPrice)}</td>
                           <td className="px-4 py-3 text-right">

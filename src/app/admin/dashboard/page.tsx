@@ -56,7 +56,7 @@ export default function DashboardPage() {
     setLoading(true);
     const now = new Date();
     const [{ data: allBookings }, { data: settingsRows }] = await Promise.all([
-      supabase.from('bookings').select('*').order('booking_date', { ascending: false }),
+      supabase.from('bookings').select('*, booking_items(service_name, price, commission_earned)').order('booking_date', { ascending: false }),
       supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct', 'bhp_pct']),
     ]);
     if (allBookings) {
@@ -89,11 +89,16 @@ export default function DashboardPage() {
 
   const monthBookings  = bookings.filter(b => b.booking_date >= startOfMonth);
   const completedMonth = monthBookings.filter(b => b.status === 'Completed');
+  const calcTerapisCut = (b: any, fallbackPct: number) => {
+    if (b.booking_items && b.booking_items.length > 0) {
+      return b.booking_items.reduce((ss: number, i: any) => ss + (Number(i.commission_earned) || 0), 0);
+    }
+    const terapisBase = Math.max(0, (b.price ?? 0) - (b.shared_discount_total ?? 0));
+    return Math.round(terapisBase * fallbackPct / 100);
+  };
+
   const grossRevenue   = completedMonth.reduce((s,b) => s+(b.final_price ?? b.price ?? 0), 0);
-  const sharedDiscount = completedMonth.reduce((s,b) => s+(b.shared_discount_total ?? 0), 0);
-  const originalGross  = completedMonth.reduce((s,b) => s+(b.price ?? 0), 0);
-  const terapisBase    = Math.max(0, originalGross - sharedDiscount);
-  const terapisCut     = Math.round(terapisBase * commissionPct / 100);
+  const terapisCut     = completedMonth.reduce((s,b) => s + calcTerapisCut(b, commissionPct), 0);
   const bhpActual      = completedMonth.reduce((s,b) => s+(b.bhp_cost ?? 0), 0);
   const netRevenue     = grossRevenue - terapisCut - bhpActual;
   const ownerPct       = Math.max(0, 100 - commissionPct);

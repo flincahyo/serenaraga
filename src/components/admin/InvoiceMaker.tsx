@@ -368,8 +368,8 @@ const InvoiceMaker = () => {
       service_name: displayName,
       customer_id: customerId,
       discount_total: totalDiscount,
-      shared_discount_total: sharedDiscountAmount,
       final_price: finalTotal,
+      price: grossTotal + Number(transportFee || 0),
     }).eq('id', selectedBookingId);
 
     // 3. Update booking_items per item
@@ -389,6 +389,17 @@ const InvoiceMaker = () => {
           commission_earned: itemCommission
         }).eq('id', item.db_id);
       }
+    }
+
+    await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
+    if (Number(transportFee) > 0) {
+      await supabase.from('booking_items').insert({
+        booking_id: selectedBookingId,
+        service_name: 'Biaya Transport',
+        price: Number(transportFee),
+        commission_earned: commissionTransport,
+        sort_order: 999
+      });
     }
 
     // 4. Insert booking_discounts
@@ -663,7 +674,7 @@ const InvoiceMaker = () => {
                <div className="w-[180px] flex items-center justify-between gap-1 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
                  <span className="text-[10px] text-zinc-500 font-medium whitespace-nowrap">Jatah Terapis:</span>
                  <div className="flex items-center">
-                   <input type="number" max={100} min={0} value={transportPct} onChange={e => setTransportPct(Number(e.target.value))} className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[32px] outline-none" />
+                   <input type="number" max={100} min={0} value={transportPct} onChange={e => setTransportPct(Number(e.target.value))} className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[45px] outline-none" />
                    <span className="text-[10px] text-zinc-400 font-bold ml-0.5">%</span>
                  </div>
                </div>

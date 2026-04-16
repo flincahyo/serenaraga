@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Clock, Info, Sparkles, Wind, Heart, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase';
 
 type Service = {
@@ -128,10 +129,12 @@ const Pricelist = () => {
               className="bg-white rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border border-gray-50 flex flex-col group"
             >
               <div className="relative h-48 sm:h-64 overflow-hidden">
-                <img
+                <Image
                   src={pkg.featured_image ?? '/featured-refine.png'}
                   alt={pkg.name}
-                  className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover transition-transform duration-1000 group-hover:scale-110"
                 />
                 <div className="absolute top-3 left-3 md:top-4 md:left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 md:px-4 md:py-2 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest text-earth-primary shadow-sm flex items-center gap-1.5 md:gap-2">
                   <Star size={10} fill="currentColor" /> Best Seller

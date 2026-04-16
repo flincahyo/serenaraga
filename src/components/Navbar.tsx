@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -29,9 +30,12 @@ const Navbar = () => {
     }`}>
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center text-text-primary">
         <Link href="/" className="relative flex items-center justify-start h-[50px] w-[200px] overflow-hidden -ml-2">
-          <img 
+          <Image 
             src="/serenalogo2.svg" 
             alt="SerenaRaga" 
+            width={200}
+            height={230}
+            priority
             className="absolute h-[230px] w-auto max-w-none object-contain -ml-5" 
           />
         </Link>

@@ -393,11 +393,13 @@ const InvoiceMaker = () => {
 
     await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
     if (Number(transportFee) > 0) {
+      const primaryTherapistId = items.find(i => i.therapist_id)?.therapist_id || null;
       await supabase.from('booking_items').insert({
         booking_id: selectedBookingId,
         service_name: 'Biaya Transport',
         price: Number(transportFee),
         commission_earned: commissionTransport,
+        therapist_id: primaryTherapistId,
         sort_order: 999
       });
     }

@@ -50,7 +50,7 @@ const BookingSection = () => {
                 Siap Menemukan <br />Ketenangan?
               </h2>
               <p className="text-white/80 mb-12 text-base leading-relaxed max-w-md">
-                Terapis profesional kami siap menghadirkan pengalaman spa premium langsung ke hunian Anda.
+                Terapis profesional kami siap menghadirkan pengalaman pijat relaksasi yang nyaman langsung ke hunian Anda.
               </p>
 
               <div className="space-y-6">
@@ -77,7 +77,7 @@ const BookingSection = () => {
               <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-8 mx-auto">
                 <Sparkles size={32} className="text-earth-primary" />
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-text-primary">Eksklusif &amp; Personal</h3>
+              <h3 className="text-2xl font-bold mb-4 text-text-primary">Nyaman &amp; Personal</h3>
               <p className="text-text-secondary text-sm mb-10 leading-relaxed">
                 Konsultasikan keluhan atau kebutuhan relaksasi Anda langsung dengan Admin kami lewat WhatsApp.
               </p>

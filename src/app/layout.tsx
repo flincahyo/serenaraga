@@ -15,8 +15,18 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "SerenaRaga - Exclusive Home Massage Service",
-  description: "Hadirkan ketenangan spa mewah langsung ke kenyamanan rumah Anda dengan SerenaRaga.",
+  metadataBase: new URL('https://serenaraga.fit'),
+  title: "SerenaRaga - Pijat Panggilan Jogja & Home Massage Nyaman",
+  description: "Layanan pijat panggilan ke rumah di Yogyakarta, Bantul, dan Sleman. Hadirkan ketenangan dan kenyamanan pijat personal profesional langsung ke tempat Anda.",
+  keywords: ["pijat panggilan jogja", "pijat bantul", "pijat sleman", "home massage yogyakarta", "massage panggilan bantul", "massage bantul", "pijat panggilan ke rumah", "pijat personal jogja", "pijat refleksi yogyakarta"],
+  openGraph: {
+    title: "SerenaRaga - Home Massage Nyaman di Jogja",
+    description: "Layanan pijat panggilan privat di wilayah Yogyakarta, Sleman, Bantul, dan sekitarnya.",
+    url: "https://serenaraga.fit",
+    siteName: "SerenaRaga",
+    locale: "id_ID",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

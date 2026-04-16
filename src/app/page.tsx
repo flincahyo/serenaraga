@@ -7,6 +7,32 @@ import BookingForm from "@/components/BookingForm";
 export default function Home() {
   return (
     <main className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "HealthAndBeautyBusiness",
+            "name": "SerenaRaga - Layanan Home Massage Jogja",
+            "image": "https://serenaraga.fit/serenalogo.svg",
+            "description": "Layanan pijat panggilan ke rumah yang nyaman dan privat di wilayah Yogyakarta, Sleman, dan Bantul.",
+            "url": "https://serenaraga.fit",
+            "telephone": "+6289518359037",
+            "priceRange": "Rp",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Yogyakarta",
+              "addressRegion": "Daerah Istimewa Yogyakarta",
+              "addressCountry": "ID"
+            },
+            "areaServed": [
+              { "@type": "City", "name": "Yogyakarta" },
+              { "@type": "City", "name": "Sleman" },
+              { "@type": "City", "name": "Bantul" }
+            ]
+          })
+        }}
+      />
       <Navbar />
       <Hero />
       <div id="about" className="py-24 bg-white border-y border-gray-50 scroll-mt-24">
@@ -36,8 +62,11 @@ export default function Home() {
                 />
               </div>
               <p className="text-white/40 text-sm max-w-xs">
-                Luxury home massage service that brings tranquility to your doorstep.
+                Layanan massage panggilan yang nyaman dan terpercaya untuk kesejahteraan raga Anda.
               </p>
+              <div className="mt-4 text-white/50 text-xs font-semibold">
+                Area Layanan: Kota Yogyakarta, Sleman, & Bantul
+              </div>
             </div>
 
             <div className="flex flex-col items-center md:items-end">

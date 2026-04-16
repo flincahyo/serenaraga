@@ -23,14 +23,14 @@ const Hero = () => {
             transition={{ duration: 0.8, ease: "easeOut" }}
           >
             <span className="inline-block px-5 py-2 rounded-full bg-earth-primary/10 text-earth-primary text-xs font-bold mb-8 tracking-widest uppercase">
-              Exclusive Home Massage
+              Nyaman, Private, & Personal
             </span>
             <h1 className="text-4xl sm:text-5xl md:text-8xl mb-8 text-gradient leading-tight font-serif italic">
-              Relaksasi Sempurna <br />
-              Langsung ke Rumah
+              Pijat Relaksasi <br />
+              ke Rumah Anda
             </h1>
             <p className="text-lg md:text-xl text-text-secondary mb-12 leading-relaxed max-w-xl">
-              SerenaRaga menghadirkan pengalaman massage premium ke dalam kenyamanan hunian Anda. Pulihkan energi dan temukan ketenangan bersama terapis profesional kami.
+              SerenaRaga menghadirkan layanan pijat panggilan yang nyaman dan personal langsung ke hunian Anda di wilayah Jogja, Sleman, dan Bantul. Temukan ketenangan sejati tanpa harus keluar rumah.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               <Link href="#booking" className="bg-earth-primary text-white text-base md:text-lg font-medium px-10 py-4 rounded-full hover:bg-earth-dark transition-all transform hover:-translate-y-1 shadow-lg hover:shadow-xl text-center">

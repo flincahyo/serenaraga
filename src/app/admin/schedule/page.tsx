@@ -14,6 +14,7 @@ type DaySchedule = {
   startTime: string;
   endTime: string;
   visible: boolean;
+  separator: string;
 };
 
 const getNextDays = (count: number = 7): DaySchedule[] => {
@@ -39,7 +40,8 @@ const getNextDays = (count: number = 7): DaySchedule[] => {
       active: false,
       startTime: '10:00',
       endTime: '20:00',
-      visible: true
+      visible: true,
+      separator: '-'
     });
   }
   return days;
@@ -49,9 +51,9 @@ export default function SchedulePage() {
   const [schedules, setSchedules] = useState<DaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [promoNote, setPromoNote] = useState('✨ Dapatkan diskon spesial:\n• 5% untuk New Customer\n• 10% untuk Loyal Customer (min. 10x order)');
+  const [promoNote, setPromoNote] = useState(' Dapatkan diskon spesial:\n• 5% untuk New Customer\n• 10% untuk Loyal Customer (min. 10x order)');
   const [pasteText, setPasteText] = useState('');
-  
+
   const [promos, setPromos] = useState<any[]>([]);
 
   const previewRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export default function SchedulePage() {
 
   useEffect(() => {
     setSchedules(getNextDays(7));
-    
+
     const fetchPromos = async () => {
       const { data } = await supabase.from('discounts').select('*').eq('is_active', true);
       if (data) setPromos(data);
@@ -69,18 +71,18 @@ export default function SchedulePage() {
   }, []);
 
   const toggleDay = (dayId: string) => {
-    setSchedules(prev => prev.map(day => 
+    setSchedules(prev => prev.map(day =>
       day.id === dayId ? { ...day, active: !day.active } : day
     ));
   };
 
   const toggleVisibility = (dayId: string) => {
-    setSchedules(prev => prev.map(day => 
+    setSchedules(prev => prev.map(day =>
       day.id === dayId ? { ...day, visible: !day.visible } : day
     ));
   };
 
-  const updateTime = (dayId: string, field: 'startTime' | 'endTime', value: string) => {
+  const updateTime = (dayId: string, field: 'startTime' | 'endTime' | 'separator', value: string) => {
     setSchedules(prev => prev.map(day => 
       day.id === dayId ? { ...day, [field]: value } : day
     ));
@@ -91,17 +93,17 @@ export default function SchedulePage() {
 
     const lines = pasteText.split('\n');
     let newSchedules = [...schedules];
-    
+
     // Hide all initially, we only show matched days. Default to FULL.
     newSchedules = newSchedules.map(d => ({ ...d, visible: false, active: false }));
 
     lines.forEach(line => {
       if (!line.trim()) return;
-      
+
       const lineLower = line.toLowerCase();
-      
+
       const matchedDayIndex = newSchedules.findIndex(day => {
-        const parts = day.label.split(','); 
+        const parts = day.label.split(',');
         const dayName = parts[0].trim().toLowerCase();
         const dateNum = parts[1].trim().split(' ')[0];
         return lineLower.includes(dayName) && lineLower.includes(dateNum);
@@ -110,19 +112,26 @@ export default function SchedulePage() {
       if (matchedDayIndex !== -1) {
         const matchedDay = { ...newSchedules[matchedDayIndex] };
         matchedDay.visible = true;
-        
+
         if (lineLower.includes('full')) {
           matchedDay.active = false;
         } else {
           matchedDay.active = true;
+          
+          if (lineLower.includes('&') || lineLower.includes('dan')) {
+            matchedDay.separator = '&';
+          } else {
+            matchedDay.separator = '-';
+          }
+
           // Extract time using regex
           const timeRegex = /\b\d{1,2}[\.\:]\d{2}\b/g;
           const timesObj = line.match(timeRegex);
-          
+
           if (timesObj && timesObj.length > 0) {
             const padTime = (t: string) => t.length === 4 ? `0${t}` : t;
             const normalized = timesObj.map(t => padTime(t.replace('.', ':')));
-            
+
             if (normalized.length >= 2) {
               matchedDay.startTime = normalized[0];
               matchedDay.endTime = normalized[normalized.length - 1];
@@ -209,7 +218,7 @@ export default function SchedulePage() {
                 Auto Format
               </button>
             </div>
-            <textarea 
+            <textarea
               className="admin-input h-28 text-xs font-mono resize-none w-full bg-zinc-50 dark:bg-zinc-800/50"
               placeholder="Contoh Paste:&#10;Rabu, 15 April FULL&#10;Kamis, 16 April 08.00&#10;Jumat, 17 April 16.00-22.00"
               value={pasteText}
@@ -230,37 +239,43 @@ export default function SchedulePage() {
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {schedules.map(day => (
-                  <div key={day.id} className={`p-4 space-y-3 transition-opacity duration-200 border-l-[3px] ${!day.visible ? 'opacity-40 bg-zinc-50/50 dark:bg-zinc-900/30 grayscale border-zinc-200' : 'border-earth-primary/50'}`}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => toggleVisibility(day.id)}
-                          className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 transition-colors"
-                          title={day.visible ? "Sembunyikan tanggal ini" : "Tampilkan tanggal ini"}
-                        >
-                          {day.visible ? <Eye size={16} /> : <EyeOff size={16} />}
-                        </button>
-                        <p className={`font-semibold text-sm flex items-center gap-2 ${!day.visible ? 'text-zinc-500' : 'dark:text-white'}`}>
-                          {day.label}
-                          {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
-                        </p>
-                      </div>
-                      <button 
-                        onClick={() => toggleDay(day.id)} 
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${day.active ? 'bg-earth-primary text-white border-earth-primary shadow-sm' : 'bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'}`}
+                <div key={day.id} className={`p-4 space-y-3 transition-opacity duration-200 border-l-[3px] ${!day.visible ? 'opacity-40 bg-zinc-50/50 dark:bg-zinc-900/30 grayscale border-zinc-200' : 'border-earth-primary/50'}`}>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleVisibility(day.id)}
+                        className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 transition-colors"
+                        title={day.visible ? "Sembunyikan tanggal ini" : "Tampilkan tanggal ini"}
                       >
-                        {day.active ? 'Tersedia' : 'Set Tersedia'}
+                        {day.visible ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
+                      <p className={`font-semibold text-sm flex items-center gap-2 ${!day.visible ? 'text-zinc-500' : 'dark:text-white'}`}>
+                        {day.label}
+                        {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
+                      </p>
                     </div>
-
-                    {day.active && (
-                      <div className="flex items-center gap-2 pt-2">
-                        <input type="time" value={day.startTime} onChange={e => updateTime(day.id, 'startTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
-                        <span className="text-zinc-400 font-mono text-sm">-</span>
-                        <input type="time" value={day.endTime} onChange={e => updateTime(day.id, 'endTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
-                      </div>
-                    )}
+                    <button
+                      onClick={() => toggleDay(day.id)}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${day.active ? 'bg-earth-primary text-white border-earth-primary shadow-sm' : 'bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'}`}
+                    >
+                      {day.active ? 'Tersedia' : 'Set Tersedia'}
+                    </button>
                   </div>
+
+                  {day.active && (
+                    <div className="flex items-center gap-2 pt-2">
+                      <input type="time" value={day.startTime} onChange={e => updateTime(day.id, 'startTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
+                      <button 
+                        onClick={() => updateTime(day.id, 'separator', day.separator === '-' ? '&' : '-')}
+                        className="w-6 h-6 rounded flex justify-center items-center font-black text-xs bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 transition-colors shrink-0"
+                        title="Ganti pemisah jam (Sampai / Dan)"
+                      >
+                        {day.separator || '-'}
+                      </button>
+                      <input type="time" value={day.endTime} onChange={e => updateTime(day.id, 'endTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -269,7 +284,7 @@ export default function SchedulePage() {
             <div className="flex justify-between items-center">
               <h2 className="text-sm font-semibold dark:text-white">Custom Note / Promo</h2>
               {promos.length > 0 && (
-                <select 
+                <select
                   className="admin-input py-1 text-xs w-48 bg-zinc-50 font-medium text-earth-primary"
                   onChange={e => {
                     const p = promos.find((x: any) => x.id === e.target.value);
@@ -387,7 +402,7 @@ export default function SchedulePage() {
                             ) : (
                               <div className="px-6 py-2 bg-gradient-to-br from-[#FFFFFF] to-[#FAF8F5] border border-[#E8D1A7] shadow-sm rounded-full flex justify-center items-center">
                                 <span className="text-[26px] font-bold tracking-widest text-[#5C4836]">
-                                  {day.startTime !== day.endTime ? `${day.startTime} - ${day.endTime}` : day.startTime}
+                                  {day.startTime !== day.endTime ? `${day.startTime} ${day.separator || '-'} ${day.endTime}` : day.startTime}
                                 </span>
                               </div>
                             )}
@@ -410,7 +425,7 @@ export default function SchedulePage() {
                   {/* Footer */}
                   <div className="relative z-10 text-center pt-5 border-t border-[#DCD3C6] pb-2">
                     <p className="text-2xl font-medium text-[#8E7962]">
-                      Reply status ini untuk mengamankan slot Anda ✨
+                      Reply untuk mengamankan slot Anda
                     </p>
                   </div>
 

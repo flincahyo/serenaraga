@@ -94,6 +94,7 @@ export default function TherapistsPage() {
     const { data, error } = await supabase
       .from('booking_items')
       .select(`
+        booking_id,
         service_name,
         price,
         commission_earned,
@@ -106,12 +107,30 @@ export default function TherapistsPage() {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      const items: PayoutItem[] = data.map((row: any) => ({
-        date: row.bookings.booking_date,
-        customer_name: row.bookings.customer_name || '-',
-        service_name: row.service_name,
-        price: Number(row.price) || 0,
-        commission_earned: Number(row.commission_earned) || 0,
+      const grouped = data.reduce((acc: any, row: any) => {
+        const key = row.booking_id;
+        if (!acc[key]) acc[key] = {
+          date: row.bookings.booking_date,
+          customer_name: row.bookings.customer_name || '-',
+          service_name: row.service_name === 'Biaya Transport' ? '' : row.service_name,
+          has_transport: row.service_name === 'Biaya Transport',
+          price: 0,
+          commission_earned: 0
+        };
+        else if (row.service_name === 'Biaya Transport') acc[key].has_transport = true;
+        else acc[key].service_name = acc[key].service_name ? `${acc[key].service_name} + ${row.service_name}` : row.service_name;
+
+        acc[key].price += Number(row.price) || 0;
+        acc[key].commission_earned += Number(row.commission_earned) || 0;
+        return acc;
+      }, {});
+
+      const items: PayoutItem[] = Object.values(grouped).map((g: any) => ({
+        date: g.date,
+        customer_name: g.customer_name,
+        service_name: g.has_transport && g.service_name ? `${g.service_name} + Transport` : (g.service_name || 'Biaya Transport'),
+        price: g.price,
+        commission_earned: g.commission_earned,
       }));
       setPayoutItems(items);
     }
@@ -306,8 +325,8 @@ export default function TherapistsPage() {
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
                   <div style={{ backgroundColor: '#e2d1ba', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #d1bda2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '300px', height: '130px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
-                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '320px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '16px' }} className="dark:brightness-0 dark:invert-0" />
+                    <div style={{ width: '225px', height: '97px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
+                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '240px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '12px' }} className="dark:brightness-0 dark:invert-0" />
                     </div>
                     <p style={{ margin: 0, fontSize: '11px', color: '#6d6153', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
                   </div>
@@ -331,24 +350,13 @@ export default function TherapistsPage() {
                     {payoutItems.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {payoutItems.map((item, idx) => {
-                          const expectedCom = Math.round(item.price * payoutTherapist.commission_pct / 100);
-                          const isTransport = item.service_name === 'Biaya Transport';
-                          const hasDiscount = !isTransport && item.commission_earned < expectedCom && expectedCom > 0;
-                          const derivedBase = item.commission_earned === 0 ? 0 : Math.round(item.commission_earned / (payoutTherapist.commission_pct / 100));
-                          const actualPct = item.price > 0 ? Math.round((item.commission_earned / item.price) * 100) : 0;
-
                           return (
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div>
                                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
                                 <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
-                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} •
-                                  {isTransport 
-                                    ? ` ${formatRp(item.price)} × ${actualPct}% (Bagi Hasil Transport)`
-                                    : hasDiscount 
-                                      ? ` ${formatRp(derivedBase)} (setelah diskon) × ${payoutTherapist.commission_pct}%` 
-                                      : ` ${formatRp(item.price)} × ${payoutTherapist.commission_pct}%`}
+                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • Basis Harga: {formatRp(item.price)}
                                 </p>
                               </div>
                               <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>

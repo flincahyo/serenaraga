@@ -823,10 +823,19 @@ const InvoiceMaker = () => {
                 </div>
               ))}
 
+              {Number(transportFee) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <div>
+                    <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11, marginBottom: 2 }}>Biaya Transport Tambahan</p>
+                  </div>
+                  <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11 }}>Rp {Number(transportFee).toLocaleString('id-ID')}</p>
+                </div>
+              )}
+
               {/* Discount lines */}
               <div style={{ marginTop: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: appliedDiscounts.length > 0 ? 6 : 10 }}>
-                  <span>Subtotal</span><span>Rp {grossTotal.toLocaleString('id-ID')}</span>
+                  <span>Subtotal</span><span>Rp {(grossTotal + Number(transportFee || 0)).toLocaleString('id-ID')}</span>
                 </div>
                 {appliedDiscounts.length > 0 && (
                    <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#059669', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -839,13 +848,6 @@ const InvoiceMaker = () => {
                     <span style={{ fontWeight: 700 }}>-Rp {a.amount.toLocaleString('id-ID')}</span>
                   </div>
                 ))}
-                
-                {Number(transportFee) > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#3f3f46', marginBottom: 6, paddingLeft: 14 }}>
-                    <span>+ Biaya Transport</span>
-                    <span style={{ fontWeight: 700 }}>Rp {Number(transportFee).toLocaleString('id-ID')}</span>
-                  </div>
-                )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: '#8B5E3C', borderRadius: 12, color: '#fff', marginTop: 10 }}>
                   <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Bayar</span>

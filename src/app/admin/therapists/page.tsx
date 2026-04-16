@@ -305,11 +305,11 @@ export default function TherapistsPage() {
                   className="bg-white"
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
-                  <div style={{ backgroundColor: '#f0e3cc', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #e1ceb1', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ backgroundColor: '#e2d1ba', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #d1bda2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ width: '300px', height: '130px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
-                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '340px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '8px' }} className="dark:brightness-0 dark:invert-0" />
+                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '320px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '16px' }} className="dark:brightness-0 dark:invert-0" />
                     </div>
-                    <p style={{ margin: 0, fontSize: '11px', color: '#888', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
+                    <p style={{ margin: 0, fontSize: '11px', color: '#6d6153', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
                   </div>
 
                   <div style={{ padding: '24px' }}>

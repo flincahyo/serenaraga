@@ -198,7 +198,10 @@ const InvoiceMaker = () => {
       .from('booking_items').select('*').eq('booking_id', bookingId).order('sort_order');
 
     if (bkItems && bkItems.length > 0) {
-      setItems(bkItems.map((bi, i) => {
+      const normalItems = bkItems.filter(bi => bi.service_name !== 'Biaya Transport');
+      const transportItem = bkItems.find(bi => bi.service_name === 'Biaya Transport');
+      
+      setItems(normalItems.map((bi, i) => {
         const svc = services.find(s => s.name === bi.service_name);
         return {
           id: bi.id ?? (Date.now() + i),
@@ -211,6 +214,14 @@ const InvoiceMaker = () => {
           parent_bundle_name: bi.parent_bundle_name ?? '',
         };
       }));
+
+      if (transportItem && transportItem.price > 0) {
+        setTransportFee(transportItem.price);
+        setTransportPct(Math.round((transportItem.commission_earned / transportItem.price) * 100));
+      } else {
+        setTransportFee('');
+        setTransportPct(100);
+      }
     } else {
       // Fallback for old single-service bookings
       const svc = services.find(s => s.name === bk.service_name);

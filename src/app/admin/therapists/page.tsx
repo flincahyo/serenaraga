@@ -17,6 +17,9 @@ type PayoutItem = {
   service_name: string;
   price: number;
   commission_earned: number;
+  service_price: number;
+  transport_commission: number;
+  has_transport: boolean;
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -109,16 +112,25 @@ export default function TherapistsPage() {
     if (!error && data) {
       const grouped = data.reduce((acc: any, row: any) => {
         const key = row.booking_id;
+        const isTransport = row.service_name === 'Biaya Transport';
         if (!acc[key]) acc[key] = {
           date: row.bookings.booking_date,
           customer_name: row.bookings.customer_name || '-',
-          service_name: row.service_name === 'Biaya Transport' ? '' : row.service_name,
-          has_transport: row.service_name === 'Biaya Transport',
+          service_name: isTransport ? '' : row.service_name,
+          has_transport: isTransport,
           price: 0,
-          commission_earned: 0
+          commission_earned: 0,
+          service_price: 0,
+          transport_commission: 0,
         };
-        else if (row.service_name === 'Biaya Transport') acc[key].has_transport = true;
+        else if (isTransport) acc[key].has_transport = true;
         else acc[key].service_name = acc[key].service_name ? `${acc[key].service_name} + ${row.service_name}` : row.service_name;
+
+        if (isTransport) {
+          acc[key].transport_commission += Number(row.commission_earned) || 0;
+        } else {
+          acc[key].service_price += Number(row.price) || 0;
+        }
 
         acc[key].price += Number(row.price) || 0;
         acc[key].commission_earned += Number(row.commission_earned) || 0;
@@ -128,9 +140,12 @@ export default function TherapistsPage() {
       const items: PayoutItem[] = Object.values(grouped).map((g: any) => ({
         date: g.date,
         customer_name: g.customer_name,
-        service_name: g.has_transport && g.service_name ? `${g.service_name} + Transport` : (g.service_name || 'Biaya Transport'),
+        service_name: g.service_name || 'Biaya Transport',
         price: g.price,
         commission_earned: g.commission_earned,
+        service_price: g.service_price,
+        transport_commission: g.transport_commission,
+        has_transport: g.has_transport,
       }));
       setPayoutItems(items);
     }
@@ -325,8 +340,8 @@ export default function TherapistsPage() {
                   style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
                   <div style={{ backgroundColor: '#e2d1ba', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #d1bda2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '225px', height: '97px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
-                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '240px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '12px' }} className="dark:brightness-0 dark:invert-0" />
+                    <div style={{ width: '180px', height: '78px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
+                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '190px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '10px' }} className="dark:brightness-0 dark:invert-0" />
                     </div>
                     <p style={{ margin: 0, fontSize: '11px', color: '#6d6153', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
                   </div>
@@ -354,9 +369,12 @@ export default function TherapistsPage() {
                             <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div>
                                 <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
-                                <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>{item.service_name}</p>
+                                <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>
+                                  {item.service_name}
+                                  {item.has_transport && <span style={{ color: '#059669', marginLeft: 4 }}>(+ Transport {formatRp(item.transport_commission)})</span>}
+                                </p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
-                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • Basis Harga: {formatRp(item.price)}
+                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • {item.service_price > 0 ? `Jasa: ${formatRp(item.service_price)} × ${payoutTherapist.commission_pct}%` : 'Hanya Transport'}
                                 </p>
                               </div>
                               <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>

@@ -76,6 +76,7 @@ const InvoiceMaker = () => {
   const [completing, setCompleting]       = useState(false);
   const [transportFee, setTransportFee]   = useState<number | ''>('');
   const [transportPct, setTransportPct]   = useState<number>(100);
+  const [transportLabel, setTransportLabel] = useState('Biaya Transport Tambahan');
 
   // Discount + customer state
   const [allDiscounts, setAllDiscounts]           = useState<Discount[]>([]);
@@ -680,7 +681,7 @@ const InvoiceMaker = () => {
 
         {/* Transport Fee */}
         <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
-          <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2 block">Biaya Transport Tambahan (Rp)</label>
+          <input type="text" value={transportLabel} onChange={e => setTransportLabel(e.target.value)} className="bg-transparent text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2 block outline-none border-b border-dashed border-zinc-300 dark:border-zinc-600 hover:border-earth-primary focus:border-earth-primary w-fit pb-0.5" />
           <div className="flex gap-3">
              <input type="number" placeholder="Contoh: 15000" value={transportFee} onChange={e => setTransportFee(e.target.value === '' ? '' : Number(e.target.value))} className="admin-input text-xs font-mono flex-1" />
              {isOwner && (
@@ -826,7 +827,7 @@ const InvoiceMaker = () => {
               {Number(transportFee) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
-                    <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11, marginBottom: 2 }}>Biaya Transport Tambahan</p>
+                    <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11, marginBottom: 2 }}>{transportLabel}</p>
                   </div>
                   <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11 }}>Rp {Number(transportFee).toLocaleString('id-ID')}</p>
                 </div>

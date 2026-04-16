@@ -12,6 +12,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     // We only need the top-level route because the landing page is a single-page scrolling structure.
     {
+      url: `${baseUrl}/area/pijat-panggilan-jogja`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/area/pijat-panggilan-sleman`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/area/pijat-panggilan-bantul`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.9,
+    },
+    {
       url: `${baseUrl}/login`,
       lastModified: new Date(),
       changeFrequency: 'monthly',

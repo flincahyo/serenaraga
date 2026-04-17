@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Upload, Check, X, ImageIcon, Loader2 } from 'lucide-react';
+import { Upload, Check, X, ImageIcon, Loader2, Image as ImageIcon2, MessageSquare } from 'lucide-react';
+import TestimonialEditor from '@/components/admin/TestimonialEditor';
 
 interface ImageSlot {
   id: string;
@@ -21,6 +22,7 @@ const defaultSlots: ImageSlot[] = [
 ];
 
 export default function ContentPage() {
+  const [activeTab, setActiveTab] = useState<'gambar' | 'testimoni'>('gambar');
   const [slots, setSlots] = useState<ImageSlot[]>(defaultSlots);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -52,11 +54,31 @@ export default function ContentPage() {
       <div>
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Konten</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">
-          Ganti gambar halaman depan langsung dari sini
+          Atur gambar dan testimoni untuk Landing Page
         </p>
       </div>
 
-      {/* Info Banner */}
+      {/* Tabs */}
+      <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('gambar')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'gambar' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+        >
+          <ImageIcon2 size={16} /> Cover & Layanan
+        </button>
+        <button
+          onClick={() => setActiveTab('testimoni')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'testimoni' ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+        >
+          <MessageSquare size={16} /> Testimoni WA (Blur)
+        </button>
+      </div>
+
+      {activeTab === 'testimoni' ? (
+        <TestimonialEditor />
+      ) : (
+        <>
+          {/* Info Banner */}
       <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
         <ImageIcon size={16} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-700 dark:text-blue-400">
@@ -141,6 +163,8 @@ export default function ContentPage() {
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }

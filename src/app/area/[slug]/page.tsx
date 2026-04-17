@@ -4,6 +4,9 @@ import Hero from "@/components/Hero";
 import WhyChooseUs from "@/components/WhyChooseUs";
 import Pricelist from "@/components/Pricelist";
 import BookingForm from "@/components/BookingForm";
+import FAQ from "@/components/FAQ";
+import TestimonialsCarousel from "@/components/TestimonialsCarousel";
+import FloatingWhatsApp from "@/components/FloatingWhatsApp";
 import Image from 'next/image';
 
 const areas: Record<string, { label: string; desc: string }> = {
@@ -46,7 +49,10 @@ export default function AreaPage({ params }: { params: { slug: string } }) {
       </div>
       <WhyChooseUs />
       <Pricelist />
+      <TestimonialsCarousel />
+      <FAQ />
       <BookingForm />
+      <FloatingWhatsApp />
 
       <footer className="bg-text-primary text-white py-16">
         <div className="container-custom">

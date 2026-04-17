@@ -8,8 +8,6 @@ import { MessageCircleHeart } from 'lucide-react';
 const TestimonialsCarousel = () => {
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
 
   useEffect(() => {
     const fetchTestimonials = async () => {
@@ -29,13 +27,6 @@ const TestimonialsCarousel = () => {
 
     fetchTestimonials();
   }, []);
-
-  useEffect(() => {
-    if (carouselRef.current) {
-      // Calculate total width of the original gallery to scroll seamlessly
-      setWidth(carouselRef.current.scrollWidth / 2);
-    }
-  }, [images]);
 
   if (loading || images.length === 0) return null;
 
@@ -76,29 +67,39 @@ const TestimonialsCarousel = () => {
         <div className="absolute right-0 top-0 bottom-0 w-16 md:w-40 bg-gradient-to-l from-bg-cream/50 to-transparent z-10 pointer-events-none"></div>
 
         <motion.div
-          ref={carouselRef}
-          className="flex gap-6 md:gap-8 px-4 pr-10 md:pr-12 w-max"
-          animate={{ x: width ? [0, -width] : 0 }}
+          className="flex w-max"
+          animate={{ x: "-50%" }}
           transition={{
             repeat: Infinity,
             ease: "linear",
-            duration: baseSequence.length * 6, // Smooth dynamic duration
+            duration: baseSequence.length * 5, // Smooth duration
           }}
         >
-          {duplicatedImages.map((src, i) => (
-            <div
-              key={i}
-              className="relative w-[200px] sm:w-[240px] md:w-[280px] aspect-[9/16] shrink-0 rounded-[2rem] overflow-hidden shadow-xl border-4 border-white/60 group"
-            >
-              <img
-                src={src}
-                alt={`Ulasan SerenaRaga ${i}`}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/5 pointer-events-none"></div>
-            </div>
-          ))}
+          {/* Group 1 */}
+          <div className="flex gap-6 md:gap-8 pr-6 md:pr-8 pl-4">
+            {baseSequence.map((src, i) => (
+              <div
+                key={`g1-${i}`}
+                className="relative w-[200px] sm:w-[240px] md:w-[280px] aspect-[9/16] shrink-0 rounded-[2rem] overflow-hidden shadow-xl border-4 border-white/60 group"
+              >
+                <img src={src} alt="Testimoni SerenaRaga" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
+                <div className="absolute inset-0 bg-black/5 pointer-events-none"></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Group 2 (Exact Clone for flawless looping) */}
+          <div className="flex gap-6 md:gap-8 pr-6 md:pr-8 pl-4">
+            {baseSequence.map((src, i) => (
+              <div
+                key={`g2-${i}`}
+                className="relative w-[200px] sm:w-[240px] md:w-[280px] aspect-[9/16] shrink-0 rounded-[2rem] overflow-hidden shadow-xl border-4 border-white/60 group"
+              >
+                <img src={src} alt="Testimoni SerenaRaga" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
+                <div className="absolute inset-0 bg-black/5 pointer-events-none"></div>
+              </div>
+            ))}
+          </div>
         </motion.div>
       </div>
     </section>

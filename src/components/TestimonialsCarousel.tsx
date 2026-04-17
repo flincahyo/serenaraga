@@ -39,8 +39,13 @@ const TestimonialsCarousel = () => {
 
   if (loading || images.length === 0) return null;
 
-  // Duplicate images exactly once to create a flawless infinite loop
-  const duplicatedImages = [...images, ...images];
+  // 1. Ensure the base chunk has enough items to fill a 4K screen
+  const MIN_ITEMS = 8;
+  const repeatCount = Math.max(1, Math.ceil(MIN_ITEMS / images.length));
+  const baseSequence = Array(repeatCount).fill(images).flat();
+
+  // 2. Duplicate exactly once for a flawless infinite loop
+  const duplicatedImages = [...baseSequence, ...baseSequence];
 
   return (
     <section id="testimonials" className="py-24 bg-bg-cream/50 overflow-hidden border-y border-earth-primary/5">
@@ -77,7 +82,7 @@ const TestimonialsCarousel = () => {
           transition={{
             repeat: Infinity,
             ease: "linear",
-            duration: images.length * 6, // Smooth dynamic duration
+            duration: baseSequence.length * 6, // Smooth dynamic duration
           }}
         >
           {duplicatedImages.map((src, i) => (

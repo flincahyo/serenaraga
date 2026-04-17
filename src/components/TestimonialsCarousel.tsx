@@ -15,7 +15,7 @@ const TestimonialsCarousel = () => {
     const fetchTestimonials = async () => {
       const supabase = createClient();
       const { data } = await supabase.from('settings').select('value').eq('key', 'whatsapp_testimonials').single();
-      
+
       if (data && data.value) {
         try {
           const parsed = JSON.parse(data.value);
@@ -61,7 +61,7 @@ const TestimonialsCarousel = () => {
           Cerita <span className="text-earth-primary">Nyaman</span> Pelanggan
         </motion.h2>
         <p className="text-text-secondary text-sm max-w-xl mx-auto">
-          Tangkapan layar asli dari pelanggan kami yang telah merasakan sensasi spa bintang 5 di dalam rumah mereka sendiri.
+          Real Testimoni dari pelanggan kami yang telah relaksasi nyaman di dalam rumah mereka sendiri.
         </p>
       </div>
 
@@ -81,13 +81,13 @@ const TestimonialsCarousel = () => {
           }}
         >
           {duplicatedImages.map((src, i) => (
-            <div 
-              key={i} 
-              className="relative w-[240px] md:w-[280px] aspect-[9/16] shrink-0 rounded-3xl overflow-hidden shadow-xl border-4 border-white/60 group"
+            <div
+              key={i}
+              className="relative w-[200px] sm:w-[240px] md:w-[280px] aspect-[9/16] shrink-0 rounded-[2rem] overflow-hidden shadow-xl border-4 border-white/60 group"
             >
-              <img 
-                src={src} 
-                alt={`Ulasan SerenaRaga ${i}`} 
+              <img
+                src={src}
+                alt={`Ulasan SerenaRaga ${i}`}
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 loading="lazy"
               />

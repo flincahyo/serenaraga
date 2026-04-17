@@ -39,8 +39,8 @@ const TestimonialsCarousel = () => {
 
   if (loading || images.length === 0) return null;
 
-  // Duplicate images to create an infinite loop effect
-  const duplicatedImages = [...images, ...images, ...images];
+  // Duplicate images exactly once to create a flawless infinite loop
+  const duplicatedImages = [...images, ...images];
 
   return (
     <section id="testimonials" className="py-24 bg-bg-cream/50 overflow-hidden border-y border-earth-primary/5">
@@ -72,12 +72,12 @@ const TestimonialsCarousel = () => {
 
         <motion.div
           ref={carouselRef}
-          className="flex gap-6 md:gap-8 px-4"
-          animate={{ x: [0, -width || -1000] }}
+          className="flex gap-6 md:gap-8 px-4 pr-10 md:pr-12 w-max"
+          animate={{ x: width ? [0, -width] : 0 }}
           transition={{
             repeat: Infinity,
             ease: "linear",
-            duration: images.length * 8, // dynamically scale duration based on items
+            duration: images.length * 6, // Smooth dynamic duration
           }}
         >
           {duplicatedImages.map((src, i) => (

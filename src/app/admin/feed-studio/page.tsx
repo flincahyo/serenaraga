@@ -475,33 +475,36 @@ export default function FeedEditor() {
     finally { setIsGen(false); }
   };
 
-  // Download — removes CSS transform to capture full 1080×1350 at 2× pixel ratio → 2160×2700 HD
+  // Download — clones the canvas at full 1080×1350, captures without CSS transform
+  // NOTE: We clone instead of mutating the original to keep images rendering correctly.
   const onDownload = async () => {
     if (!postRef.current) return;
     setSelectedLayer(null);
-    const el = postRef.current;
-    // Save current inline styles
-    const savedTransform  = el.style.transform;
-    const savedPosition   = el.style.position;
-    const savedTop        = el.style.top;
-    const savedLeft       = el.style.left;
-    const savedZIndex     = el.style.zIndex;
-    const savedWidth      = el.style.width;
-    const savedHeight     = el.style.height;
+    await new Promise(r => setTimeout(r, 120)); // wait for ring to disappear
+
+    // Off-screen container: position absolute far to the left, NOT fixed
+    // (fixed elements at -9999px can be excluded from browser compositing)
+    const offscreen = document.createElement('div');
+    offscreen.style.cssText =
+      'position:absolute;top:0;left:-99999px;width:1080px;height:1350px;overflow:hidden;pointer-events:none;z-index:-9999;';
+    document.body.appendChild(offscreen);
+
+    // Deep clone — class-based styles still apply; only override inline transform
+    const clone = postRef.current.cloneNode(true) as HTMLElement;
+    clone.style.transform      = 'none';
+    clone.style.transformOrigin = 'top left';
+    clone.style.position       = 'relative';
+    clone.style.top            = '0';
+    clone.style.left           = '0';
+    clone.style.width          = '1080px';
+    clone.style.height         = '1350px';
+    offscreen.appendChild(clone);
+
     try {
-      await new Promise(r => setTimeout(r, 100)); // let ring disappear
-      // Move element off-screen (escaping the overflow:hidden wrapper) and undo scale
-      el.style.transform  = 'none';
-      el.style.position   = 'fixed';
-      el.style.top        = '-9999px';
-      el.style.left       = '-9999px';
-      el.style.zIndex     = '-1';
-      el.style.width      = '1080px';
-      el.style.height     = '1350px';
-      await new Promise(r => setTimeout(r, 60)); // let layout settle
-      const url = await htmlToImage.toPng(el, {
+      await new Promise(r => setTimeout(r, 80)); // let clone images settle in DOM
+      const url = await htmlToImage.toPng(clone, {
         quality: 1,
-        pixelRatio: 2,           // 2160 × 2700px output
+        pixelRatio: 2,          // → 2160 × 2700 HD
         width: 1080,
         height: 1350,
         fetchRequestInit: { mode: 'cors' },
@@ -512,18 +515,13 @@ export default function FeedEditor() {
       }).click();
       setDownloaded(true);
       setTimeout(() => setDownloaded(false), 3000);
-    } catch(e) { console.error(e); }
-    finally {
-      // Always restore styles
-      el.style.transform  = savedTransform;
-      el.style.position   = savedPosition;
-      el.style.top        = savedTop;
-      el.style.left       = savedLeft;
-      el.style.zIndex     = savedZIndex;
-      el.style.width      = savedWidth;
-      el.style.height     = savedHeight;
+    } catch (e) {
+      console.error('Download error:', e);
+    } finally {
+      document.body.removeChild(offscreen);
     }
   };
+
 
   // Text layers CRUD
   const addTextLayer = () => {

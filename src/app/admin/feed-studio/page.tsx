@@ -347,12 +347,55 @@ function Pills({ dark = true }: { dark?: boolean }) {
   );
 }
 
+/* Editable Text — cursor-safe: uses ref to avoid dangerouslySetInnerHTML re-renders that reset cursor
+   External value changes only propagate when the element is NOT focused. */
 function ET({ value, onChange, className, tag = 'p', dark = true }: { value: string; onChange: (v: string) => void; className: string; tag?: 'p'|'h1'|'h2'|'h3'|'span'|'div'; dark?: boolean; }) {
+  const ref     = useRef<HTMLElement>(null);
+  const focused = useRef(false);
   const Tag = tag as any;
+
+  // Set content on mount and whenever value changes externally (e.g. AI fill)
+  useEffect(() => {
+    if (ref.current && !focused.current && ref.current.innerText !== value) {
+      ref.current.innerText = value;
+    }
+  }, [value]);
+
   return (
-    <Tag contentEditable suppressContentEditableWarning onInput={(e: React.FormEvent<HTMLElement>) => onChange(e.currentTarget.innerText)}
-      className={`${className} cursor-text outline-none`} style={{ caretColor: dark ? 'white' : '#8b5e3c' }}
-      dangerouslySetInnerHTML={{ __html: value }} />
+    <Tag
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onFocus={() => { focused.current = true; }}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => { focused.current = false; onChange(e.currentTarget.innerText); }}
+      onInput={(e: React.FormEvent<HTMLElement>) => onChange(e.currentTarget.innerText)}
+      className={`${className} cursor-text outline-none`}
+      style={{ caretColor: dark ? 'white' : '#8b5e3c' }}
+    />
+  );
+}
+
+/* Inline EditableField — same cursor-safe pattern, for multiline-safe div fields */
+function EF({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const ref     = useRef<HTMLDivElement>(null);
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (ref.current && !focused.current && ref.current.innerText !== value) {
+      ref.current.innerText = value;
+    }
+  }, [value]);
+
+  return (
+    <div
+      ref={ref}
+      contentEditable
+      suppressContentEditableWarning
+      onFocus={() => { focused.current = true; }}
+      onBlur={(e) => { focused.current = false; onChange(e.currentTarget.innerText); }}
+      onInput={(e) => onChange(e.currentTarget.innerText)}
+      className={className}
+    />
   );
 }
 
@@ -432,18 +475,54 @@ export default function FeedEditor() {
     finally { setIsGen(false); }
   };
 
-  // Download
+  // Download — removes CSS transform to capture full 1080×1350 at 2× pixel ratio → 2160×2700 HD
   const onDownload = async () => {
     if (!postRef.current) return;
-    // Temporarily hide selection outline
     setSelectedLayer(null);
+    const el = postRef.current;
+    // Save current inline styles
+    const savedTransform  = el.style.transform;
+    const savedPosition   = el.style.position;
+    const savedTop        = el.style.top;
+    const savedLeft       = el.style.left;
+    const savedZIndex     = el.style.zIndex;
+    const savedWidth      = el.style.width;
+    const savedHeight     = el.style.height;
     try {
-      await new Promise(r => setTimeout(r, 80)); // let outline disappear
-      const url = await htmlToImage.toPng(postRef.current, { quality: 1, pixelRatio: 2, fetchRequestInit: { mode: 'cors' } });
-      Object.assign(document.createElement('a'), { download: `serenaraga-${theme}-${Date.now()}.png`, href: url }).click();
+      await new Promise(r => setTimeout(r, 100)); // let ring disappear
+      // Move element off-screen (escaping the overflow:hidden wrapper) and undo scale
+      el.style.transform  = 'none';
+      el.style.position   = 'fixed';
+      el.style.top        = '-9999px';
+      el.style.left       = '-9999px';
+      el.style.zIndex     = '-1';
+      el.style.width      = '1080px';
+      el.style.height     = '1350px';
+      await new Promise(r => setTimeout(r, 60)); // let layout settle
+      const url = await htmlToImage.toPng(el, {
+        quality: 1,
+        pixelRatio: 2,           // 2160 × 2700px output
+        width: 1080,
+        height: 1350,
+        fetchRequestInit: { mode: 'cors' },
+      });
+      Object.assign(document.createElement('a'), {
+        download: `serenaraga-${theme}-${Date.now()}.png`,
+        href: url,
+      }).click();
       setDownloaded(true);
       setTimeout(() => setDownloaded(false), 3000);
     } catch(e) { console.error(e); }
+    finally {
+      // Always restore styles
+      el.style.transform  = savedTransform;
+      el.style.position   = savedPosition;
+      el.style.top        = savedTop;
+      el.style.left       = savedLeft;
+      el.style.zIndex     = savedZIndex;
+      el.style.width      = savedWidth;
+      el.style.height     = savedHeight;
+    }
   };
 
   // Text layers CRUD
@@ -609,9 +688,8 @@ export default function FeedEditor() {
                 <div className="w-[70px] h-[70px] bg-earth-primary rounded-2xl flex items-center justify-center flex-shrink-0">
                   <span className="text-[24px] font-black text-white">{String(i + 1).padStart(2, '0')}</span>
                 </div>
-                <div contentEditable suppressContentEditableWarning onInput={e => updateBenefitItem(i, e.currentTarget.innerText)}
-                  className="text-[30px] text-[#3d2b1f] leading-snug font-medium self-center outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors w-full"
-                  dangerouslySetInnerHTML={{ __html: text }} />
+                <EF value={text} onChange={v => updateBenefitItem(i, v)}
+                  className="text-[30px] text-[#3d2b1f] leading-snug font-medium self-center outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors w-full" />
               </div>
             ))}
           </div>
@@ -674,21 +752,18 @@ export default function FeedEditor() {
             <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-white/5 rounded-full translate-x-1/2 -translate-y-1/2" />
             <div className="relative z-10"><Logo invert scale={0.75} /><div className="mt-8 text-center"><ET value={title} onChange={setTitle} className="text-[56px] font-serif italic text-white leading-none" tag="h1" /><ET value={label} onChange={setLabel} className="text-[24px] font-black uppercase tracking-[0.4em] text-white/70 mt-3" /></div></div>
           </div>
-          {/* Price items — fully editable */}
+          {/* Price items — fully editable, cursor-safe */}
           <div className="flex-1 flex flex-col justify-center px-[80px] py-[40px] gap-0">
             {priceItems.map((item, i) => (
               <div key={i} className={`flex items-center justify-between py-7 ${i < 4 ? 'border-b border-[#8b5e3c]/15' : ''}`}>
                 <div>
-                  <div contentEditable suppressContentEditableWarning onInput={e => updatePriceItem(i, 'service', e.currentTarget.innerText)}
-                    className="text-[32px] font-semibold text-zinc-800 outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors"
-                    dangerouslySetInnerHTML={{ __html: item.service }} />
-                  <div contentEditable suppressContentEditableWarning onInput={e => updatePriceItem(i, 'dur', e.currentTarget.innerText)}
-                    className="text-[24px] text-zinc-400 outline-none cursor-text border-b border-transparent hover:border-zinc-300 focus:border-zinc-400 transition-colors"
-                    dangerouslySetInnerHTML={{ __html: item.dur }} />
+                  <EF value={item.service} onChange={v => updatePriceItem(i, 'service', v)}
+                    className="text-[32px] font-semibold text-zinc-800 outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors" />
+                  <EF value={item.dur} onChange={v => updatePriceItem(i, 'dur', v)}
+                    className="text-[24px] text-zinc-400 outline-none cursor-text border-b border-transparent hover:border-zinc-300 focus:border-zinc-400 transition-colors" />
                 </div>
-                <div contentEditable suppressContentEditableWarning onInput={e => updatePriceItem(i, 'harga', e.currentTarget.innerText)}
-                  className="text-[34px] font-black text-earth-primary outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors"
-                  dangerouslySetInnerHTML={{ __html: item.harga }} />
+                <EF value={item.harga} onChange={v => updatePriceItem(i, 'harga', v)}
+                  className="text-[34px] font-black text-earth-primary outline-none cursor-text border-b-2 border-transparent hover:border-earth-primary/30 focus:border-earth-primary/60 transition-colors" />
               </div>
             ))}
           </div>

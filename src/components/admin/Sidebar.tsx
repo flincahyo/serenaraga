@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2,
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -22,6 +22,7 @@ const OWNER_ITEMS = [
   { name: 'Diskon & Promo', icon: Tag,             href: '/admin/discounts' },
   { name: 'Share Jadwal',   icon: Share2,          href: '/admin/schedule' },
   { name: 'Reports',        icon: BarChart3,       href: '/admin/reports' },
+  { name: 'Feed Studio',    icon: ImagePlay,       href: '/admin/feed-studio' },
   { name: 'Konten',         icon: Image,           href: '/admin/content' },
   { name: 'Staff & Kasir',  icon: UserCog,         href: '/admin/staff' },
   { name: 'Settings',       icon: Settings2,       href: '/admin/settings' },

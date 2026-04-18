@@ -15,8 +15,9 @@ const areas: Record<string, { label: string; desc: string }> = {
   'pijat-panggilan-jogja': { label: 'Yogyakarta', desc: 'Layanan pijat panggilan terpercaya di Kota Yogyakarta. Hadirkan relaksasi yang tenang langsung ke hunian Anda.' }
 };
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const area = areas[params.slug] || { label: 'Yogyakarta', desc: '' };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const area = areas[resolvedParams.slug] || { label: 'Yogyakarta', desc: '' };
   
   return {
     title: `SerenaRaga - Pijat Panggilan ${area.label} Nyaman & Private`,
@@ -25,13 +26,14 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
     openGraph: {
       title: `SerenaRaga - Pijat Panggilan ${area.label}`,
       description: area.desc,
-      url: `https://serenaraga.fit/area/${params.slug}`
+      url: `https://serenaraga.fit/area/${resolvedParams.slug}`
     }
   };
 }
 
-export default function AreaPage({ params }: { params: { slug: string } }) {
-  const area = areas[params.slug] || { label: 'Yogyakarta & Sekitarnya' };
+export default async function AreaPage({ params }: { params: Promise<{ slug: string }> }) {
+  const resolvedParams = await params;
+  const area = areas[resolvedParams.slug] || { label: 'Yogyakarta & Sekitarnya' };
 
   return (
     <main className="min-h-screen">

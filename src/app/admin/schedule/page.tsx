@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Share2, Image as ImageIcon, Plus, X, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Share2, Image as ImageIcon, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste, Calendar, Pencil, Check } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
@@ -11,10 +11,8 @@ type DaySchedule = {
   dateStr: string;
   label: string;
   active: boolean;
-  startTime: string;
-  endTime: string;
+  timeText: string;
   visible: boolean;
-  separator: string;
 };
 
 const getNextDays = (count: number = 7): DaySchedule[] => {
@@ -38,10 +36,8 @@ const getNextDays = (count: number = 7): DaySchedule[] => {
       dateStr,
       label,
       active: false,
-      startTime: '10:00',
-      endTime: '20:00',
+      timeText: '10:00 - 20:00',
       visible: true,
-      separator: '-'
     });
   }
   return days;
@@ -53,6 +49,13 @@ export default function SchedulePage() {
   const [generating, setGenerating] = useState(false);
   const [promoNote, setPromoNote] = useState(' Dapatkan diskon spesial:\n• 5% untuk New Customer\n• 10% untuk Loyal Customer (min. 10x order)');
   const [pasteText, setPasteText] = useState('');
+  const [weekMode, setWeekMode] = useState<1 | 2>(1);
+  // inline canvas editing — label
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [editingLabelValue, setEditingLabelValue] = useState('');
+  // inline canvas editing — time
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [editingTimeValue, setEditingTimeValue] = useState('');
 
   const [promos, setPromos] = useState<any[]>([]);
 
@@ -70,6 +73,17 @@ export default function SchedulePage() {
     fetchPromos();
   }, []);
 
+  // When weekMode changes, regenerate days whilst preserving existing edits
+  const handleWeekModeChange = (mode: 1 | 2) => {
+    const newDays = getNextDays(mode === 2 ? 14 : 7);
+    setWeekMode(mode);
+    // Merge: keep existing edits for days that overlap
+    setSchedules(prev => {
+      const prevMap = new Map(prev.map(d => [d.id, d]));
+      return newDays.map(d => prevMap.get(d.id) ?? d);
+    });
+  };
+
   const toggleDay = (dayId: string) => {
     setSchedules(prev => prev.map(day =>
       day.id === dayId ? { ...day, active: !day.active } : day
@@ -82,10 +96,42 @@ export default function SchedulePage() {
     ));
   };
 
-  const updateTime = (dayId: string, field: 'startTime' | 'endTime' | 'separator', value: string) => {
-    setSchedules(prev => prev.map(day => 
-      day.id === dayId ? { ...day, [field]: value } : day
+  const updateTimeText = (dayId: string, value: string) => {
+    setSchedules(prev => prev.map(day =>
+      day.id === dayId ? { ...day, timeText: value } : day
     ));
+  };
+
+  const startEditTime = (day: DaySchedule) => {
+    setEditingTimeId(day.id);
+    setEditingTimeValue(day.timeText);
+  };
+
+  const commitEditTime = () => {
+    if (editingTimeId) {
+      updateTimeText(editingTimeId, editingTimeValue.trim() || editingTimeValue);
+    }
+    setEditingTimeId(null);
+    setEditingTimeValue('');
+  };
+
+  const updateLabel = (dayId: string, value: string) => {
+    setSchedules(prev => prev.map(day =>
+      day.id === dayId ? { ...day, label: value } : day
+    ));
+  };
+
+  const startEditLabel = (day: DaySchedule) => {
+    setEditingLabelId(day.id);
+    setEditingLabelValue(day.label);
+  };
+
+  const commitEditLabel = () => {
+    if (editingLabelId) {
+      updateLabel(editingLabelId, editingLabelValue.trim() || editingLabelValue);
+    }
+    setEditingLabelId(null);
+    setEditingLabelValue('');
   };
 
   const handleSmartPaste = () => {
@@ -105,8 +151,8 @@ export default function SchedulePage() {
       const matchedDayIndex = newSchedules.findIndex(day => {
         const parts = day.label.split(',');
         const dayName = parts[0].trim().toLowerCase();
-        const dateNum = parts[1].trim().split(' ')[0];
-        return lineLower.includes(dayName) && lineLower.includes(dateNum);
+        const dateNum = parts[1]?.trim().split(' ')[0];
+        return lineLower.includes(dayName) && dateNum && lineLower.includes(dateNum);
       });
 
       if (matchedDayIndex !== -1) {
@@ -115,17 +161,14 @@ export default function SchedulePage() {
 
         if (lineLower.includes('full')) {
           matchedDay.active = false;
+          matchedDay.timeText = '10:00 - 20:00';
         } else {
           matchedDay.active = true;
-          
-          if (lineLower.includes('&') || lineLower.includes('dan')) {
-            matchedDay.separator = '&';
-          } else {
-            matchedDay.separator = '-';
-          }
+
+          const sep = (lineLower.includes('&') || lineLower.includes('dan')) ? '&' : '-';
 
           // Extract time using regex
-          const timeRegex = /\b\d{1,2}[\.\:]\d{2}\b/g;
+          const timeRegex = /\b\d{1,2}[.:]\d{2}\b/g;
           const timesObj = line.match(timeRegex);
 
           if (timesObj && timesObj.length > 0) {
@@ -133,12 +176,9 @@ export default function SchedulePage() {
             const normalized = timesObj.map(t => padTime(t.replace('.', ':')));
 
             if (normalized.length >= 2) {
-              matchedDay.startTime = normalized[0];
-              matchedDay.endTime = normalized[normalized.length - 1];
-            } else if (normalized.length === 1) {
-              // Only 1 time detected
-              matchedDay.startTime = normalized[0];
-              matchedDay.endTime = normalized[0];
+              matchedDay.timeText = `${normalized[0]} ${sep} ${normalized[normalized.length - 1]}`;
+            } else {
+              matchedDay.timeText = normalized[0];
             }
           }
         }
@@ -152,6 +192,9 @@ export default function SchedulePage() {
 
   const generateImage = async (action: 'download' | 'share') => {
     if (!previewRef.current) return;
+    // Commit any open edits before generating
+    if (editingLabelId) commitEditLabel();
+    if (editingTimeId) commitEditTime();
     setGenerating(true);
 
     try {
@@ -195,6 +238,9 @@ export default function SchedulePage() {
 
   if (loading) return <AdminSkeleton rows={5} />;
 
+  const visibleSchedules = schedules.filter(d => d.visible);
+
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div>
@@ -220,7 +266,7 @@ export default function SchedulePage() {
             </div>
             <textarea
               className="admin-input h-28 text-xs font-mono resize-none w-full bg-zinc-50 dark:bg-zinc-800/50"
-              placeholder="Contoh Paste:&#10;Rabu, 15 April FULL&#10;Kamis, 16 April 08.00&#10;Jumat, 17 April 16.00-22.00"
+              placeholder={`Contoh Paste:\nRabu, 15 April FULL\nKamis, 16 April 08.00\nJumat, 17 April 16.00-22.00`}
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
             ></textarea>
@@ -230,53 +276,62 @@ export default function SchedulePage() {
           </div>
 
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between">
-              <h2 className="text-sm font-semibold dark:text-white">Slot Tersedia</h2>
-              <button onClick={() => setSchedules(getNextDays(7))} className="text-xs flex items-center gap-1 text-zinc-500 hover:text-earth-primary transition-colors">
-                <RefreshCw size={12} /> Reset ke Awal
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold dark:text-white shrink-0">Slot Tersedia</h2>
+
+              {/* Week Mode Toggle */}
+              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
+                <button
+                  onClick={() => handleWeekModeChange(1)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${weekMode === 1 ? 'bg-white dark:bg-zinc-700 shadow text-earth-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                >
+                  <Calendar size={12} /> 1 Minggu
+                </button>
+                <button
+                  onClick={() => handleWeekModeChange(2)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${weekMode === 2 ? 'bg-white dark:bg-zinc-700 shadow text-earth-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+                >
+                  <Calendar size={12} /> 2 Minggu
+                </button>
+              </div>
+
+              <button onClick={() => { setSchedules(getNextDays(weekMode === 2 ? 14 : 7)); }} className="text-xs flex items-center gap-1 text-zinc-500 hover:text-earth-primary transition-colors shrink-0">
+                <RefreshCw size={12} /> Reset
               </button>
             </div>
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {schedules.map(day => (
-                <div key={day.id} className={`p-4 space-y-3 transition-opacity duration-200 border-l-[3px] ${!day.visible ? 'opacity-40 bg-zinc-50/50 dark:bg-zinc-900/30 grayscale border-zinc-200' : 'border-earth-primary/50'}`}>
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => toggleVisibility(day.id)}
-                        className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 transition-colors"
-                        title={day.visible ? "Sembunyikan tanggal ini" : "Tampilkan tanggal ini"}
-                      >
-                        {day.visible ? <Eye size={16} /> : <EyeOff size={16} />}
-                      </button>
-                      <p className={`font-semibold text-sm flex items-center gap-2 ${!day.visible ? 'text-zinc-500' : 'dark:text-white'}`}>
-                        {day.label}
-                        {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => toggleDay(day.id)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${day.active ? 'bg-earth-primary text-white border-earth-primary shadow-sm' : 'bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'}`}
-                    >
-                      {day.active ? 'Tersedia' : 'Set Tersedia'}
-                    </button>
-                  </div>
-
-                  {day.active && (
-                    <div className="flex items-center gap-2 pt-2">
-                      <input type="time" value={day.startTime} onChange={e => updateTime(day.id, 'startTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
-                      <button 
-                        onClick={() => updateTime(day.id, 'separator', day.separator === '-' ? '&' : '-')}
-                        className="w-6 h-6 rounded flex justify-center items-center font-black text-xs bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 transition-colors shrink-0"
-                        title="Ganti pemisah jam (Sampai / Dan)"
-                      >
-                        {day.separator || '-'}
-                      </button>
-                      <input type="time" value={day.endTime} onChange={e => updateTime(day.id, 'endTime', e.target.value)} className="admin-input py-1.5 text-xs font-mono w-[85px] text-center bg-white dark:bg-zinc-800" />
-                    </div>
-                  )}
+              {/* Week 1 group header when 2-week mode */}
+              {weekMode === 2 && (
+                <div className="px-4 py-2 bg-earth-primary/5 border-b border-earth-primary/10">
+                  <p className="text-[11px] font-bold text-earth-primary uppercase tracking-widest">Minggu 1</p>
                 </div>
+              )}
+              {schedules.slice(0, 7).map(day => (
+                <DayRow
+                  key={day.id}
+                  day={day}
+                  onToggleVisibility={toggleVisibility}
+                  onToggleDay={toggleDay}
+                />
               ))}
+
+              {/* Week 2 */}
+              {weekMode === 2 && (
+                <>
+                  <div className="px-4 py-2 bg-earth-primary/5 border-b border-earth-primary/10">
+                    <p className="text-[11px] font-bold text-earth-primary uppercase tracking-widest">Minggu 2</p>
+                  </div>
+                  {schedules.slice(7, 14).map(day => (
+                    <DayRow
+                      key={day.id}
+                      day={day}
+                      onToggleVisibility={toggleVisibility}
+                      onToggleDay={toggleDay}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
@@ -331,10 +386,15 @@ export default function SchedulePage() {
         {/* RIGHT PANEL: Live Preview */}
         <div className="lg:col-span-2">
           <div className="sticky top-6">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-3 flex items-center justify-between">
-              Live Preview (9:16)
-              {generating && <span className="text-earth-primary font-normal flex items-center gap-1 animate-pulse"><ImageIcon size={12} /> Rendering...</span>}
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide flex items-center gap-2">
+                Live Preview (9:16)
+                {generating && <span className="text-earth-primary font-normal flex items-center gap-1 animate-pulse"><ImageIcon size={12} /> Rendering...</span>}
+              </p>
+              <p className="text-[10px] text-zinc-400 flex items-center gap-1">
+                <Pencil size={10} /> Klik tanggal / jam untuk edit
+              </p>
+            </div>
 
             {/* The wrapper that scales the 1080x1920 canvas down to fit the web layout */}
             <div className="relative w-full rounded-2xl overflow-hidden shadow-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800"
@@ -345,22 +405,20 @@ export default function SchedulePage() {
                 style={{ width: '1080px', height: '1920px', transform: 'scale(calc(100% / 1080 * var(--tw-scale-x, 1)))' }}
                 ref={(el) => {
                   if (el) {
-                    // Update scale based on container width dynamically
                     const parentWidth = el.parentElement?.clientWidth || 0;
                     el.style.transform = `scale(${parentWidth / 1080})`;
                   }
                 }}
               >
-                {/* 1080x1920 Canvas Content (Dark Luxury Theme) */}
+                {/* 1080x1920 Canvas Content */}
                 <div
                   ref={previewRef}
                   className="w-[1080px] h-[1920px] bg-[#FAF8F5] relative flex flex-col p-12 overflow-hidden"
                   style={{
-                    // Gradient overlay to make it look premium
                     backgroundImage: 'linear-gradient(145deg, #FAF8F5 0%, #EFEBE1 100%)'
                   }}
                 >
-                  {/* Subtle decorative circle */}
+                  {/* Subtle decorative circles */}
                   <div className="absolute -top-[200px] -right-[200px] w-[800px] h-[800px] rounded-full bg-[#D2B48C]/30 blur-[150px] pointer-events-none" />
                   <div className="absolute -bottom-[300px] -left-[200px] w-[900px] h-[900px] rounded-full bg-[#E8D1A7]/40 blur-[150px] pointer-events-none" />
 
@@ -377,7 +435,7 @@ export default function SchedulePage() {
                   <div className="relative z-10 w-full h-px bg-gradient-to-r from-transparent via-[#DCD3C6] to-transparent mb-8" />
 
                   {/* Title */}
-                  <div className="relative z-10 text-center mb-10">
+                  <div className="relative z-10 text-center mb-8">
                     <h2 className="text-[56px] font-bold text-[#3D2E1F] tracking-tight drop-shadow-sm">
                       Available Slots
                     </h2>
@@ -387,30 +445,83 @@ export default function SchedulePage() {
                   </div>
 
                   {/* Schedule Body */}
-                  <div className="relative z-10 flex-1 space-y-6 ml-4">
-                    {schedules.filter(d => d.visible).map(day => {
-                      return (
-                        <div key={`preview_${day.id}`} className="space-y-2.5">
-                          <h3 className="text-3xl font-bold text-[#4A3C2D] drop-shadow-sm">{day.label}</h3>
-
-                          <div className="flex flex-wrap gap-3">
-                            {!day.active ? (
-                              <div className="px-5 py-2 bg-white border border-[#E8D1A7] rounded-full flex items-center gap-2 shadow-sm">
-                                <span className="text-[24px] font-bold tracking-wider text-[#C04949]">FULL</span>
-                                <span className="text-[20px] text-[#D87D7D] font-medium">Booked</span>
-                              </div>
-                            ) : (
-                              <div className="px-6 py-2 bg-gradient-to-br from-[#FFFFFF] to-[#FAF8F5] border border-[#E8D1A7] shadow-sm rounded-full flex justify-center items-center">
-                                <span className="text-[26px] font-bold tracking-widest text-[#5C4836]">
-                                  {day.startTime !== day.endTime ? `${day.startTime} ${day.separator || '-'} ${day.endTime}` : day.startTime}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                  {weekMode === 1 ? (
+                    // Single week layout
+                    <div className="relative z-10 flex-1 space-y-5 ml-4">
+                      {visibleSchedules.map(day => (
+                        <CanvasDayRow
+                          key={`preview_${day.id}`}
+                          day={day}
+                          editingLabelId={editingLabelId}
+                          editingLabelValue={editingLabelValue}
+                          onStartEditLabel={startEditLabel}
+                          onLabelChange={setEditingLabelValue}
+                          onCommitLabel={commitEditLabel}
+                          editingTimeId={editingTimeId}
+                          editingTimeValue={editingTimeValue}
+                          onStartEditTime={startEditTime}
+                          onTimeChange={setEditingTimeValue}
+                          onCommitTime={commitEditTime}
+                          fontSize="text-3xl"
+                          timeFontSize="text-[26px]"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    // Two week layout: side-by-side columns
+                    <div className="relative z-10 flex-1 flex gap-6">
+                      {/* Week 1 column */}
+                      <div className="flex-1 flex flex-col">
+                        <div className="space-y-5">
+                          {schedules.slice(0, 7).filter(d => d.visible).map(day => (
+                            <CanvasDayRow
+                              key={`preview_${day.id}`}
+                              day={day}
+                              editingLabelId={editingLabelId}
+                              editingLabelValue={editingLabelValue}
+                              onStartEditLabel={startEditLabel}
+                              onLabelChange={setEditingLabelValue}
+                              onCommitLabel={commitEditLabel}
+                              editingTimeId={editingTimeId}
+                              editingTimeValue={editingTimeValue}
+                              onStartEditTime={startEditTime}
+                              onTimeChange={setEditingTimeValue}
+                              onCommitTime={commitEditTime}
+                              fontSize="text-3xl"
+                              timeFontSize="text-[26px]"
+                            />
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="w-px bg-gradient-to-b from-transparent via-[#DCD3C6] to-transparent self-stretch" />
+
+                      {/* Week 2 column */}
+                      <div className="flex-1 flex flex-col">
+                        <div className="space-y-5">
+                          {schedules.slice(7, 14).filter(d => d.visible).map(day => (
+                            <CanvasDayRow
+                              key={`preview_${day.id}`}
+                              day={day}
+                              editingLabelId={editingLabelId}
+                              editingLabelValue={editingLabelValue}
+                              onStartEditLabel={startEditLabel}
+                              onLabelChange={setEditingLabelValue}
+                              onCommitLabel={commitEditLabel}
+                              editingTimeId={editingTimeId}
+                              editingTimeValue={editingTimeValue}
+                              onStartEditTime={startEditTime}
+                              onTimeChange={setEditingTimeValue}
+                              onCommitTime={commitEditTime}
+                              fontSize="text-3xl"
+                              timeFontSize="text-[26px]"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Promo Box */}
                   {promoNote && (
@@ -442,11 +553,174 @@ export default function SchedulePage() {
   );
 }
 
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function DayRow({
+  day,
+  onToggleVisibility,
+  onToggleDay,
+}: {
+  day: DaySchedule;
+  onToggleVisibility: (id: string) => void;
+  onToggleDay: (id: string) => void;
+}) {
+  return (
+    <div className={`p-4 space-y-3 transition-opacity duration-200 border-l-[3px] ${!day.visible ? 'opacity-40 bg-zinc-50/50 dark:bg-zinc-900/30 grayscale border-zinc-200' : 'border-earth-primary/50'}`}>
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => onToggleVisibility(day.id)}
+            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 transition-colors"
+            title={day.visible ? "Sembunyikan tanggal ini" : "Tampilkan tanggal ini"}
+          >
+            {day.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+          <p className={`font-semibold text-sm flex items-center gap-2 ${!day.visible ? 'text-zinc-500' : 'dark:text-white'}`}>
+            {day.label}
+            {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
+          </p>
+        </div>
+        <button
+          onClick={() => onToggleDay(day.id)}
+          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${day.active ? 'bg-earth-primary text-white border-earth-primary shadow-sm' : 'bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'}`}
+        >
+          {day.active ? 'Tersedia' : 'Set Tersedia'}
+        </button>
+      </div>
+
+    </div>
+  );
+}
+
+function CanvasDayRow({
+  day,
+  editingLabelId,
+  editingLabelValue,
+  onStartEditLabel,
+  onLabelChange,
+  onCommitLabel,
+  editingTimeId,
+  editingTimeValue,
+  onStartEditTime,
+  onTimeChange,
+  onCommitTime,
+  fontSize,
+  timeFontSize,
+}: {
+  day: DaySchedule;
+  editingLabelId: string | null;
+  editingLabelValue: string;
+  onStartEditLabel: (day: DaySchedule) => void;
+  onLabelChange: (val: string) => void;
+  onCommitLabel: () => void;
+  editingTimeId: string | null;
+  editingTimeValue: string;
+  onStartEditTime: (day: DaySchedule) => void;
+  onTimeChange: (val: string) => void;
+  onCommitTime: () => void;
+  fontSize: string;
+  timeFontSize: string;
+}) {
+  const isEditingLabel = editingLabelId === day.id;
+  const isEditingTime = editingTimeId === day.id;
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditingLabel && labelInputRef.current) {
+      labelInputRef.current.focus();
+      labelInputRef.current.select();
+    }
+  }, [isEditingLabel]);
+
+  useEffect(() => {
+    if (isEditingTime && timeInputRef.current) {
+      timeInputRef.current.focus();
+      timeInputRef.current.select();
+    }
+  }, [isEditingTime]);
+
+  return (
+    <div className="space-y-2.5">
+      {/* Label (tanggal) */}
+      {isEditingLabel ? (
+        <div className="flex items-center gap-2">
+          <input
+            ref={labelInputRef}
+            value={editingLabelValue}
+            onChange={e => onLabelChange(e.target.value)}
+            onBlur={onCommitLabel}
+            onKeyDown={e => { if (e.key === 'Enter') onCommitLabel(); if (e.key === 'Escape') onCommitLabel(); }}
+            className={`${fontSize} font-bold text-[#4A3C2D] bg-transparent border-b-2 border-[#C9AB75] outline-none flex-1 min-w-0`}
+            style={{ fontFamily: 'inherit' }}
+          />
+          <button
+            onMouseDown={e => { e.preventDefault(); onCommitLabel(); }}
+            className="flex-shrink-0 w-8 h-8 rounded-full bg-[#C9AB75] flex items-center justify-center text-white hover:bg-[#B89A60] transition-colors"
+          >
+            <Check size={14} />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => onStartEditLabel(day)}
+          className="group flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          title="Klik untuk edit tanggal"
+        >
+          <h3 className={`${fontSize} font-bold text-[#4A3C2D] drop-shadow-sm text-left`}>{day.label}</h3>
+          <Pencil size={16} className="text-[#C9AB75] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+        </button>
+      )}
+
+      {/* Time / FULL badge */}
+      <div className="flex flex-wrap gap-2">
+        {!day.active ? (
+          <div className="px-5 py-2 bg-white border border-[#E8D1A7] rounded-full flex items-center gap-2 shadow-sm">
+            <span className="text-[24px] font-bold tracking-wider text-[#C04949]">FULL</span>
+            <span className="text-[20px] text-[#D87D7D] font-medium">Booked</span>
+          </div>
+        ) : isEditingTime ? (
+          <div className="flex items-center gap-2">
+            <input
+              ref={timeInputRef}
+              value={editingTimeValue}
+              onChange={e => onTimeChange(e.target.value)}
+              onBlur={onCommitTime}
+              onKeyDown={e => { if (e.key === 'Enter') onCommitTime(); if (e.key === 'Escape') onCommitTime(); }}
+              className={`${timeFontSize} font-bold tracking-widest text-[#5C4836] bg-transparent border-b-2 border-[#C9AB75] outline-none min-w-0 w-64`}
+              placeholder="mis: 10:00 - 20:00"
+              style={{ fontFamily: 'inherit' }}
+            />
+            <button
+              onMouseDown={e => { e.preventDefault(); onCommitTime(); }}
+              className="flex-shrink-0 w-8 h-8 rounded-full bg-[#C9AB75] flex items-center justify-center text-white hover:bg-[#B89A60] transition-colors"
+            >
+              <Check size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => onStartEditTime(day)}
+            className="group flex items-center gap-2 cursor-pointer"
+            title="Klik untuk edit jam"
+          >
+            <div className="px-6 py-2 bg-gradient-to-br from-[#FFFFFF] to-[#FAF8F5] border border-[#E8D1A7] shadow-sm rounded-full flex items-center gap-2 group-hover:border-[#C9AB75] transition-colors">
+              <span className={`${timeFontSize} font-bold tracking-widest text-[#5C4836]`}>
+                {day.timeText}
+              </span>
+              <Pencil size={14} className="text-[#C9AB75] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+            </div>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Helper to rescale preview on window resize so it stays responsive
 function DynamicScaler() {
   useEffect(() => {
     const handleResize = () => {
-      // Just triggering a re-render or layout reflow is enough for the ref callback to fire
       window.dispatchEvent(new CustomEvent('re-scale-preview'));
     };
     window.addEventListener('resize', handleResize);

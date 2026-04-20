@@ -140,3 +140,10 @@ body {
 html {
   scroll-behavior: smooth;
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}

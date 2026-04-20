@@ -41,7 +41,10 @@ export default function BookingsPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [services, setServices]       = useState<Service[]>([]);
   const [therapists, setTherapists]   = useState<{id: string; name: string; commission_pct: number}[]>([]);
+  const [customers, setCustomers]     = useState<{id: string; name: string; wa_number: string}[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Hari Ini');
   const [search, setSearch]           = useState('');
   const [showForm, setShowForm]       = useState(false);
@@ -58,15 +61,17 @@ export default function BookingsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: b }, { data: s }, { data: settingsData }, { data: t }] = await Promise.all([
+    const [{ data: b }, { data: s }, { data: settingsData }, { data: t }, { data: c }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('services').select('id, name, price, category, is_bundle, bundle_child_ids').order('category').order('sort_order'),
       supabase.from('settings').select('value').eq('key', 'whatsapp_reminder_message').single(),
       supabase.from('therapists').select('id, name, commission_pct').eq('is_active', true).order('name'),
+      supabase.from('customers').select('id, name, wa_number').order('name', { ascending: true }),
     ]);
     if (b) setBookings(b);
     if (s) setServices(s);
     if (t) setTherapists(t);
+    if (c) setCustomers(c);
     if (settingsData) setReminderTemplate(settingsData.value);
     setLoading(false);
   }, []);
@@ -509,10 +514,56 @@ export default function BookingsPage() {
             </div>
 
             {/* Customer info */}
-            <input className="admin-input" placeholder="Nama Pelanggan" value={form.customer_name}
-              onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} />
-            <input className="admin-input" placeholder="Nomor WhatsApp (62xxx)" value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+            <div className="relative">
+              <input className="admin-input" placeholder="Nama Pelanggan" value={form.customer_name}
+                onFocus={() => setShowNameSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                onChange={e => {
+                  setForm(f => ({ ...f, customer_name: e.target.value }));
+                  setShowNameSuggestions(true);
+                }} />
+              {showNameSuggestions && form.customer_name && (
+                <div className="absolute z-20 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+                  {customers.filter(c => c.name?.toLowerCase().includes(form.customer_name.toLowerCase()) && c.name?.toLowerCase() !== form.customer_name.toLowerCase()).map(c => (
+                    <div key={c.id} className="px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer text-zinc-900 dark:text-white"
+                         onClick={() => {
+                           setForm(f => ({ ...f, customer_name: c.name, phone: c.wa_number || f.phone }));
+                           setShowNameSuggestions(false);
+                         }}>
+                      <p className="font-medium">{c.name}</p>
+                      <p className="text-xs text-zinc-500">{c.wa_number}</p>
+                    </div>
+                  ))}
+                  {customers.filter(c => c.name?.toLowerCase().includes(form.customer_name.toLowerCase()) && c.name?.toLowerCase() !== form.customer_name.toLowerCase()).length === 0 && (
+                    <div className="px-3 py-2 text-xs text-zinc-500">Buat pelanggan baru</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <input className="admin-input" placeholder="Nomor WhatsApp (62xxx)" value={form.phone}
+                onFocus={() => setShowPhoneSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 200)}
+                onChange={e => {
+                  setForm(f => ({ ...f, phone: e.target.value }));
+                  setShowPhoneSuggestions(true);
+                }} />
+              {showPhoneSuggestions && form.phone && form.phone !== '62' && (
+                <div className="absolute z-20 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
+                  {customers.filter(c => c.wa_number?.includes(form.phone) && c.wa_number !== form.phone).map(c => (
+                    <div key={c.id} className="px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer text-zinc-900 dark:text-white"
+                         onClick={() => {
+                           setForm(f => ({ ...f, customer_name: c.name || f.customer_name, phone: c.wa_number }));
+                           setShowPhoneSuggestions(false);
+                         }}>
+                      <p className="font-medium">{c.name}</p>
+                      <p className="text-xs text-zinc-500">{c.wa_number}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Multi-service items */}
             <div>

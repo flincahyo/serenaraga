@@ -734,25 +734,38 @@ const InvoiceMaker = () => {
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <button onClick={shareToWhatsApp} disabled={generating || completing}
-            className="admin-btn-primary flex-1 justify-center py-3 disabled:opacity-60">
-            {generating || completing ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
-            {selectedBookingId ? 'Selesaikan & Kirim WA' : 'Kirim WA'}
-          </button>
-          <button onClick={downloadInvoice} disabled={generating || completing}
-            className="admin-btn-ghost px-4 py-3 disabled:opacity-60" title="Download PNG">
-            <Download size={15} />
-          </button>
+        {/* ── STICKY FOOTER (Summary & Actions) ── */}
+        <div className="sticky bottom-4 z-20 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl p-4 sm:p-5 rounded-2xl shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.05)] dark:shadow-none border border-zinc-200 dark:border-zinc-700/50 space-y-3">
+          
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <button onClick={shareToWhatsApp} disabled={generating || completing}
+              className="admin-btn-primary flex-1 justify-center py-3.5 disabled:opacity-60 shadow-lg shadow-earth-primary/20">
+              {generating || completing ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
+              {selectedBookingId ? 'Selesaikan & Kirim WA' : 'Kirim WA'}
+            </button>
+            <button onClick={downloadInvoice} disabled={generating || completing}
+              className="admin-btn-ghost px-4 py-3.5 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700" title="Download PNG">
+              <Download size={15} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between px-2">
+            <div>
+              <p className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Total Tagihan</p>
+              <p className="text-xl font-bold text-earth-primary font-mono leading-none">{formatRp(finalTotal)}</p>
+            </div>
+            
+            <div className="text-right">
+               {selectedBookingId && (
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mb-0.5">Booking → Completed</p>
+               )}
+               {isOwner && commissionPct > 0 && finalTotal > 0 && (
+                 <p className="text-[10px] text-zinc-500 font-medium">Net Pemilik: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-bold">{formatRp(ownerNet)}</span></p>
+               )}
+            </div>
+          </div>
         </div>
-        {selectedBookingId && (
-          <p className="text-[10px] text-zinc-400 text-center">Booking akan otomatis berubah menjadi <strong>Completed</strong> saat invoice digenerate.</p>
-        )}
-        <p className="text-[10px] text-zinc-400 text-center leading-relaxed">
-          Di HP: gambar invoice langsung ke share sheet → pilih WA.<br />
-          Di laptop: gambar di-download + WA Web dibuka otomatis.
-        </p>
       </div>
 
       {/* ── PREVIEW SECTION ── */}

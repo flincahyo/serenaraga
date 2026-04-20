@@ -28,7 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split Item'
 };
 
-const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, final_price_override: null as number | null };
+const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0 };
 const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '', parent_bundle_name: '' });
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -135,7 +135,6 @@ export default function BookingsPage() {
       notes: b.notes ?? '',
       discount_total: b.discount_total ?? 0,
       shared_discount_total: b.shared_discount_total ?? 0,
-      final_price_override: b.final_price ?? null,
     });
     // Load existing booking_items
     const { data: items } = await supabase
@@ -206,7 +205,7 @@ export default function BookingsPage() {
       service_name: displayName,
       price: totalPrice,
       bhp_cost: totalBhp,
-      final_price: form.final_price_override ?? totalPrice,
+      final_price: Math.max(0, totalPrice - (form.discount_total || 0)),
       discount_total: form.discount_total,
       shared_discount_total: form.shared_discount_total,
       customer_id: customerId,

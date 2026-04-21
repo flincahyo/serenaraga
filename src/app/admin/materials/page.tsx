@@ -434,6 +434,11 @@ export default function MaterialsPage() {
               <h3 className="font-semibold text-zinc-900 dark:text-white">Hapus Bahan?</h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 {materials.find(m => m.id === deleteId)?.name} — akan dihapus dari semua layanan yang memakainya.
+                {(usageCounts[deleteId ?? ''] ?? 0) > 0 && (
+                  <span className="block mt-1 text-red-500 font-medium text-xs">
+                    ⚠ Bahan ini masih dipakai di {usageCounts[deleteId ?? '']} layanan — BHP layanan tersebut akan hilang!
+                  </span>
+                )}
               </p>
               <div className="flex gap-3 w-full pt-2">
                 <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center">Batal</button>

@@ -56,7 +56,7 @@ export default function ReportsPage() {
     const y = d.getFullYear();
     const m = d.getMonth();
     const mb = bookings.filter(b => {
-      const bd = new Date(b.booking_date);
+      const bd = new Date(b.booking_date + 'T00:00:00');
       return bd.getFullYear() === y && bd.getMonth() === m;
     });
     
@@ -169,7 +169,7 @@ export default function ReportsPage() {
               {totalDiscount > 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Diskon: -{formatRp(totalDiscount)}</p>}
             </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
-              <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Terapis ({commissionPct}%) + BHP</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mb-1">Bagian Terapis + BHP</p>
               <p className="text-2xl font-bold text-amber-700 dark:text-amber-400 tabular-nums">{formatRp(totalTerapis + totalBhp)}</p>
               <p className="text-xs text-amber-600/60 mt-1">Total potongan</p>
             </div>
@@ -331,7 +331,7 @@ export default function ReportsPage() {
                       const net = finalPrice - terapis - bhp;
                       return (
                         <tr key={b.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                          <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 text-xs whitespace-nowrap">{new Date(b.booking_date).toLocaleDateString('id-ID')}</td>
+                          <td className="px-6 py-3 text-zinc-800 dark:text-zinc-200 text-xs whitespace-nowrap">{new Date(b.booking_date + 'T00:00:00').toLocaleDateString('id-ID')}</td>
                           <td className="px-4 py-3 text-zinc-800 dark:text-zinc-200 text-xs">{b.customer_name || '-'}</td>
                           <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 text-xs max-w-[200px] truncate" title={b.service_name}>{b.service_name}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-zinc-500 font-mono text-xs">{formatRp(serviceGross)}</td>

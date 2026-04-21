@@ -26,7 +26,7 @@ type Discount = { id: string; type: string; value: number; value_type: string; m
 type BookingRow = { customer_id: string; status: string; final_price: number | null; price: number | null; booking_date: string; };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
-const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+const formatDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 
 function TierBadge({ count, discounts }: { count: number; discounts: Discount[] }) {
   const loyal = discounts
@@ -145,9 +145,10 @@ export default function CustomersPage() {
         countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + (r.status === 'Completed' ? 1 : 0);
         if (r.status === 'Completed') {
           spendMap[r.customer_id] = (spendMap[r.customer_id] ?? 0) + (r.final_price ?? r.price ?? 0);
-        }
-        if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
-          lastMap[r.customer_id] = r.booking_date;
+          // Audit #3 Bug #3: only track last_visit from Completed bookings
+          if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
+            lastMap[r.customer_id] = r.booking_date;
+          }
         }
       });
       setCustomers(custs.map(c => ({
@@ -222,13 +223,15 @@ export default function CustomersPage() {
 
   const getEligiblePromo = (c: Customer): Discount | null => {
     const nextCount = (c.effective_count ?? 0) + 1;
+    // Audit #3 Bug #4: use >= (minimum visit threshold) not modulo to avoid recurring triggers
     const loyal = discounts
-      .filter(d => d.type === 'loyal' && d.min_orders && nextCount % d.min_orders === 0)
+      .filter(d => d.type === 'loyal' && d.min_orders && nextCount >= d.min_orders)
       .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))[0];
     if (loyal) return loyal;
 
     if (c.last_visit) {
-      const days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+      // Audit #3 Bug #5: use T00:00:00 for consistent local timezone parsing
+      const days = Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000);
       if (days >= reEngageDays) {
         const rc = discounts.find(d => d.type === 'returning_customer');
         if (rc) return rc;
@@ -239,7 +242,8 @@ export default function CustomersPage() {
 
   const isDormant = (c: Customer) => {
     if (!c.last_visit) return false;
-    const days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+    // Audit #3 Bug #5: use T00:00:00 to avoid UTC midnight timezone shift
+    const days = Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000);
     return days >= reEngageDays;
   };
 

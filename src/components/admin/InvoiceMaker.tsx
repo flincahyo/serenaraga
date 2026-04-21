@@ -52,6 +52,8 @@ function isDiscountValid(d: Discount): boolean {
   const today = new Date().toISOString().split('T')[0];
   if (d.valid_from && today < d.valid_from) return false;
   if (d.valid_to   && today > d.valid_to)   return false;
+  // Audit #3 Bug #3: enforce max_uses limit
+  if (d.max_uses !== null && d.uses_count >= d.max_uses) return false;
   return true;
 }
 
@@ -61,6 +63,8 @@ const InvoiceMaker = () => {
   const isOwner = user?.role !== 'cashier';
 
   const invoiceRef = useRef<HTMLDivElement>(null);
+  // Audit #2 Bug #1: prevent double-completion if kasir clicks both Download & WA
+  const hasSavedRef = useRef(false);
   const [invoiceNumber] = useState(genInvoiceNo);
   const [customerName, setCustomerName]   = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -118,6 +122,9 @@ const InvoiceMaker = () => {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Reset save guard whenever a new booking is selected
+  useEffect(() => { hasSavedRef.current = false; }, [selectedBookingId]);
 
   // ── Customer lookup by WA ──
   const lookupCustomer = useCallback(async (phone: string) => {
@@ -364,6 +371,9 @@ const InvoiceMaker = () => {
   // ── Save: complete booking + record discounts ──
   const completeAndSave = async () => {
     if (!selectedBookingId) return;
+    // Audit #2 Bug #1: double-completion guard
+    if (hasSavedRef.current) return;
+    hasSavedRef.current = true;
     setCompleting(true);
     let clean = customerPhone.replace(/\D/g, '');
     if (clean.startsWith('0')) clean = '62' + clean.substring(1);
@@ -395,22 +405,32 @@ const InvoiceMaker = () => {
       price: grossTotal + Number(transportFee || 0),
     }).eq('id', selectedBookingId);
 
-    // 3. Update booking_items per item
+    // 3. Update/insert booking_items per item
     const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
     for (const item of items) {
+      const itemSharedDiscount = item.price * sharedDiscountPerGross;
+      const itemTerapisBase = Math.max(0, item.price - itemSharedDiscount);
+      let pct = commissionPct;
+      if (item.therapist_id) {
+        const t = therapists.find(x => x.id === item.therapist_id);
+        if (t) pct = t.commission_pct;
+      }
+      const itemCommission = Math.round(itemTerapisBase * pct / 100);
       if (item.db_id) {
-        const itemSharedDiscount = item.price * sharedDiscountPerGross;
-        const itemTerapisBase = Math.max(0, item.price - itemSharedDiscount);
-        let pct = commissionPct;
-        if (item.therapist_id) {
-          const t = therapists.find(x => x.id === item.therapist_id);
-          if (t) pct = t.commission_pct;
-        }
-        const itemCommission = Math.round(itemTerapisBase * pct / 100);
+        // UPDATE existing item
         await supabase.from('booking_items').update({
           therapist_id: item.therapist_id || null,
           commission_earned: itemCommission
         }).eq('id', item.db_id);
+      } else {
+        // Audit #2 Bug #6: INSERT items that have no db_id yet
+        await supabase.from('booking_items').insert({
+          booking_id: selectedBookingId,
+          service_name: item.name,
+          price: item.price,
+          therapist_id: item.therapist_id || null,
+          commission_earned: itemCommission,
+        });
       }
     }
 
@@ -427,7 +447,8 @@ const InvoiceMaker = () => {
       });
     }
 
-    // 4. Insert booking_discounts
+    // 4. Audit #2 Bug #2: DELETE existing discounts first to prevent duplicates on re-complete
+    await supabase.from('booking_discounts').delete().eq('booking_id', selectedBookingId);
     if (appliedDiscounts.length > 0) {
       await supabase.from('booking_discounts').insert(
         appliedDiscounts.map(a => ({
@@ -440,15 +461,18 @@ const InvoiceMaker = () => {
           is_owner_borne: a.is_owner_borne,
         }))
       );
-      // Increment uses_count (manual update — no RPC needed)
+      // Audit #2 Bug #4: re-fetch from DB before increment to avoid stale read race condition
       for (const a of appliedDiscounts) {
         if (a.discountId.startsWith('custom_')) continue;
-        const current = allDiscounts.find(d => d.id === a.discountId)?.uses_count ?? 0;
+        const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', a.discountId).single();
         await supabase.from('discounts')
-          .update({ uses_count: current + 1 })
+          .update({ uses_count: (fresh?.uses_count ?? 0) + 1 })
           .eq('id', a.discountId);
       }
     }
+
+    // Audit #2 Bug #5: refresh booking list so completed booking disappears from dropdown
+    await fetchAll();
     setCompleting(false);
   };
 

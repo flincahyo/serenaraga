@@ -44,7 +44,6 @@ export default function DashboardPage() {
   const [bookings, setBookings]       = useState<Booking[]>([]);
   const [weeklyData, setWeeklyData]   = useState<{ day:string; bookings:number }[]>([]);
   const [commissionPct, setCommissionPct] = useState(30);
-  const [bhpPct, setBhpPct]           = useState(10);
 
   const [calMonth, setCalMonth] = useState(() => { const {y,m} = getWIBParts(new Date()); return {y,m}; });
   const [selectedDate, setSelectedDate]   = useState<string | null>(null);
@@ -57,7 +56,7 @@ export default function DashboardPage() {
     const now = new Date();
     const [{ data: allBookings }, { data: settingsRows }] = await Promise.all([
       supabase.from('bookings').select('*, booking_items(service_name, price, commission_earned)').order('booking_date', { ascending: false }),
-      supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct', 'bhp_pct']),
+      supabase.from('settings').select('key, value').in('key', ['terapis_commission_pct']),
     ]);
     if (allBookings) {
       setBookings(allBookings);
@@ -74,7 +73,6 @@ export default function DashboardPage() {
     if (settingsRows) {
       settingsRows.forEach(({ key, value }) => {
         if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
-        if (key === 'bhp_pct') setBhpPct(Number(value) || 10);
       });
     }
     setLoading(false);
@@ -279,7 +277,7 @@ export default function DashboardPage() {
               <div className="h-1.5 flex">
                 <div className="bg-amber-400" style={{ width:`${commissionPct}%` }} />
                 {bhpActual > 0 && grossRevenue > 0 && (
-                  <div className="bg-blue-400" style={{ width:`${Math.min(100-commissionPct, Math.round(bhpActual/grossRevenue*100))}%` }} />
+                  <div className="bg-blue-400" style={{ width:`${Math.min(100-commissionPct, grossRevenue > 0 ? Math.round(bhpActual/grossRevenue*100) : 0)}%` }} />
                 )}
                 <div className="bg-emerald-500 flex-1" />
               </div>

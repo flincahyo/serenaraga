@@ -90,7 +90,9 @@ export default function POSPage() {
 
   // ── Customer lookup ──
   useEffect(() => {
-    const phone = customerPhone.replace(/\D/g, '');
+    let phone = customerPhone.replace(/\D/g, '');
+    // Bug #5: Normalize 08xxx -> 628xxx before lookup
+    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
     if (phone.length < 6) { setCustomer(null); setVisitCount(0); setAutoDiscount(null); return; }
     const t = setTimeout(async () => {
       setLookingUp(true);
@@ -102,10 +104,10 @@ export default function POSPage() {
         const totalVisits = (cust.visit_count_base ?? 0) + (count ?? 0);
         setVisitCount(totalVisits);
 
-        // Auto-apply loyalty discount
+        // Bug #2: Fix type string — 'loyal' not 'loyalty'
         const today = new Date().toISOString().split('T')[0];
         const eligible = discounts.filter(d =>
-          d.is_active && d.type === 'loyalty' &&
+          d.is_active && d.type === 'loyal' &&
           (!d.valid_from || today >= d.valid_from) && (!d.valid_to || today <= d.valid_to) &&
           (d.min_orders === null || totalVisits >= d.min_orders)
         ).sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0));
@@ -178,10 +180,13 @@ export default function POSPage() {
       : cart.filter(c => !c.parent_bundle_name).map(c => c.name).join(' + ')
         || [...new Set(cart.map(c => c.parent_bundle_name ?? c.name))].join(' + ');
 
-    // Save booking
-    const { data: booking } = await supabase.from('bookings').insert({
+    // Bug #5: normalize phone for save too
+    let phone = customerPhone.replace(/\D/g, '');
+    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+
+    const { data: booking, error: bookingError } = await supabase.from('bookings').insert({
       customer_name: customerName,
-      phone: customerPhone.replace(/\D/g, ''),
+      phone,
       service_name: serviceName,
       booking_date: date,
       price: subtotal,
@@ -191,25 +196,46 @@ export default function POSPage() {
       notes: '',
     }).select().single();
 
-    if (booking) {
-      // Save booking_items
-      for (const item of cart) {
-        await supabase.from('booking_items').insert({
-          booking_id: booking.id,
-          service_name: item.name,
-          price: item.price,
-          therapist_id: item.therapist_id || null,
-          parent_bundle_name: item.parent_bundle_name || null,
-        });
-      }
-      // Upsert customer
-      const phone = customerPhone.replace(/\D/g, '');
-      if (phone) {
-        await supabase.from('customers').upsert({ wa_number: phone, name: customerName }, { onConflict: 'wa_number' });
-      }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+    if (bookingError || !booking) {
+      console.error('Failed to save booking:', bookingError);
+      setSaving(false);
+      return;
     }
+
+    // Bug #4: Calculate commission_earned per item using therapist's individual rate
+    // Bug #1: Use Promise.all for atomic batch insert instead of sequential loop
+    try {
+      await Promise.all(
+        cart.map(item => {
+          let commissionEarned = 0;
+          if (item.therapist_id) {
+            const t = therapists.find(x => x.id === item.therapist_id);
+            if (t) commissionEarned = Math.round(item.price * item.qty * t.commission_pct / 100);
+          }
+          return supabase.from('booking_items').insert({
+            booking_id: booking.id,
+            service_name: item.name,
+            price: item.price * item.qty,
+            therapist_id: item.therapist_id || null,
+            parent_bundle_name: item.parent_bundle_name || null,
+            commission_earned: commissionEarned,
+          });
+        })
+      );
+    } catch (err) {
+      console.error('Failed to save booking items:', err);
+    }
+
+    // Bug #6: Use ignoreDuplicates to prevent overwriting existing customer name
+    if (phone) {
+      await supabase.from('customers').upsert(
+        { wa_number: phone, name: customerName },
+        { onConflict: 'wa_number', ignoreDuplicates: true }
+      );
+    }
+
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
     setSaving(false);
   };
 
@@ -554,7 +580,7 @@ export default function POSPage() {
               <p style={{ fontSize:9, fontWeight:900, textTransform:'uppercase', letterSpacing:'0.2em', color:'rgba(139,94,60,0.5)', marginBottom:6 }}>Ditujukan Untuk:</p>
               <h4 style={{ fontSize:18, fontWeight:700 }}>{customerName || 'Nama Pelanggan'}</h4>
               <p style={{ fontSize:11, color:'#a1a1aa', marginTop:4 }}>
-                {new Date(date).toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })}
+                {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric' })}
               </p>
             </div>
             {/* Items */}

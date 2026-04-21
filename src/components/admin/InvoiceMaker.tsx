@@ -807,7 +807,7 @@ const InvoiceMaker = () => {
               <p style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(139,94,60,0.5)', marginBottom: 6 }}>Ditujukan Untuk:</p>
               <h4 style={{ fontSize: 18, fontWeight: 700 }}>{customerName || 'Nama Pelanggan'}</h4>
               <p style={{ fontSize: 11, color: '#a1a1aa', marginTop: 4 }}>
-                {new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
             </div>
 

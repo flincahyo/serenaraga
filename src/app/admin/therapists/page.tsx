@@ -355,7 +355,7 @@ export default function TherapistsPage() {
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: '10px', color: '#71717a', margin: '0 0 2px' }}>PERIODE</p>
                         <p style={{ fontSize: '12px', fontWeight: 600, margin: 0 }}>
-                          {payoutStart === payoutEnd ? new Date(payoutStart).toLocaleDateString('id-ID') : `${new Date(payoutStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(payoutEnd).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`}
+                          {payoutStart === payoutEnd ? new Date(payoutStart + 'T00:00:00').toLocaleDateString('id-ID') : `${new Date(payoutStart + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(payoutEnd + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`}
                         </p>
                       </div>
                     </div>
@@ -375,13 +375,13 @@ export default function TherapistsPage() {
                                 </p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
                                   {(() => {
-                                    if (item.service_price <= 0) return `Tanggal: ${new Date(item.date).toLocaleDateString('id-ID')} • Hanya Transport`;
+                                    if (item.service_price <= 0) return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Hanya Transport`;
                                     const serviceCommission = item.commission_earned - item.transport_commission;
                                     const effectivePct = item.service_price > 0
                                       ? Math.round((serviceCommission / item.service_price) * 100)
                                       : payoutTherapist.commission_pct;
                                     const showNote = effectivePct !== payoutTherapist.commission_pct;
-                                    return `Tanggal: ${new Date(item.date).toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${effectivePct}%${showNote ? ` (std. ${payoutTherapist.commission_pct}%, ada penyesuaian diskon)` : ''}`;
+                                    return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${effectivePct}%${showNote ? ` (std. ${payoutTherapist.commission_pct}%, ada penyesuaian diskon)` : ''}`;
                                   })()}
                                 </p>
                               </div>

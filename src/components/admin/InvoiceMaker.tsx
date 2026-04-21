@@ -17,8 +17,9 @@ type Booking = {
 };
 type Discount = {
   id: string; name: string; type: string; value_type: string; value: number;
-  min_orders: number | null; is_active: boolean; valid_from: string | null; valid_to: string | null;
-  uses_count: number; is_owner_borne?: boolean;
+  min_orders: number | null; max_uses: number | null; uses_count: number;
+  is_active: boolean; valid_from: string | null; valid_to: string | null;
+  is_owner_borne?: boolean;
 };
 type AppliedDiscount = {
   discountId: string; label: string; value_type: string;

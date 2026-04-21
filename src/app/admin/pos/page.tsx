@@ -184,6 +184,18 @@ export default function POSPage() {
     let phone = customerPhone.replace(/\D/g, '');
     if (phone.startsWith('0')) phone = '62' + phone.substring(1);
 
+    // Fix #9: upsert customer FIRST so we get customer_id to link to booking
+    // This ensures walk-in POS visits count toward loyalty tier
+    let customerId: string | null = null;
+    if (phone && phone.length > 5) {
+      await supabase.from('customers').upsert(
+        { wa_number: phone, name: customerName },
+        { onConflict: 'wa_number', ignoreDuplicates: true }
+      );
+      const { data: cust } = await supabase.from('customers').select('id').eq('wa_number', phone).single();
+      customerId = cust?.id ?? null;
+    }
+
     const { data: booking, error: bookingError } = await supabase.from('bookings').insert({
       customer_name: customerName,
       phone,
@@ -194,6 +206,7 @@ export default function POSPage() {
       discount_total: discountAmount,
       status: 'Confirmed',
       notes: '',
+      customer_id: customerId, // Fix #9: link booking to customer for loyalty tracking
     }).select().single();
 
     if (bookingError || !booking) {
@@ -224,14 +237,6 @@ export default function POSPage() {
       );
     } catch (err) {
       console.error('Failed to save booking items:', err);
-    }
-
-    // Bug #6: Use ignoreDuplicates to prevent overwriting existing customer name
-    if (phone) {
-      await supabase.from('customers').upsert(
-        { wa_number: phone, name: customerName },
-        { onConflict: 'wa_number', ignoreDuplicates: true }
-      );
     }
 
     setSaved(true);

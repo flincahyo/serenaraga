@@ -157,7 +157,8 @@ export default function BookingsPage() {
 
   const saveBooking = async () => {
     const validItems = bookingItems.filter(i => i.service_name.trim());
-    if (!form.customer_name || validItems.length === 0) return;
+    // Fix #11: also require booking_date
+    if (!form.customer_name || validItems.length === 0 || !form.booking_date) return;
     setSaving(true);
 
     // BHP per item
@@ -259,6 +260,14 @@ export default function BookingsPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
+    // Fix #2: prevent silent deletion of Completed bookings that have commission earned
+    const target = bookings.find(b => b.id === deleteId);
+    if (target?.status === 'Completed') {
+      const confirmed = window.confirm(
+        `Booking ini berstatus COMPLETED dan komisi terapis mungkin sudah tercatat.\n\nMenghapus akan menyebabkan data laporan tidak balance.\n\nYakin ingin tetap menghapus?`
+      );
+      if (!confirmed) { setDeleteId(null); return; }
+    }
     setDeleting(true);
     await supabase.from('bookings').delete().eq('id', deleteId);
     setBookings(prev => prev.filter(b => b.id !== deleteId));
@@ -324,20 +333,31 @@ export default function BookingsPage() {
     window.open(`https://wa.me/${b.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const todayString = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const todayString    = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const tomorrowString = new Date(new Date().getTime() + 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
 
   const filtered = bookings
     .filter(b => {
       if (filterStatus === 'Semua') return true;
       if (filterStatus === 'Hari Ini') return b.booking_date === todayString;
+      if (filterStatus === 'Besok') return b.booking_date === tomorrowString;
       return b.status === filterStatus;
     })
     .filter(b => !search ||
       b.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       b.service_name?.toLowerCase().includes(search.toLowerCase()));
 
+  // Fix #7: bulk WA reminder for tomorrow's Confirmed bookings
+  const tomorrowConfirmed = bookings.filter(b => b.booking_date === tomorrowString && b.status === 'Confirmed');
+  const sendBulkReminder = () => {
+    tomorrowConfirmed.forEach((b, i) => {
+      setTimeout(() => sendWA(b), i * 600); // stagger 600ms to avoid popup blocker
+    });
+  };
+
   const counts = STATUS_OPTIONS.reduce((acc, s) => ({ ...acc, [s]: bookings.filter(b => b.status === s).length }), {} as Record<string, number>);
-  const todayCount = bookings.filter(b => b.booking_date === todayString).length;
+  const todayCount    = bookings.filter(b => b.booking_date === todayString).length;
+  const tomorrowCount = bookings.filter(b => b.booking_date === tomorrowString).length;
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
@@ -367,17 +387,33 @@ export default function BookingsPage() {
 
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {['Hari Ini', 'Semua', ...STATUS_OPTIONS].map(s => (
+        {['Hari Ini', 'Besok', 'Semua', ...STATUS_OPTIONS].map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               filterStatus === s
                 ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
                 : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}>
-            {s} {s === 'Hari Ini' ? `(${todayCount})` : s !== 'Semua' && counts[s] !== undefined ? `(${counts[s]})` : s === 'Semua' ? `(${bookings.length})` : ''}
+            {s}{s === 'Hari Ini' ? ` (${todayCount})` : s === 'Besok' ? ` (${tomorrowCount})` : s !== 'Semua' && counts[s] !== undefined ? ` (${counts[s]})` : s === 'Semua' ? ` (${bookings.length})` : ''}
           </button>
         ))}
       </div>
+
+      {/* Fix #7: Bulk WA Reminder for tomorrow's bookings */}
+      {tomorrowConfirmed.length > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+          <div className="flex items-center gap-2">
+            <MessageCircle size={14} className="text-emerald-600 shrink-0" />
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              {tomorrowConfirmed.length} booking besok belum direminder
+            </p>
+          </div>
+          <button onClick={sendBulkReminder}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors">
+            <MessageCircle size={12} /> Reminder Semua
+          </button>
+        </div>
+      )}
 
       {/* Search — only in list mode */}
       {viewMode === 'list' && (
@@ -640,7 +676,7 @@ export default function BookingsPage() {
             <div className="flex gap-3 pt-2">
               <button onClick={() => setShowForm(false)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
               <button onClick={saveBooking}
-                disabled={saving || !form.customer_name || bookingItems.every(i => !i.service_name)}
+                disabled={saving || !form.customer_name || !form.booking_date || bookingItems.every(i => !i.service_name)}
                 className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
                 {editId ? 'Update' : 'Simpan'}
@@ -662,6 +698,11 @@ export default function BookingsPage() {
               <h3 className="font-semibold text-zinc-900 dark:text-white">Hapus Booking?</h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 {bookings.find(b => b.id === deleteId)?.customer_name} — tindakan ini tidak bisa dibatalkan.
+                {bookings.find(b => b.id === deleteId)?.status === 'Completed' && (
+                  <span className="block mt-1 text-red-500 font-medium text-xs">
+                    ⚠ Booking ini sudah Completed — komisi terapis di laporan bisa tidak balance!
+                  </span>
+                )}
               </p>
               <div className="flex gap-3 w-full pt-2">
                 <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center">Batal</button>

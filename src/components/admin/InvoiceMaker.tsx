@@ -373,6 +373,17 @@ const InvoiceMaker = () => {
     if (!selectedBookingId) return;
     // Audit #2 Bug #1: double-completion guard
     if (hasSavedRef.current) return;
+
+    // Fix #15: verify current status from DB before proceeding
+    const { data: currentBooking } = await supabase
+      .from('bookings').select('status').eq('id', selectedBookingId).single();
+    if (currentBooking?.status === 'Completed') {
+      const confirmed = window.confirm(
+        'Booking ini sudah berstatus COMPLETED.\n\nMelanjutkan akan menimpa data invoice, komisi, dan diskon yang telah tersimpan.\n\nYakin ingin mengubah data?'
+      );
+      if (!confirmed) return;
+    }
+
     hasSavedRef.current = true;
     setCompleting(true);
     let clean = customerPhone.replace(/\D/g, '');

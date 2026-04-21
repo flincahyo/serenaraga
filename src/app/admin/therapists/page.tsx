@@ -374,7 +374,15 @@ export default function TherapistsPage() {
                                   {item.has_transport && <span style={{ color: '#059669', marginLeft: 4 }}>(+ Transport {formatRp(item.transport_commission)})</span>}
                                 </p>
                                 <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
-                                  Tanggal: {new Date(item.date).toLocaleDateString('id-ID')} • {item.service_price > 0 ? `Jasa: ${formatRp(item.service_price)} × ${payoutTherapist.commission_pct}%` : 'Hanya Transport'}
+                                  {(() => {
+                                    if (item.service_price <= 0) return `Tanggal: ${new Date(item.date).toLocaleDateString('id-ID')} • Hanya Transport`;
+                                    const serviceCommission = item.commission_earned - item.transport_commission;
+                                    const effectivePct = item.service_price > 0
+                                      ? Math.round((serviceCommission / item.service_price) * 100)
+                                      : payoutTherapist.commission_pct;
+                                    const showNote = effectivePct !== payoutTherapist.commission_pct;
+                                    return `Tanggal: ${new Date(item.date).toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${effectivePct}%${showNote ? ` (std. ${payoutTherapist.commission_pct}%, ada penyesuaian diskon)` : ''}`;
+                                  })()}
                                 </p>
                               </div>
                               <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>

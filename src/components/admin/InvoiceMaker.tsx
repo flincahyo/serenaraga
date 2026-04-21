@@ -323,7 +323,18 @@ const InvoiceMaker = () => {
   const finalTotal    = Math.max(0, grossTotal - totalDiscount) + Number(transportFee || 0);
   const terapisBase   = Math.max(0, grossTotal - sharedDiscountAmount);
   
-  const commissionServices = Math.round(terapisBase * commissionPct / 100);
+  // Per-item commission: use each item's assigned therapist pct, fallback to global commissionPct
+  const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
+  const commissionServices = items.reduce((sum, item) => {
+    const itemSharedDisc = item.price * sharedDiscountPerGross;
+    const itemBase = Math.max(0, item.price - itemSharedDisc);
+    let pct = commissionPct; // global fallback
+    if (item.therapist_id) {
+      const t = therapists.find(x => x.id === item.therapist_id);
+      if (t) pct = t.commission_pct;
+    }
+    return sum + Math.round(itemBase * pct / 100);
+  }, 0);
   const commissionTransport = Math.round(Number(transportFee || 0) * (transportPct / 100));
   const commission    = commissionServices + commissionTransport;
   const ownerNet      = finalTotal - commission;
@@ -720,10 +731,10 @@ const InvoiceMaker = () => {
               <span className="text-lg font-bold text-earth-primary font-mono">{formatRp(finalTotal)}</span>
             </div>
           )}
-          {isOwner && commissionPct > 0 && finalTotal > 0 && (
+          {isOwner && commission > 0 && finalTotal > 0 && (
             <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({commissionPct}%{Number(transportFee) > 0 ? ' + Transport' : ''})</span>
+                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({items.some(i => i.therapist_id && therapists.find(t => t.id === i.therapist_id)) ? 'per terapis' : `${commissionPct}%`}{Number(transportFee) > 0 ? ' + Transport' : ''})</span>
                 <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatRp(commission)}</span>
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">

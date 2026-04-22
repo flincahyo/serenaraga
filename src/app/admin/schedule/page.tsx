@@ -15,7 +15,19 @@ type DaySchedule = {
   visible: boolean;
 };
 
-const getNextDays = (count: number = 7): DaySchedule[] => {
+// Parse jam operasional dari teks settings, contoh: "Senin - Minggu, 08.00 - 21.00 WIB"
+// Returns "08:00 - 21:00" atau fallback jika gagal parse
+function parseOperationalTime(raw: string, fallback = '08:00 - 22:00'): string {
+  const matches = raw.match(/\b(\d{1,2})[.:](\d{2})\b/g);
+  if (!matches || matches.length < 2) return fallback;
+  const fmt = (t: string) => {
+    const norm = t.replace('.', ':');
+    return norm.length === 4 ? '0' + norm : norm;
+  };
+  return `${fmt(matches[0])} - ${fmt(matches[matches.length - 1])}`;
+}
+
+const getNextDays = (count: number = 7, defaultTimeText = '08:00 - 22:00'): DaySchedule[] => {
   const days: DaySchedule[] = [];
   const today = new Date();
 
@@ -35,8 +47,8 @@ const getNextDays = (count: number = 7): DaySchedule[] => {
       id: `day_${i}`,
       dateStr,
       label,
-      active: false,
-      timeText: '10:00 - 20:00',
+      active: true,           // default aktif (buka)
+      timeText: defaultTimeText, // default jam dari settings
       visible: true,
     });
   }
@@ -58,24 +70,36 @@ export default function SchedulePage() {
   const [editingTimeValue, setEditingTimeValue] = useState('');
 
   const [promos, setPromos] = useState<any[]>([]);
+  const [defaultTimeText, setDefaultTimeText] = useState('08:00 - 22:00');
 
   const previewRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
-    setSchedules(getNextDays(7));
+    const init = async () => {
+      // Fetch settings: promos + operational_hours
+      const [{ data: discData }, { data: settingsData }] = await Promise.all([
+        supabase.from('discounts').select('*').eq('is_active', true),
+        supabase.from('settings').select('key, value').in('key', ['operational_hours']),
+      ]);
+      if (discData) setPromos(discData);
 
-    const fetchPromos = async () => {
-      const { data } = await supabase.from('discounts').select('*').eq('is_active', true);
-      if (data) setPromos(data);
+      // Parse jam operasional dari settings
+      let timeText = '08:00 - 22:00';
+      if (settingsData) {
+        const row = settingsData.find(r => r.key === 'operational_hours');
+        if (row?.value) timeText = parseOperationalTime(row.value, '08:00 - 22:00');
+      }
+      setDefaultTimeText(timeText);
+      setSchedules(getNextDays(7, timeText));
       setLoading(false);
     };
-    fetchPromos();
+    init();
   }, []);
 
   // When weekMode changes, regenerate days whilst preserving existing edits
   const handleWeekModeChange = (mode: 1 | 2) => {
-    const newDays = getNextDays(mode === 2 ? 14 : 7);
+    const newDays = getNextDays(mode === 2 ? 14 : 7, defaultTimeText);
     setWeekMode(mode);
     // Merge: keep existing edits for days that overlap
     setSchedules(prev => {
@@ -161,7 +185,7 @@ export default function SchedulePage() {
 
         if (lineLower.includes('full')) {
           matchedDay.active = false;
-          matchedDay.timeText = '10:00 - 20:00';
+          matchedDay.timeText = defaultTimeText;
         } else {
           matchedDay.active = true;
 

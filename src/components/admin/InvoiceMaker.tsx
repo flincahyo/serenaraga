@@ -66,10 +66,10 @@ const InvoiceMaker = () => {
   const invoiceRef = useRef<HTMLDivElement>(null);
   // Audit #2 Bug #1: prevent double-completion if kasir clicks both Download & WA
   const hasSavedRef = useRef(false);
-  const [invoiceNumber] = useState(genInvoiceNo);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [customerName, setCustomerName]   = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [date, setDate]                   = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate]                   = useState('');
   const [items, setItems]                 = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
   const [services, setServices]           = useState<Service[]>([]);
   const [bookings, setBookings]           = useState<Booking[]>([]);
@@ -123,6 +123,13 @@ const InvoiceMaker = () => {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Initialize client-only values to prevent SSR hydration mismatch
+  // (Math.random and new Date() produce different values on server vs client)
+  useEffect(() => {
+    setInvoiceNumber(genInvoiceNo());
+    setDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }));
+  }, []);
 
   // Reset save guard whenever a new booking is selected
   useEffect(() => { hasSavedRef.current = false; }, [selectedBookingId]);

@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [calMonth, setCalMonth] = useState(() => { const {y,m} = getWIBParts(new Date()); return {y,m}; });
   const [selectedDate, setSelectedDate]   = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
+  const [summaryPeriod, setSummaryPeriod] = useState<'today' | 'month'>('today');
 
   const supabase = createClient();
 
@@ -95,6 +96,7 @@ export default function DashboardPage() {
     return Math.round(terapisBase * fallbackPct / 100);
   };
 
+  // Retain for cashier fallback view
   const grossRevenue   = completedMonth.reduce((s,b) => s+(b.final_price ?? b.price ?? 0), 0);
   const terapisCut     = completedMonth.reduce((s,b) => s + calcTerapisCut(b, commissionPct), 0);
   const bhpActual      = completedMonth.reduce((s,b) => s+(b.bhp_cost ?? 0), 0);
@@ -205,20 +207,46 @@ export default function DashboardPage() {
   }
 
   // ── Full Owner Dashboard ──
-  const stats = [
-    { label:'Booking Bulan Ini', value:String(monthBookings.length), icon:ShoppingBag,
-      change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
-    { label:'Pendapatan Kotor',  value:formatRp(grossRevenue), icon:TrendingUp, change:'', up:true, sub:'Transaksi selesai bulan ini' },
-    { label:'Penghasilan Bersih',value:formatRp(netRevenue),  icon:Wallet, change:`Owner ${ownerPct}%`, up:true, sub:'Setelah terapis & BHP' },
-    { label:'Jadwal Hari Ini',   value:String(todayBookings.length), icon:Star,
-      change: todayBookings.length > 0 ? `${todayActive.length} aktif` : '', up:true },
+  // ── Full Owner Dashboard ──
+  const activeBookings = summaryPeriod === 'today' ? todayBookings : monthBookings;
+  const filteredCompleted = activeBookings.filter(b => b.status === 'Completed');
+  const filteredPending = activeBookings.filter(b => b.status === 'Confirmed' || b.status === 'Pending');
+
+  const calcGross = filteredCompleted.reduce((s,b) => s+(b.final_price ?? b.price ?? 0), 0);
+  const calcTerapisCutTotal = filteredCompleted.reduce((s,b) => s + calcTerapisCut(b, commissionPct), 0);
+  const calcBhp = filteredCompleted.reduce((s,b) => s+(b.bhp_cost ?? 0), 0);
+  const calcNet = calcGross - calcTerapisCutTotal - calcBhp;
+  const calcProjected = filteredPending.reduce((s,b) => s+(b.final_price ?? b.price ?? 0), 0);
+
+  const stats = summaryPeriod === 'today' ? [
+    { label: 'Selesai Hari Ini', value: String(filteredCompleted.length), icon: ShoppingBag, change: `${filteredPending.length} menunggu`, up: true },
+    { label: 'Masuk (Completed)', value: formatRp(calcGross), icon: Wallet, change: '', up: true, sub: 'Pendapatan 100% Selesai' },
+    { label: 'Proyeksi (Aktif)', value: formatRp(calcProjected), icon: Clock, change: '', up: true, sub: 'Potensi dari jadwal sisa' },
+    { label: 'Estimasi Bersih (Net)', value: formatRp(calcNet), icon: TrendingUp, change: `Owner ${ownerPct}%`, up: true, sub: 'Setelah potong komisi & BHP' },
+  ] : [
+    { label: 'Booking Bulan Ini', value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
+    { label: 'Pendapatan Kotor', value: formatRp(calcGross), icon: TrendingUp, change: '', up: true, sub: 'Transaksi selesai bulan ini' },
+    { label: 'Penghasilan Bersih', value: formatRp(calcNet), icon: Wallet, change: `Owner ${ownerPct}%`, up: true, sub: 'Setelah terapis & BHP' },
+    { label: 'Jadwal Hari Ini', value: String(todayBookings.length), icon: Star, change: todayBookings.length > 0 ? `${todayActive.length} aktif` : '', up: true },
   ];
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Dashboard</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{today}</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Dashboard</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{today}</p>
+        </div>
+        <div className="flex bg-white dark:bg-zinc-900 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800 self-start sm:self-auto shadow-sm">
+          <button
+            onClick={() => setSummaryPeriod('today')}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'today' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+          >Hari Ini</button>
+          <button
+            onClick={() => setSummaryPeriod('month')}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'month' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+          >Bulan Ini</button>
+        </div>
       </div>
 
       {loading ? (
@@ -247,39 +275,39 @@ export default function DashboardPage() {
           </div>
 
           {/* Rincian Bagi Hasil */}
-          {grossRevenue > 0 && (
+          {calcGross > 0 && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
-                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Rincian Bagi Hasil Bulan Ini</p>
+                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Rincian Bagi Hasil {summaryPeriod === 'today' ? 'Hari Ini' : 'Bulan Ini'}</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-zinc-800">
                 <div className="px-5 py-4">
                   <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-wide mb-1">Pendapatan Kotor</p>
-                  <p className="text-lg font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(grossRevenue)}</p>
-                  <p className="text-[10px] text-zinc-400 mt-1">100%</p>
+                  <p className="text-lg font-bold text-zinc-900 dark:text-white tabular-nums">{formatRp(calcGross)}</p>
+                  <p className="text-[10px] text-zinc-400 mt-1">100% (Completed)</p>
                 </div>
                 <div className="px-5 py-4">
                   <p className="text-[10px] font-medium text-amber-500 uppercase tracking-wide mb-1">Bagian Terapis</p>
-                  <p className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">{formatRp(terapisCut)}</p>
-                  <p className="text-[10px] text-amber-400 mt-1">{commissionPct}%</p>
+                  <p className="text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">{formatRp(calcTerapisCutTotal)}</p>
+                  <p className="text-[10px] text-amber-400 mt-1">{commissionPct}% statis/dinamis</p>
                 </div>
                 <div className="px-5 py-4">
                   <p className="text-[10px] font-medium text-blue-500 uppercase tracking-wide mb-1">Modal BHP</p>
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{formatRp(bhpActual)}</p>
-                  <p className="text-[10px] text-blue-400 mt-1">dari data per booking</p>
+                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">{formatRp(calcBhp)}</p>
+                  <p className="text-[10px] text-blue-400 mt-1">Data riil per layanan</p>
                 </div>
                 <div className="px-5 py-4 bg-emerald-50/50 dark:bg-emerald-950/20">
                   <p className="text-[10px] font-medium text-emerald-600 uppercase tracking-wide mb-1">Penghasilan Bersih</p>
-                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatRp(netRevenue)}</p>
+                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatRp(calcNet)}</p>
                   <p className="text-[10px] text-emerald-500 mt-1">{ownerPct}%</p>
                 </div>
               </div>
               <div className="h-1.5 flex">
                 <div className="bg-amber-400" style={{ width:`${commissionPct}%` }} />
-                {bhpActual > 0 && grossRevenue > 0 && (
-                  <div className="bg-blue-400" style={{ width:`${Math.min(100-commissionPct, grossRevenue > 0 ? Math.round(bhpActual/grossRevenue*100) : 0)}%` }} />
+                {calcBhp > 0 && calcGross > 0 && (
+                  <div className="bg-blue-400" style={{ width:`${Math.min(100-commissionPct, calcGross > 0 ? Math.round(calcBhp/calcGross*100) : 0)}%` }} />
                 )}
-                <div className="bg-emerald-500 flex-1" />
+                <div className="bg-emerald-400 flex-1" />
               </div>
             </div>
           )}

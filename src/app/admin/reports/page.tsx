@@ -120,14 +120,60 @@ export default function ReportsPage() {
   const hasBhpData    = totalBhp > 0;
 
   const exportCSV = () => {
-    const headers = ['Bulan','Total Booking','Diskon','Pendapatan (after diskon)','Bagian Terapis','Modal BHP (aktual)','Penghasilan Bersih'];
-    const rows = monthlyData.map(d => [d.month, d.bookings, d.discount ?? 0, d.gross, d.terapis, d.bhp, d.net]);
-    const csv  = [headers, ...rows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const headers = [
+      'Tanggal Transaksi',
+      'ID Booking',
+      'Nama Pelanggan',
+      'Layanan Utama',
+      'Status',
+      'Harga Awal (Gross)',
+      'Total Diskon',
+      'Pendapatan Setelah Diskon (DPP / Net Sales)',
+      'Komisi Terapis & Transport',
+      'Biaya Bahan Habis Pakai (BHP)',
+      'Pendapatan Bersih Owner (Net Income)'
+    ];
+
+    const rows = bookings.map(b => {
+      const gross = b.price ?? 0;
+      const discount = b.discount_total ?? 0;
+      const netSales = b.final_price ?? gross;
+      const terapis = calcTerapisCutForTotal(b);
+      const bhp = b.bhp_cost ?? 0;
+      const ownerNet = netSales - terapis - bhp;
+
+      // Handle quotes for strings so commas don't break the CSV format
+      return [
+        `"${b.booking_date}"`,
+        `"${b.id}"`,
+        `"${b.customer_name ?? ''}"`,
+        `"${b.service_name ?? ''}"`,
+        `"${b.status}"`,
+        gross,
+        discount,
+        netSales,
+        terapis,
+        bhp,
+        ownerNet
+      ];
+    });
+
+    const totalRow = [
+      '"TOTAL"', '', '', '', '',
+      bookings.reduce((s, b) => s + (b.price ?? 0), 0),
+      bookings.reduce((s, b) => s + (b.discount_total ?? 0), 0),
+      bookings.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0),
+      bookings.reduce((s, b) => s + calcTerapisCutForTotal(b), 0),
+      bookings.reduce((s, b) => s + (b.bhp_cost ?? 0), 0),
+      bookings.reduce((s, b) => s + ((b.final_price ?? b.price ?? 0) - calcTerapisCutForTotal(b) - (b.bhp_cost ?? 0)), 0),
+    ];
+
+    const csvContent = '\uFEFF' + [headers, ...rows, [], totalRow].map(r => r.join(';')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `SerenaRaga_Report_${new Date().toISOString().slice(0, 7)}.csv`;
+    link.download = `SerenaRaga_Detailed_Report_${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -311,8 +357,10 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                     {[...bookings].reverse().map(b => {
                       const totalGross = b.price ?? 0;
-                      const transportItem = b.booking_items?.find(i => i.service_name === 'Biaya Transport');
-                      const transportPrice = transportItem ? Number(transportItem.price || 0) : 0;
+                      // Sum all transport items (can be multiple per-therapist entries)
+                      const transportPrice = b.booking_items
+                        ?.filter(i => i.service_name === 'Biaya Transport')
+                        .reduce((s, i) => s + Number(i.price || 0), 0) ?? 0;
                       const serviceGross = Math.max(0, totalGross - transportPrice);
 
                       const finalPrice = b.final_price ?? totalGross;

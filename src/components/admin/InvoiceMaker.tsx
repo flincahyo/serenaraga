@@ -4,12 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import {
   Download, Plus, Trash2, Loader2, Share2, Users, Percent,
-  Tag, X, Check, Award, Hash,
+  Tag, X, Check, Award, Hash, Bus
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 
 type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string; parent_bundle_name?: string };
+type TransportEntry = { id: string; therapist_id: string; fee: number | ''; pct: number };
 type Service = { id: string; name: string; price: number; details: string; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
 type Booking = {
   id: string; customer_name: string; phone: string;
@@ -79,9 +80,10 @@ const InvoiceMaker = () => {
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
   const [commissionPct, setCommissionPct] = useState(30);
   const [completing, setCompleting]       = useState(false);
-  const [transportFee, setTransportFee]   = useState<number | ''>('');
-  const [transportPct, setTransportPct]   = useState<number>(100);
+  const [transportEntries, setTransportEntries] = useState<TransportEntry[]>([{ id: '1', therapist_id: '', fee: '', pct: 100 }]);
   const [transportLabel, setTransportLabel] = useState('Biaya Transport Tambahan');
+  // Pool of therapist IDs allowed in transport dropdown. Empty = all therapists (manual mode).
+  const [transportTherapistPool, setTransportTherapistPool] = useState<string[]>([]);
 
   // Discount + customer state
   const [allDiscounts, setAllDiscounts]           = useState<Discount[]>([]);
@@ -202,7 +204,12 @@ const InvoiceMaker = () => {
   // ── Booking select ──
   const onBookingSelect = async (bookingId: string) => {
     setSelectedBookingId(bookingId);
-    if (!bookingId) return;
+    if (!bookingId) {
+      // Reset transport entries and pool when clearing booking selection
+      setTransportEntries([{ id: Date.now().toString(), therapist_id: '', fee: '', pct: 100 }]);
+      setTransportTherapistPool([]);
+      return;
+    }
     const bk = bookings.find(b => b.id === bookingId);
     if (!bk) return;
     setCustomerName(bk.customer_name);
@@ -215,7 +222,7 @@ const InvoiceMaker = () => {
 
     if (bkItems && bkItems.length > 0) {
       const normalItems = bkItems.filter(bi => bi.service_name !== 'Biaya Transport');
-      const transportItem = bkItems.find(bi => bi.service_name === 'Biaya Transport');
+      const transportItems = bkItems.filter(bi => bi.service_name === 'Biaya Transport');
       
       setItems(normalItems.map((bi, i) => {
         const svc = services.find(s => s.name === bi.service_name);
@@ -231,12 +238,25 @@ const InvoiceMaker = () => {
         };
       }));
 
-      if (transportItem && transportItem.price > 0) {
-        setTransportFee(transportItem.price);
-        setTransportPct(Math.round((transportItem.commission_earned / transportItem.price) * 100));
+      // Build transport therapist pool from assigned therapists in this booking
+      const assignedTherapistIds = [...new Set(
+        normalItems.map(bi => bi.therapist_id).filter(Boolean)
+      )] as string[];
+      setTransportTherapistPool(assignedTherapistIds);
+
+      if (transportItems.length > 0) {
+        setTransportEntries(transportItems.map(ti => ({
+          id: ti.id,
+          therapist_id: ti.therapist_id || '',
+          fee: '' as '',  // Always start empty — transport cost is situational per session
+          pct: 100,
+        })));
       } else {
-        setTransportFee('');
-        setTransportPct(100);
+        // Pre-create 1 entry per assigned therapist for convenience
+        const initialEntries = assignedTherapistIds.length > 0
+          ? assignedTherapistIds.map((tid, i) => ({ id: `${Date.now()}_${i}`, therapist_id: tid, fee: '' as '', pct: 100 }))
+          : [{ id: Date.now().toString(), therapist_id: '', fee: '' as '', pct: 100 }];
+        setTransportEntries(initialEntries);
       }
     } else {
       // Fallback for old single-service bookings
@@ -334,8 +354,11 @@ const InvoiceMaker = () => {
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
   const sharedDiscountAmount = appliedDiscounts.filter(a => !a.is_owner_borne).reduce((s, a) => s + a.amount, 0);
+
+  // Transport: sum all entries
+  const totalTransportFee = transportEntries.reduce((s, e) => s + Number(e.fee || 0), 0);
   
-  const finalTotal    = Math.max(0, grossTotal - totalDiscount) + Number(transportFee || 0);
+  const finalTotal    = Math.max(0, grossTotal - totalDiscount) + totalTransportFee;
   const terapisBase   = Math.max(0, grossTotal - sharedDiscountAmount);
   
   // Per-item commission: use each item's assigned therapist pct, fallback to global commissionPct
@@ -350,7 +373,11 @@ const InvoiceMaker = () => {
     }
     return sum + Math.round(itemBase * pct / 100);
   }, 0);
-  const commissionTransport = Math.round(Number(transportFee || 0) * (transportPct / 100));
+  // Transport commission: only if entry has a therapist assigned; no therapist → full goes to owner
+  const commissionTransport = transportEntries.reduce((s, e) => {
+    if (!e.therapist_id) return s;
+    return s + Math.round(Number(e.fee || 0) * (e.pct / 100));
+  }, 0);
   const commission    = commissionServices + commissionTransport;
   const ownerNet      = finalTotal - commission;
 
@@ -421,7 +448,7 @@ const InvoiceMaker = () => {
       customer_id: customerId,
       discount_total: totalDiscount,
       final_price: finalTotal,
-      price: grossTotal + Number(transportFee || 0),
+      price: grossTotal + totalTransportFee,
     }).eq('id', selectedBookingId);
 
     // 3. Update/insert booking_items per item
@@ -454,16 +481,21 @@ const InvoiceMaker = () => {
     }
 
     await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
-    if (Number(transportFee) > 0) {
-      const primaryTherapistId = items.find(i => i.therapist_id)?.therapist_id || null;
-      await supabase.from('booking_items').insert({
-        booking_id: selectedBookingId,
-        service_name: 'Biaya Transport',
-        price: Number(transportFee),
-        commission_earned: commissionTransport,
-        therapist_id: primaryTherapistId,
-        sort_order: 999
-      });
+    for (const entry of transportEntries) {
+      if (Number(entry.fee) > 0) {
+        // No therapist assigned → commission_earned = 0 (full transport amount to owner)
+        const entryCommission = entry.therapist_id
+          ? Math.round(Number(entry.fee) * (entry.pct / 100))
+          : 0;
+        await supabase.from('booking_items').insert({
+          booking_id: selectedBookingId,
+          service_name: 'Biaya Transport',
+          price: Number(entry.fee),
+          commission_earned: entryCommission,
+          therapist_id: entry.therapist_id || null,
+          sort_order: 999,
+        });
+      }
     }
 
     // 4. Audit #2 Bug #2: DELETE existing discounts first to prevent duplicates on re-complete
@@ -733,21 +765,77 @@ const InvoiceMaker = () => {
           </div>
         </div>
 
-        {/* Transport Fee */}
-        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
-          <input type="text" value={transportLabel} onChange={e => setTransportLabel(e.target.value)} className="bg-transparent text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-2 block outline-none border-b border-dashed border-zinc-300 dark:border-zinc-600 hover:border-earth-primary focus:border-earth-primary w-fit pb-0.5" />
-          <div className="flex gap-3">
-             <input type="number" placeholder="Contoh: 15000" value={transportFee} onChange={e => setTransportFee(e.target.value === '' ? '' : Number(e.target.value))} className="admin-input text-xs font-mono flex-1" />
-             {isOwner && (
-               <div className="w-[180px] flex items-center justify-between gap-1 bg-white dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                 <span className="text-[10px] text-zinc-500 font-medium whitespace-nowrap">Jatah Terapis:</span>
-                 <div className="flex items-center">
-                   <input type="number" max={100} min={0} value={transportPct} onChange={e => setTransportPct(Number(e.target.value))} className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[45px] outline-none" />
-                   <span className="text-[10px] text-zinc-400 font-bold ml-0.5">%</span>
-                 </div>
-               </div>
-             )}
+        {/* Transport Fee — per terapis */}
+        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <input type="text" value={transportLabel} onChange={e => setTransportLabel(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-zinc-600 dark:text-zinc-300 outline-none border-b border-dashed border-zinc-300 dark:border-zinc-600 hover:border-earth-primary focus:border-earth-primary w-fit pb-0.5" />
+            {totalTransportFee > 0 && (
+              <span className="text-[10px] text-earth-primary font-mono font-semibold">
+                Total: Rp {totalTransportFee.toLocaleString('id-ID')}
+              </span>
+            )}
           </div>
+          <div className="space-y-2">
+            {transportEntries.map((entry) => {
+              // Therapists available in pool (booking-filtered or all)
+              const poolTherapists = transportTherapistPool.length > 0
+                ? therapists.filter(t => transportTherapistPool.includes(t.id))
+                : therapists;
+              // Exclude therapists already selected in OTHER entries (prevent duplicates)
+              const usedIds = transportEntries
+                .filter(te => te.id !== entry.id && te.therapist_id)
+                .map(te => te.therapist_id);
+              const availableTherapists = poolTherapists.filter(t => !usedIds.includes(t.id));
+              return (
+              <div key={entry.id} className="flex gap-2 items-center">
+                <select
+                  value={entry.therapist_id}
+                  onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, therapist_id: e.target.value } : te))}
+                  className="admin-input text-xs flex-1 min-w-0"
+                >
+                  <option value="">→ Ke Owner</option>
+                  {availableTherapists.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  {/* Show current value even if not in pool (e.g. re-loaded from DB) */}
+                  {entry.therapist_id && !availableTherapists.find(t => t.id === entry.therapist_id) && (() => {
+                    const t = therapists.find(x => x.id === entry.therapist_id);
+                    return t ? <option key={t.id} value={t.id}>{t.name}</option> : null;
+                  })()}
+                </select>
+                <input
+                  type="number" placeholder="Nominal"
+                  value={entry.fee}
+                  onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, fee: e.target.value === '' ? '' : Number(e.target.value) } : te))}
+                  className="admin-input text-xs font-mono w-[110px] text-right"
+                />
+                {isOwner && entry.therapist_id && (
+                  <div className="flex items-center gap-0.5 bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shrink-0">
+                    <input
+                      type="number" max={100} min={0} value={entry.pct}
+                      onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, pct: Number(e.target.value) } : te))}
+                      className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[35px] outline-none"
+                    />
+                    <span className="text-[10px] text-zinc-400 font-bold">%</span>
+                  </div>
+                )}
+                {transportEntries.length > 1 && (
+                  <button
+                    onClick={() => setTransportEntries(prev => prev.filter(te => te.id !== entry.id))}
+                    className="text-red-400 hover:text-red-500 p-1 shrink-0"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            );
+            })}
+          </div>
+          <button
+            onClick={() => setTransportEntries(prev => [...prev, { id: Date.now().toString(), therapist_id: '', fee: '', pct: 100 }])}
+            className="text-xs text-earth-primary font-semibold hover:underline flex items-center gap-1"
+          >
+            <Plus size={12} /> Tambah Transport Lain
+          </button>
         </div>
 
         {/* Summary + Commission breakdown */}
@@ -777,7 +865,7 @@ const InvoiceMaker = () => {
           {isOwner && commission > 0 && finalTotal > 0 && (
             <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
               <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({items.some(i => i.therapist_id && therapists.find(t => t.id === i.therapist_id)) ? 'per terapis' : `${commissionPct}%`}{Number(transportFee) > 0 ? ' + Transport' : ''})</span>
+                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({items.some(i => i.therapist_id && therapists.find(t => t.id === i.therapist_id)) ? 'per terapis' : `${commissionPct}%`}{totalTransportFee > 0 ? ' + Transport' : ''})</span>
                 <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatRp(commission)}</span>
               </div>
               <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
@@ -826,9 +914,20 @@ const InvoiceMaker = () => {
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest px-1">Preview Invoice</h3>
         <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg">
-          <div ref={invoiceRef} className="bg-[#FDFBF7] p-10 text-zinc-900 font-sans" style={{ width: 480, minHeight: 680 }}>
+          <div ref={invoiceRef} className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden" style={{ width: 480, minHeight: 680 }}>
+            {/* Top Accent Strip */}
+            <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
+            
+            {/* Watermark Logo */}
+            <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -translate-y-24">
+              <img src="/serenalogo2.svg" alt="watermark" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
+            </div>
+
+            {/* Content Container */}
+            <div className="relative z-10 p-10 mt-2">
+            
             {/* Header */}
-            <div className="flex justify-between items-start mb-14">
+            <div className="flex justify-between items-start mb-12">
               <div>
                 <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
                   <img 
@@ -840,23 +939,23 @@ const InvoiceMaker = () => {
                 <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
               </div>
               <div className="text-right">
-                <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8 }}>INVOICE</div>
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.15em' }}>{invoiceNumber}</p>
+                <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8, letterSpacing: '0.1em' }}>INVOICE</div>
+                <div className="font-mono text-[10px] font-bold text-zinc-500">{invoiceNumber}</div>
+                <div className="text-[9px] font-medium text-zinc-400 mt-1">
+                  {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
               </div>
             </div>
 
             {/* Bill To */}
-            <div style={{ borderLeft: '4px solid #8B5E3C', paddingLeft: 20, marginBottom: 40 }}>
-              <p style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(139,94,60,0.5)', marginBottom: 6 }}>Ditujukan Untuk:</p>
-              <h4 style={{ fontSize: 18, fontWeight: 700 }}>{customerName || 'Nama Pelanggan'}</h4>
-              <p style={{ fontSize: 11, color: '#a1a1aa', marginTop: 4 }}>
-                {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
+            <div style={{ borderLeft: '3px solid #8B5E3C', paddingLeft: 16, marginBottom: 40 }}>
+              <p style={{ fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#8B5E3C', opacity: 0.7, marginBottom: 4 }}>Ditujukan Untuk:</p>
+              <h4 style={{ fontSize: 20, fontWeight: 800, color: '#27272a', letterSpacing: '-0.02em' }}>{customerName || 'Nama Pelanggan'}</h4>
             </div>
 
             {/* Items */}
             <div style={{ marginBottom: 40 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f4f4f5', paddingBottom: 10, marginBottom: 14, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e4e4e7', paddingBottom: 10, marginBottom: 14, fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
                 <span>Item &amp; Layanan</span><span>Harga</span>
               </div>
               {Object.values(
@@ -882,28 +981,35 @@ const InvoiceMaker = () => {
                   return acc;
                 }, {} as Record<string, Item>)
               ).map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottom: '1px dashed #e4e4e7' }}>
                   <div>
                     <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>
                     {item.details && <p style={{ fontSize: 9, color: '#71717a', lineHeight: 1.3, maxWidth: 260 }}>{item.details}</p>}
                   </div>
-                  <p style={{ fontWeight: 700, fontSize: 13 }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
+                  <p style={{ fontWeight: 700, fontSize: 13, color: '#3f3f46' }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
                 </div>
               ))}
 
-              {Number(transportFee) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                  <div>
-                    <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11, marginBottom: 2 }}>{transportLabel}</p>
+              {totalTransportFee > 0 && (() => {
+                const tCount = transportEntries.filter(e => Number(e.fee) > 0 && e.therapist_id).length;
+                const suffix = tCount === 1 ? ' (1 Terapis)' : tCount > 1 ? ` (${tCount} Terapis)` : '';
+                return (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '10px 12px', background: 'rgba(139,94,60,0.06)', borderRadius: 8, border: '1px solid rgba(139,94,60,0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Bus size={13} color="#8B5E3C" /> 
+                      <p style={{ fontWeight: 600, color: '#8B5E3C', fontSize: 11, letterSpacing: '0.02em' }}>
+                        {transportLabel}{suffix}
+                      </p>
+                    </div>
+                    <p style={{ fontWeight: 700, color: '#8B5E3C', fontSize: 12 }}>Rp {totalTransportFee.toLocaleString('id-ID')}</p>
                   </div>
-                  <p style={{ fontWeight: 600, color: '#a1a1aa', fontSize: 11 }}>Rp {Number(transportFee).toLocaleString('id-ID')}</p>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Discount lines */}
               <div style={{ marginTop: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: appliedDiscounts.length > 0 ? 6 : 10 }}>
-                  <span>Subtotal</span><span>Rp {(grossTotal + Number(transportFee || 0)).toLocaleString('id-ID')}</span>
+                  <span>Subtotal</span><span>Rp {(grossTotal + totalTransportFee).toLocaleString('id-ID')}</span>
                 </div>
                 {appliedDiscounts.length > 0 && (
                    <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#059669', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -917,18 +1023,27 @@ const InvoiceMaker = () => {
                   </div>
                 ))}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: '#8B5E3C', borderRadius: 12, color: '#fff', marginTop: 10 }}>
-                  <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Total Bayar</span>
-                  <span style={{ fontSize: 18, fontWeight: 700, fontStyle: 'italic' }}>Rp {finalTotal.toLocaleString('id-ID')}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#8B5E3C', borderRadius: '12px 12px 12px 0', color: '#fff', marginTop: 14, boxShadow: '0 4px 12px rgba(139,94,60,0.2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.3)' }}></div>
+                    <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.9)' }}>Total Bayar</span>
+                  </div>
+                  <span style={{ fontSize: 20, fontWeight: 700, fontStyle: 'italic', letterSpacing: '0.02em' }}>Rp {finalTotal.toLocaleString('id-ID')}</span>
                 </div>
               </div>
             </div>
 
             {/* Footer */}
-            <div style={{ textAlign: 'center', paddingTop: 20, borderTop: '1px solid #f4f4f5' }}>
-              <p style={{ fontSize: 11, fontStyle: 'italic', color: '#a1a1aa' }}>{invoiceFooter}</p>
-              <p style={{ fontSize: 9, fontWeight: 700, color: '#8B5E3C', textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: 8 }}>{invoiceSocial}</p>
+            <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px solid #f4f4f5', paddingTop: 24, paddingBottom: 10 }}>
+              <p style={{ fontSize: 11.5, fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: 16, whiteSpace: 'nowrap' }}>"{invoiceFooter}"</p>
+              <div style={{ display: 'inline-block', background: 'rgba(139,94,60,0.06)', padding: '8px 16px', borderRadius: 100, border: '1px solid rgba(139,94,60,0.1)' }}>
+                <p style={{ fontSize: 9, fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.15em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  {invoiceSocial}
+                </p>
+              </div>
             </div>
+            
+            </div> {/* End of Content Container */}
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Share2, Image as ImageIcon, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste, Calendar, Pencil, Check } from 'lucide-react';
+import { Share2, Image as ImageIcon, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste, Calendar, Pencil, Check, ChevronDown, ChevronUp, CheckCircle2, Ban } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
@@ -27,15 +27,19 @@ function parseOperationalTime(raw: string, fallback = '08:00 - 22:00'): string {
   return `${fmt(matches[0])} - ${fmt(matches[matches.length - 1])}`;
 }
 
-const getNextDays = (count: number = 7, defaultTimeText = '08:00 - 22:00'): DaySchedule[] => {
+const getDaysInRange = (startStr: string, endStr: string, defaultTimeText = '08:00 - 22:00'): DaySchedule[] => {
   const days: DaySchedule[] = [];
-  const today = new Date();
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+  
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return days;
+  
+  // limit to max 14 days to prevent UI breaking
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays > 13) end.setDate(start.getDate() + 13);
 
-  for (let i = 0; i < count; i++) {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-
-    // Format: "Rabu, 15 April"
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const weekday = d.toLocaleDateString('id-ID', { weekday: 'long' });
     const dayNum = d.getDate();
     const month = d.toLocaleDateString('id-ID', { month: 'long' });
@@ -44,11 +48,11 @@ const getNextDays = (count: number = 7, defaultTimeText = '08:00 - 22:00'): DayS
     const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
 
     days.push({
-      id: `day_${i}`,
+      id: `day_${dateStr}`,
       dateStr,
       label,
-      active: true,           // default aktif (buka)
-      timeText: defaultTimeText, // default jam dari settings
+      active: true,
+      timeText: defaultTimeText,
       visible: true,
     });
   }
@@ -61,7 +65,13 @@ export default function SchedulePage() {
   const [generating, setGenerating] = useState(false);
   const [promoNote, setPromoNote] = useState(' Dapatkan diskon spesial:\n• 5% untuk New Customer\n• 10% untuk Loyal Customer (min. 10x order)');
   const [pasteText, setPasteText] = useState('');
-  const [weekMode, setWeekMode] = useState<1 | 2>(1);
+  const [isSmartPasteOpen, setIsSmartPasteOpen] = useState(false);
+  const [startDate, setStartDate] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }));
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 13); // Default 14 days (today + 13)
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  });
+  const [weekMode, setWeekMode] = useState<1 | 2>(2);
   // inline canvas editing — label
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editingLabelValue, setEditingLabelValue] = useState('');
@@ -71,41 +81,71 @@ export default function SchedulePage() {
 
   const [promos, setPromos] = useState<any[]>([]);
   const [defaultTimeText, setDefaultTimeText] = useState('08:00 - 22:00');
+  const [waNumber, setWaNumber] = useState('');
+  const [socialText, setSocialText] = useState('serena.raga');
 
   const previewRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
   useEffect(() => {
     const init = async () => {
-      // Fetch settings: promos + operational_hours
+      // Fetch settings: promos + operational_hours + WA + social
       const [{ data: discData }, { data: settingsData }] = await Promise.all([
         supabase.from('discounts').select('*').eq('is_active', true),
-        supabase.from('settings').select('key, value').in('key', ['operational_hours']),
+        supabase.from('settings').select('key, value').in('key', ['operational_hours', 'whatsapp_number', 'invoice_social_text']),
       ]);
       if (discData) setPromos(discData);
 
-      // Parse jam operasional dari settings
+      // Parse settings
       let timeText = '08:00 - 22:00';
       if (settingsData) {
-        const row = settingsData.find(r => r.key === 'operational_hours');
-        if (row?.value) timeText = parseOperationalTime(row.value, '08:00 - 22:00');
+        const ohOpt = settingsData.find(r => r.key === 'operational_hours');
+        if (ohOpt?.value) timeText = parseOperationalTime(ohOpt.value, '08:00 - 22:00');
+        
+        const waOpt = settingsData.find(r => r.key === 'whatsapp_number');
+        if (waOpt?.value) setWaNumber(waOpt.value);
+
+        const socOpt = settingsData.find(r => r.key === 'invoice_social_text');
+        if (socOpt?.value) {
+          // Bersihkan teks default dari settings jika ada (agar ringkas)
+          let cleanSoc = socOpt.value.replace(/Instagram & Threads:\s*/i, '');
+          // Hilangkan juga URL website jika sudah ada di text sosial, agar tidak dobel
+          cleanSoc = cleanSoc.replace(/\s*\/?\s*www\.serenaraga\.fit/i, '');
+          setSocialText(cleanSoc);
+        }
       }
       setDefaultTimeText(timeText);
-      setSchedules(getNextDays(7, timeText));
+      
+      const sDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      const eDate = new Date(Date.now() + 13 * 86400000).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      
+      setSchedules(getDaysInRange(sDate, eDate, timeText));
       setLoading(false);
     };
     init();
   }, []);
 
-  // When weekMode changes, regenerate days whilst preserving existing edits
-  const handleWeekModeChange = (mode: 1 | 2) => {
-    const newDays = getNextDays(mode === 2 ? 14 : 7, defaultTimeText);
-    setWeekMode(mode);
-    // Merge: keep existing edits for days that overlap
+  const handleDateRangeChange = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
+    const newDays = getDaysInRange(start, end, defaultTimeText);
+    
+    // Auto toggle view mode based on length (2 weeks for > 7 days)
+    if (newDays.length > 7) setWeekMode(2); 
+    else setWeekMode(1);
+
     setSchedules(prev => {
-      const prevMap = new Map(prev.map(d => [d.id, d]));
-      return newDays.map(d => prevMap.get(d.id) ?? d);
+      const prevMap = new Map(prev.map(d => [d.dateStr, d]));
+      return newDays.map(d => prevMap.get(d.dateStr) ?? d);
     });
+  };
+
+  const setAllActive = (active: boolean) => {
+    setSchedules(prev => prev.map(day => ({ ...day, active })));
+  };
+
+  const resetAllHours = () => {
+    setSchedules(prev => prev.map(day => ({ ...day, timeText: defaultTimeText })));
   };
 
   const toggleDay = (dayId: string) => {
@@ -279,49 +319,80 @@ export default function SchedulePage() {
         {/* LEFT PANEL: Editor */}
         <div className="lg:col-span-3 space-y-5">
           {/* Smart Paste Block */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden p-4">
-            <div className="flex justify-between items-center mb-3">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+            <button 
+              onClick={() => setIsSmartPasteOpen(!isSmartPasteOpen)}
+              className="w-full flex justify-between items-center p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+            >
               <h2 className="text-sm font-semibold dark:text-white flex items-center gap-2">
                 <ClipboardPaste size={16} className="text-earth-primary" /> Smart Paste
               </h2>
-              <button onClick={handleSmartPaste} disabled={!pasteText.trim()} className="admin-btn-primary text-xs py-1.5 px-3 disabled:opacity-50">
-                Auto Format
-              </button>
-            </div>
-            <textarea
-              className="admin-input h-28 text-xs font-mono resize-none w-full bg-zinc-50 dark:bg-zinc-800/50"
-              placeholder={`Contoh Paste:\nRabu, 15 April FULL\nKamis, 16 April 08.00\nJumat, 17 April 16.00-22.00`}
-              value={pasteText}
-              onChange={e => setPasteText(e.target.value)}
-            ></textarea>
-            <p className="text-[10px] text-zinc-400 mt-2">
-              Paste teks jadwal mentah dari WhatsApp atau Instagram. Sistem akan otomatis menyortir hari, jam, dan status FULL-nya.
-            </p>
+              <div className="flex items-center gap-2">
+                {isSmartPasteOpen ? <ChevronUp size={16} className="text-zinc-400" /> : <ChevronDown size={16} className="text-zinc-400" />}
+              </div>
+            </button>
+            
+            {isSmartPasteOpen && (
+              <div className="px-4 pb-4 bg-zinc-50/50 dark:bg-zinc-900/30 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+                <div className="flex justify-between items-end mb-3">
+                  <p className="text-[10px] text-zinc-400">
+                    Paste teks jadwal mentah dari WhatsApp atau Instagram. Sistem otomatis menyortir hari, jam, dan status FULL.
+                  </p>
+                  <button onClick={handleSmartPaste} disabled={!pasteText.trim()} className="admin-btn-primary text-xs py-1.5 px-3 disabled:opacity-50 shrink-0">
+                    Auto Format
+                  </button>
+                </div>
+                <textarea
+                  className="admin-input h-28 text-xs font-mono resize-none w-full bg-white dark:bg-zinc-800/50 block"
+                  placeholder={`Contoh Paste:\nRabu, 15 April FULL\nKamis, 16 April 08.00\nJumat, 17 April 16.00-22.00`}
+                  value={pasteText}
+                  onChange={e => setPasteText(e.target.value)}
+                ></textarea>
+              </div>
+            )}
           </div>
 
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold dark:text-white shrink-0">Slot Tersedia</h2>
-
-              {/* Week Mode Toggle */}
-              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-                <button
-                  onClick={() => handleWeekModeChange(1)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${weekMode === 1 ? 'bg-white dark:bg-zinc-700 shadow text-earth-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
-                >
-                  <Calendar size={12} /> 1 Minggu
-                </button>
-                <button
-                  onClick={() => handleWeekModeChange(2)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${weekMode === 2 ? 'bg-white dark:bg-zinc-700 shadow text-earth-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
-                >
-                  <Calendar size={12} /> 2 Minggu
-                </button>
+            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col md:flex-row gap-3 md:items-center justify-between">
+              
+              {/* Range Date Picker */}
+              <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-1.5 shadow-sm">
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => handleDateRangeChange(e.target.value, endDate)} 
+                  className="text-xs font-medium bg-transparent border-none focus:ring-0 text-zinc-700 dark:text-zinc-300 w-[110px]" 
+                />
+                <span className="text-zinc-400 text-xs font-semibold px-1">-</span>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={e => handleDateRangeChange(startDate, e.target.value)} 
+                  className="text-xs font-medium bg-transparent border-none focus:ring-0 text-zinc-700 dark:text-zinc-300 w-[110px]" 
+                />
               </div>
 
-              <button onClick={() => { setSchedules(getNextDays(weekMode === 2 ? 14 : 7)); }} className="text-xs flex items-center gap-1 text-zinc-500 hover:text-earth-primary transition-colors shrink-0">
-                <RefreshCw size={12} /> Reset
-              </button>
+              {/* Quick Actions */}
+              <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1 md:pb-0">
+                <button 
+                  onClick={() => setAllActive(true)} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                >
+                  <CheckCircle2 size={14} /> Semua Buka
+                </button>
+                <button 
+                  onClick={() => setAllActive(false)} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 border border-red-200/50 dark:border-red-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                >
+                  <Ban size={14} /> Semua FULL
+                </button>
+                <button 
+                  onClick={resetAllHours} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                >
+                  <RefreshCw size={14} /> Reset Jam
+                </button>
+              </div>
             </div>
 
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -558,10 +629,26 @@ export default function SchedulePage() {
                   )}
 
                   {/* Footer */}
-                  <div className="relative z-10 text-center pt-5 border-t border-[#DCD3C6] pb-2">
+                  <div className="relative z-10 flex flex-col items-center pt-6 border-t border-[#DCD3C6] pb-2 space-y-3">
                     <p className="text-2xl font-medium text-[#8E7962]">
                       Reply untuk mengamankan slot Anda
                     </p>
+                    <div className="flex items-center gap-3 text-xl font-medium tracking-wide text-[#A89882] opacity-80 pb-4">
+                      {waNumber && (
+                        <div className="flex items-center gap-1.5">
+                          <MessageCircle size={18} />
+                          <span>0{waNumber.startsWith('62') ? waNumber.slice(2) : waNumber}</span>
+                        </div>
+                      )}
+                      {waNumber && socialText && <span className="opacity-50 mx-1">•</span>}
+                      {socialText && (
+                        <div className="flex items-center gap-1.5">
+                          <span>{socialText}</span>
+                        </div>
+                      )}
+                      {(waNumber || socialText) && <span className="opacity-50 mx-1">•</span>}
+                      <span className="font-semibold text-[#8E7962] opacity-90">www.serenaraga.fit</span>
+                    </div>
                   </div>
 
                 </div>
@@ -604,12 +691,20 @@ function DayRow({
             {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
           </p>
         </div>
-        <button
-          onClick={() => onToggleDay(day.id)}
-          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all duration-200 ${day.active ? 'bg-earth-primary text-white border-earth-primary shadow-sm' : 'bg-transparent text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'}`}
-        >
-          {day.active ? 'Tersedia' : 'Set Tersedia'}
-        </button>
+        <div className="flex items-center gap-2.5">
+          <span className={`text-[10px] font-bold tracking-wider transition-colors ${day.active ? 'text-earth-primary' : 'text-zinc-400'}`}>
+            {day.active ? 'TERSEDIA' : 'FULL'}
+          </span>
+          <button
+            onClick={() => onToggleDay(day.id)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-earth-primary/50 ${day.active ? 'bg-earth-primary' : 'bg-red-400 dark:bg-red-900/60'}`}
+            title={day.active ? 'Tandai sebagai FULL' : 'Tandai sebagai Buka'}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${day.active ? 'translate-x-5' : 'translate-x-0'}`}
+            />
+          </button>
+        </div>
       </div>
 
     </div>

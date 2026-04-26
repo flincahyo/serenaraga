@@ -336,44 +336,60 @@ export default function TherapistsPage() {
               <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center items-start">
                 <div
                   ref={slipRef}
-                  className="bg-white"
-                  style={{ width: '400px', maxWidth: '100%', borderRadius: '16px', overflow: 'hidden', color: '#18181b', fontFamily: 'Inter, sans-serif', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
+                  className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden"
+                  style={{ width: '400px', maxWidth: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
                 >
-                  <div style={{ backgroundColor: '#e2d1ba', color: '#18181b', padding: '16px 24px 20px', textAlign: 'center', borderBottom: '1px solid #d1bda2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '180px', height: '78px', overflow: 'hidden', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '0 auto 4px' }}>
-                      <img src="/serenalogo.svg" alt="SerenaRaga" style={{ position: 'absolute', height: '190px', width: 'auto', maxWidth: 'none', objectFit: 'contain', marginTop: '10px' }} className="dark:brightness-0 dark:invert-0" />
-                    </div>
-                    <p style={{ margin: 0, fontSize: '11px', color: '#6d6153', letterSpacing: '2px', fontWeight: 600 }}>STATEMENT OF EARNINGS</p>
+                  {/* Top Accent Strip */}
+                  <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
+
+                  {/* Watermark Logo */}
+                  <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -translate-y-16">
+                    <img src="/serenalogo2.svg" alt="watermark" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
                   </div>
 
-                  <div style={{ padding: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', borderBottom: '1px dashed #e4e4e7', paddingBottom: '16px' }}>
+                  <div className="relative z-10 p-8 mt-2">
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
                       <div>
-                        <p style={{ fontSize: '10px', color: '#71717a', margin: '0 0 2px' }}>NAMA TERAPIS</p>
-                        <p style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{payoutTherapist.name.toUpperCase()}</p>
+                        <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
+                          <img 
+                            src="/serenalogo2.svg" 
+                            alt="SerenaRaga" 
+                            className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
+                          />
+                        </div>
+                        <p style={{ margin: 0, fontSize: '7px', letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: '4px' }}>COMFORTABLE HOME MASSAGE</p>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '10px', color: '#71717a', margin: '0 0 2px' }}>PERIODE</p>
-                        <p style={{ fontSize: '12px', fontWeight: 600, margin: 0 }}>
+                        <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: '9px', fontWeight: 900, fontStyle: 'italic', borderRadius: '6px', marginBottom: '8px', letterSpacing: '0.1em' }}>PAYOUT SLIP</div>
+                        <p style={{ fontSize: '9px', fontWeight: 500, color: '#a1a1aa' }}>
                           {payoutStart === payoutEnd ? new Date(payoutStart + 'T00:00:00').toLocaleDateString('id-ID') : `${new Date(payoutStart + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} - ${new Date(payoutEnd + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}`}
                         </p>
                       </div>
                     </div>
 
-                    <p style={{ fontSize: '11px', fontWeight: 600, color: '#3f3f46', marginBottom: '12px' }}>RINCIAN KUNJUNGAN / JOB</p>
+                    {/* Therapist Info */}
+                    <div style={{ borderLeft: '3px solid #8B5E3C', paddingLeft: '16px', marginBottom: '32px' }}>
+                      <p style={{ margin: 0, fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#8B5E3C', opacity: 0.7, marginBottom: '4px' }}>Diberikan Kepada:</p>
+                      <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#27272a', letterSpacing: '-0.02em' }}>{payoutTherapist.name.toUpperCase()}</h4>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e4e4e7', paddingBottom: '10px', marginBottom: '14px', fontSize: '8px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
+                      <span>Rincian Kunjungan / Job</span><span>Komisi</span>
+                    </div>
 
                     {payoutItems.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {payoutItems.map((item, idx) => {
                           return (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #e4e4e7' }}>
                               <div>
-                                <p style={{ margin: 0, fontSize: '12px', fontWeight: 600 }}>{item.customer_name}</p>
-                                <p style={{ margin: '2px 0 0', fontSize: '10px', color: '#71717a' }}>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#27272a', marginBottom: '2px' }}>{item.customer_name}</p>
+                                <p style={{ margin: '0', fontSize: '9px', color: '#71717a', lineHeight: 1.3 }}>
                                   {item.service_name}
-                                  {item.has_transport && <span style={{ color: '#059669', marginLeft: 4 }}>(+ Transport {formatRp(item.transport_commission)})</span>}
+                                  {item.has_transport && <span style={{ color: '#8B5E3C', marginLeft: 4 }}>(+ Transport {formatRp(item.transport_commission)})</span>}
                                 </p>
-                                <p style={{ margin: '2px 0 0', fontSize: '9px', color: '#a1a1aa' }}>
+                                <p style={{ margin: '2px 0 0', fontSize: '8px', color: '#a1a1aa' }}>
                                   {(() => {
                                     if (item.service_price <= 0) return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Hanya Transport`;
                                     const serviceCommission = item.commission_earned - item.transport_commission;
@@ -381,11 +397,11 @@ export default function TherapistsPage() {
                                       ? Math.round((serviceCommission / item.service_price) * 100)
                                       : payoutTherapist.commission_pct;
                                     const showNote = effectivePct !== payoutTherapist.commission_pct;
-                                    return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${effectivePct}%${showNote ? ` (std. ${payoutTherapist.commission_pct}%, ada penyesuaian diskon)` : ''}`;
+                                    return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${effectivePct}%${showNote ? ` (std. ${payoutTherapist.commission_pct}%, penyesuaian diskon)` : ''}`;
                                   })()}
                                 </p>
                               </div>
-                              <p style={{ margin: 0, fontSize: '12px', fontWeight: 600, fontFamily: 'monospace' }}>
+                              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#3f3f46' }}>
                                 {formatRp(item.commission_earned)}
                               </p>
                             </div>
@@ -396,16 +412,21 @@ export default function TherapistsPage() {
                       <p style={{ fontSize: '12px', color: '#a1a1aa', textAlign: 'center', margin: '24px 0' }}>Tidak ada job terekam di periode ini.</p>
                     )}
 
-                    <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '2px solid #f4f4f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: '#52525b' }}>TOTAL TAKE HOME PAY</p>
-                      <p style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#059669', letterSpacing: '-0.5px' }}>
-                        {formatRp(totalPayout)}
+                    <div style={{ marginTop: '24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#27272a', borderRadius: '12px 12px 12px 0', color: '#fff', boxShadow: '0 4px 12px rgba(39,39,42,0.2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.2)' }}></div>
+                          <span style={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.8)' }}>Take Home Pay</span>
+                        </div>
+                        <span style={{ fontSize: '20px', fontWeight: 700, fontStyle: 'italic', letterSpacing: '0.02em', color: '#e4e4e7' }}>{formatRp(totalPayout)}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px dashed #e4e4e7', paddingTop: '20px' }}>
+                      <p style={{ fontSize: '9.5px', fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: '16px', lineHeight: 1.5 }}>
+                        "*Nilai komisi bersifat bersih setelah penyesuaian diskon operasional. Biaya bahan habis pakai murni ditanggung oleh manajemen."
                       </p>
                     </div>
-                  </div>
-
-                  <div style={{ backgroundColor: '#fdfdfd', padding: '16px', textAlign: 'center', borderTop: '1px solid #f4f4f5' }}>
-                    <p style={{ margin: 0, fontSize: '9px', color: '#a1a1aa' }}>*Nilai komisi bersifat bersih setelah penyesuaian. Biaya bahan habis pakai/BHP murni ditanggung oleh owner.</p>
                   </div>
                 </div>
               </div>

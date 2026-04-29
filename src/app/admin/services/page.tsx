@@ -21,6 +21,7 @@ type Service = {
   sort_order: number;
   is_bundle: boolean;
   bundle_child_ids: string[] | null;
+  estimated_duration: number | null;
 };
 
 type Material = {
@@ -118,7 +119,7 @@ export default function ServicesPage() {
   const [newSvc, setNewSvc] = useState<Partial<Service>>({
     name: '', details: '', price: 0, is_bestseller: false,
     is_featured: false, featured_image: '', featured_description: '', featured_duration: '',
-    is_bundle: false, bundle_child_ids: [],
+    is_bundle: false, bundle_child_ids: [], estimated_duration: 90,
   });
   const [newSplit, setNewSplit] = useState(30);
 
@@ -172,6 +173,7 @@ export default function ServicesPage() {
       featured_duration: s.featured_duration ?? '',
       is_bundle: s.is_bundle ?? false,
       bundle_child_ids: s.bundle_child_ids ?? [],
+      estimated_duration: s.estimated_duration ?? 90,
     });
     setEditSvcMats([]);
     setAddMatId('');
@@ -237,7 +239,7 @@ export default function ServicesPage() {
     });
     await fetchServices();
     setShowAdd(false);
-    setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '', is_bundle: false, bundle_child_ids: [] });
+    setNewSvc({ name: '', details: '', price: 0, is_bestseller: false, is_featured: false, featured_image: '', featured_description: '', featured_duration: '', is_bundle: false, bundle_child_ids: [], estimated_duration: 90 });
     setNewSplit(defaultCommission);
     setSaving(false);
   };
@@ -301,6 +303,11 @@ export default function ServicesPage() {
                       <label className="text-xs font-medium text-zinc-500 mb-1 block">Harga (Rp)</label>
                       <input type="number" className="admin-input font-mono" value={editData.price ?? 0}
                         onChange={e => setEditData(d => ({ ...d, price: Number(e.target.value) }))} />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-zinc-500 mb-1 block">Estimasi Waktu Dikerjakan (Menit)</label>
+                      <input type="number" className="admin-input font-mono" value={editData.estimated_duration || ''} placeholder="contoh: 90, 120"
+                        onChange={e => setEditData(d => ({ ...d, estimated_duration: Number(e.target.value) }))} />
                     </div>
                   </div>
 
@@ -520,6 +527,9 @@ export default function ServicesPage() {
                             Featured
                           </span>
                         )}
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                          ⏱ {svc.estimated_duration ?? 90} Mnt
+                        </span>
                       </div>
                       <p className="text-xs text-zinc-400 truncate mt-0.5">{svc.details}</p>
                     </div>
@@ -560,10 +570,17 @@ export default function ServicesPage() {
             <textarea className="admin-input resize-none" rows={2} placeholder="Detail / Deskripsi" value={newSvc.details}
               onChange={e => setNewSvc(n => ({ ...n, details: e.target.value }))} />
 
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Harga (Rp)</label>
-              <input type="number" className="admin-input font-mono" placeholder="Harga" value={newSvc.price || ''}
-                onChange={e => setNewSvc(n => ({ ...n, price: Number(e.target.value) }))} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Harga (Rp)</label>
+                <input type="number" className="admin-input font-mono" placeholder="Harga" value={newSvc.price || ''}
+                  onChange={e => setNewSvc(n => ({ ...n, price: Number(e.target.value) }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Durasi (Menit)</label>
+                <input type="number" className="admin-input font-mono" placeholder="Estimasi Menit" value={newSvc.estimated_duration || undefined}
+                  onChange={e => setNewSvc(n => ({ ...n, estimated_duration: Number(e.target.value) }))} />
+              </div>
             </div>
 
             {/* Commission Calculator */}

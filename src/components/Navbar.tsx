@@ -41,7 +41,7 @@ const Navbar = () => {
         </Link>
 
         {/* Desktop Menu */}
-        <div className="hidden md:flex items-center gap-8">
+        <div className="hidden md:flex items-center gap-6">
           {navLinks.map((link) => (
             <Link 
               key={link.name}
@@ -51,12 +51,24 @@ const Navbar = () => {
               {link.name}
             </Link>
           ))}
-          <Link 
-            href="#booking" 
-            className="bg-earth-primary text-white text-sm font-medium px-6 py-2.5 rounded-full hover:bg-earth-dark transition-all transform hover:-translate-y-0.5 shadow-sm hover:shadow-md"
-          >
-            Pesan Sekarang
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link 
+              href="#schedule" 
+              className="group flex items-center gap-2 text-earth-primary text-sm font-medium px-5 py-2 rounded-full border border-earth-primary/20 bg-earth-primary/5 hover:bg-earth-primary/10 transition-all"
+            >
+              <span className="relative flex h-2 w-2">
+                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Cek Jadwal
+            </Link>
+            <Link 
+              href="#booking" 
+              className="bg-earth-primary text-white text-sm font-medium px-6 py-2.5 rounded-full hover:bg-earth-dark transition-all transform hover:-translate-y-0.5 shadow-sm hover:shadow-md"
+            >
+              Pesan Sekarang
+            </Link>
+          </div>
         </div>
 
         {/* Mobile Toggle */}
@@ -88,13 +100,26 @@ const Navbar = () => {
                   {link.name}
                 </Link>
               ))}
-              <Link 
-                href="#booking" 
-                className="bg-earth-primary text-white py-3 rounded-full font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Pesan Sekarang
-              </Link>
+              <div className="flex flex-col gap-3 mt-4">
+                <Link 
+                  href="#schedule" 
+                  className="flex items-center justify-center gap-3 text-earth-primary py-3 rounded-full border border-earth-primary/20 bg-earth-primary/5 font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <span className="relative flex h-2.5 w-2.5">
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                  Cek Jadwal Langsung
+                </Link>
+                <Link 
+                  href="#booking" 
+                  className="bg-earth-primary text-white py-3 rounded-full font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Pesan Sekarang
+                </Link>
+              </div>
             </div>
           </motion.div>
         )}

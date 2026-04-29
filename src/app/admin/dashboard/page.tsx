@@ -10,7 +10,7 @@ import { useUser } from '@/lib/user-context';
 import Link from 'next/link';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
-
+import { TherapistTracker } from '@/components/admin/TherapistTracker';
 
 type Booking = {
   id: string; customer_name: string; service_name: string;
@@ -311,6 +311,11 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Tracker Operasional */}
+          <div className="mb-6">
+            <TherapistTracker date={todayStr} />
+          </div>
 
           {/* Chart + Today */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">

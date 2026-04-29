@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, CalendarCheck, ClipboardList,
+  LayoutDashboard, CalendarCheck, CalendarDays, ClipboardList,
   Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
@@ -16,6 +16,7 @@ const OWNER_NAV_GROUPS = [
     label: 'Main Menu',
     items: [
       { name: 'Dashboard',      icon: LayoutDashboard, href: '/admin/dashboard' },
+      { name: 'Tracker Jadwal', icon: CalendarDays,    href: '/admin/calendar' },
       { name: 'Bookings',       icon: CalendarCheck,   href: '/admin/bookings' },
       { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
     ]

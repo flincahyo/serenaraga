@@ -251,7 +251,124 @@ export default function SchedulePage() {
     });
 
     setSchedules(newSchedules);
-    setPasteText(''); // Clear after successful paste
+    setIsSmartPasteOpen(false);
+  };
+
+  const autoGenerateFromTherapists = async () => {
+    setLoading(true);
+    const { data: ths } = await supabase.from('therapists').select('id').eq('is_active', true);
+    const thIds = ths?.map(t => t.id) || [];
+    
+    if (thIds.length === 0) {
+       alert("Tidak ada terapis aktif.");
+       setLoading(false);
+       return;
+    }
+
+    const [{ data: shifts }, { data: offs }, { data: bData }, { data: settingData }] = await Promise.all([
+      supabase.from('therapist_shifts').select('*').in('therapist_id', thIds),
+      supabase.from('therapist_timeoffs').select('*').in('therapist_id', thIds).gte('off_date', startDate).lte('off_date', endDate),
+      (supabase.from('booking_items').select('therapist_id, duration, bookings!inner(id, booking_date, booking_time, status)').in('therapist_id', thIds).gte('bookings.booking_date', startDate).lte('bookings.booking_date', endDate).neq('bookings.status', 'Canceled') as any),
+      supabase.from('settings').select('value').eq('key', 'default_buffer_time').single()
+    ]);
+    const defaultBuffer = settingData?.value ? Number(settingData.value) : 30;
+
+    const timeToMins = (t: string) => {
+      if (!t) return 0;
+      const [h,m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const minsToTime = (m: number) => `${String(Math.floor(m/60)).padStart(2, '0')}.${String(m%60).padStart(2, '0')}`;
+
+    setSchedules(prev => prev.map(day => {
+      const gDate = new Date(day.dateStr);
+      const dayOfWeek = gDate.getDay();
+      const shopFreeBlocks: {s: number, e: number}[] = [];
+      let workingCount = 0;
+
+      thIds.forEach(tid => {
+        const thOff = offs?.find(o => o.therapist_id === tid && o.off_date === day.dateStr);
+        if (thOff && thOff.is_full_day) return; 
+
+        const thShift = shifts?.find(s => s.therapist_id === tid && s.day_of_week === dayOfWeek);
+        if (thShift && thShift.is_working) {
+           workingCount++;
+           let tFree: {s: number, e: number}[] = [{ s: timeToMins(thShift.start_time), e: timeToMins(thShift.end_time) }];
+           
+           const removeBlock = (start: number, end: number) => {
+             const newFree: {s: number, e: number}[] = [];
+             for (let f of tFree) {
+               if (end <= f.s || start >= f.e) {
+                 newFree.push(f);
+               } else {
+                 if (start > f.s) newFree.push({ s: f.s, e: start });
+                 if (end < f.e) newFree.push({ s: end, e: f.e });
+               }
+             }
+             tFree = newFree;
+           };
+
+           if (thShift.break_start_time && thShift.break_end_time) {
+             removeBlock(timeToMins(thShift.break_start_time), timeToMins(thShift.break_end_time));
+           }
+           if (thOff && !thOff.is_full_day && thOff.start_time && thOff.end_time) {
+             removeBlock(timeToMins(thOff.start_time), timeToMins(thOff.end_time));
+           }
+
+           const thBookings = bData ? (bData as any[]).filter((b: any) => b.therapist_id === tid && b.bookings.booking_date === day.dateStr) : [];
+           const groupedBks: Record<string, { start: number, dur: number }> = {};
+           
+           for (const bk of thBookings) {
+             const bid = bk.bookings.id;
+             let dur = parseInt(String(bk.duration)) || 90;
+             if (!groupedBks[bid]) {
+               groupedBks[bid] = { start: timeToMins(bk.bookings.booking_time), dur };
+             } else {
+               groupedBks[bid].dur += dur;
+             }
+           }
+           
+           for (const bid in groupedBks) {
+             const bk = groupedBks[bid];
+             removeBlock(bk.start, bk.start + bk.dur + defaultBuffer);
+           }
+           
+           // FIX ISSUE 8: align with public API — require ≥90m (60m min service + 30m buffer)
+           // so the Share Jadwal preview matches what the public schedule widget shows.
+           tFree = tFree.filter(f => (f.e - f.s) >= 90);
+           shopFreeBlocks.push(...tFree);
+        }
+      });
+
+      if (workingCount === 0) {
+        return { ...day, active: false };
+      }
+
+      if (shopFreeBlocks.length === 0) {
+        return { ...day, active: true, timeText: "FULL BOOKED" };
+      }
+
+      // Merge overlapping free blocks globally for the shop
+      shopFreeBlocks.sort((a,b) => a.s - b.s);
+      const mergedBlocks: {s: number, e: number}[] = [shopFreeBlocks[0]];
+      
+      for (let i = 1; i < shopFreeBlocks.length; i++) {
+         const curr = shopFreeBlocks[i];
+         const last = mergedBlocks[mergedBlocks.length - 1];
+         if (curr.s <= last.e) {
+           last.e = Math.max(last.e, curr.e); // overlap, merge
+         } else {
+           mergedBlocks.push(curr); // gap
+         }
+      }
+
+      // Format to string
+      const timeParts = mergedBlocks.map(b => `${minsToTime(b.s)} - ${minsToTime(b.e)}`);
+      const timeText = timeParts.join(' & ');
+
+      return { ...day, active: true, timeText };
+    }));
+    setLoading(false);
   };
 
   const generateImage = async (action: 'download' | 'share') => {
@@ -374,6 +491,12 @@ export default function SchedulePage() {
 
               {/* Quick Actions */}
               <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1 md:pb-0">
+                <button 
+                  onClick={autoGenerateFromTherapists} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-400 border border-purple-200/50 dark:border-purple-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                >
+                  <RefreshCw size={14} /> Auto-Sync Data Terapis
+                </button>
                 <button 
                   onClick={() => setAllActive(true)} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"

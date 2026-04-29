@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, MessageCircle, Loader2, X, Check, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
+import { Plus, MessageCircle, Loader2, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
+import BookingFormModal from '@/components/admin/BookingFormModal';
 
 type Booking = {
   id: string; created_at: string; customer_name: string; phone: string;
@@ -14,7 +15,6 @@ type Booking = {
 };
 
 type Service = { id: string; name: string; price: number; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
-type BookingItem = { tempId: number; service_id: string; service_name: string; price: number; duration: string; therapist_id?: string; parent_bundle_name?: string; };
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
 const STATUS_STYLES: Record<string, string> = {
@@ -23,13 +23,6 @@ const STATUS_STYLES: Record<string, string> = {
   Completed: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
   Canceled:  'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
-const CATEGORY_LABELS: Record<string, string> = {
-  packages: 'Paket Massage', services: 'Massage Services',
-  reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split Item'
-};
-
-const EMPTY_FORM = { customer_name: '', phone: '62', booking_date: '', booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0 };
-const EMPTY_ITEM = (): BookingItem => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '', parent_bundle_name: '' });
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -43,19 +36,17 @@ export default function BookingsPage() {
   const [therapists, setTherapists]   = useState<{id: string; name: string; commission_pct: number}[]>([]);
   const [customers, setCustomers]     = useState<{id: string; name: string; wa_number: string}[]>([]);
   const [loading, setLoading]         = useState(true);
-  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
-  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
   const [filterStatus, setFilterStatus] = useState('Hari Ini');
   const [search, setSearch]           = useState('');
-  const [showForm, setShowForm]       = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [editId, setEditId]           = useState<string | null>(null);
-  const [deleteId, setDeleteId]       = useState<string | null>(null);
-  const [deleting, setDeleting]       = useState(false);
+  // BookingFormModal state
+  const [showForm, setShowForm]   = useState(false);
+  const [editId, setEditId]       = useState<string | null>(null);
+  const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [deleting, setDeleting]   = useState(false);
+
   const [reminderTemplate, setReminderTemplate] = useState('');
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [bookingItems, setBookingItems] = useState<BookingItem[]>([EMPTY_ITEM()]);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+
 
   const supabase = createClient();
 
@@ -63,7 +54,7 @@ export default function BookingsPage() {
     setLoading(true);
     const [{ data: b }, { data: s }, { data: settingsData }, { data: t }, { data: c }] = await Promise.all([
       supabase.from('bookings').select('*').order('booking_date', { ascending: false }).order('created_at', { ascending: false }),
-      supabase.from('services').select('id, name, price, category, is_bundle, bundle_child_ids').order('category').order('sort_order'),
+      supabase.from('services').select('id, name, price, category, is_bundle, bundle_child_ids, estimated_duration').order('category').order('sort_order'),
       supabase.from('settings').select('value').eq('key', 'whatsapp_reminder_message').single(),
       supabase.from('therapists').select('id, name, commission_pct').eq('is_active', true).order('name'),
       supabase.from('customers').select('id, name, wa_number').order('name', { ascending: true }),
@@ -78,194 +69,57 @@ export default function BookingsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Hitung BHP aktual per layanan
+
+  // Hitung BHP aktual per layanan (used by updateStatus commission recalc)
   const calculateBhpCost = async (serviceName: string): Promise<number> => {
     const svc = services.find(s => s.name === serviceName);
     if (!svc) return 0;
     const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
-      supabase.from('service_materials')
-        .select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)')
-        .eq('service_id', svc.id),
+      supabase.from('service_materials').select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)').eq('service_id', svc.id),
       supabase.from('materials').select('id, pack_price, customers_per_pack').eq('is_global', true),
     ]);
     type MatObj = { id: string; pack_price: number; customers_per_pack: number; is_global: boolean };
     type SvcMatRow = { qty_multiplier: number; material: MatObj | MatObj[] | null };
     type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
-    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => {
-      if (!raw) return null;
-      return Array.isArray(raw) ? (raw[0] ?? null) : raw;
-    };
+    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => Array.isArray(raw) ? (raw[0] ?? null) : raw ?? null;
     const rows = (svcMats ?? []) as unknown as SvcMatRow[];
-    const assignedGlobalIds = new Set(
-      rows.map(sm => getMat(sm.material)).filter((m): m is MatObj => m !== null && m.is_global).map(m => m.id)
-    );
+    const assignedGlobalIds = new Set(rows.map(sm => getMat(sm.material)).filter((m): m is MatObj => m !== null && m.is_global).map(m => m.id));
     let total = 0;
-    for (const sm of rows) {
-      const m = getMat(sm.material);
-      if (!m || m.customers_per_pack <= 0) continue;
-      total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
-    }
-    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) {
-      if (assignedGlobalIds.has(gm.id) || gm.customers_per_pack <= 0) continue;
-      total += gm.pack_price / gm.customers_per_pack;
-    }
+    for (const sm of rows) { const m = getMat(sm.material); if (m && m.customers_per_pack > 0) total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack); }
+    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) { if (!assignedGlobalIds.has(gm.id) && gm.customers_per_pack > 0) total += gm.pack_price / gm.customers_per_pack; }
     return Math.round(total);
   };
 
+  // EC#7: updateStatus recalculates commission when set to Completed
   const updateStatus = async (id: string, status: string) => {
     await supabase.from('bookings').update({ status }).eq('id', id);
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
-  };
-
-  const openAdd = () => {
-    setEditId(null);
-    setForm(EMPTY_FORM);
-    setBookingItems([EMPTY_ITEM()]);
-    setShowForm(true);
-  };
-
-  const openEdit = async (b: Booking) => {
-    setEditId(b.id);
-    setForm({
-      customer_name: b.customer_name ?? '',
-      phone: b.phone ?? '62',
-      booking_date: b.booking_date ?? '',
-      booking_time: b.booking_time ?? '',
-      status: b.status ?? 'Pending',
-      notes: b.notes ?? '',
-      discount_total: b.discount_total ?? 0,
-      shared_discount_total: b.shared_discount_total ?? 0,
-    });
-    // Load existing booking_items
-    const { data: items } = await supabase
-      .from('booking_items').select('*').eq('booking_id', b.id).order('sort_order');
-    if (items && items.length > 0) {
-      setBookingItems(items.map((it, i) => ({
-        tempId: i, service_id: it.service_id ?? '', service_name: it.service_name,
-        price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '',
-        parent_bundle_name: it.parent_bundle_name ?? ''
-      })));
-    } else {
-      // Fallback for old single-service bookings
-      setBookingItems([{
-        tempId: 0, service_id: '', service_name: b.service_name ?? '',
-        price: b.price ?? 0, duration: '', parent_bundle_name: ''
-      }]);
-    }
-    setShowForm(true);
-  };
-
-  const saveBooking = async () => {
-    const validItems = bookingItems.filter(i => i.service_name.trim());
-    // Fix #11: also require booking_date
-    if (!form.customer_name || validItems.length === 0 || !form.booking_date) return;
-    setSaving(true);
-
-    // BHP per item
-    const itemsWithBhp = await Promise.all(
-      validItems.map(async item => ({
-        ...item,
-        bhp_cost: await calculateBhpCost(item.service_name),
-      }))
-    );
-
-    const totalPrice = itemsWithBhp.reduce((s, i) => s + Number(i.price), 0);
-    const totalBhp   = itemsWithBhp.reduce((s, i) => s + i.bhp_cost, 0);
-    const displayName = itemsWithBhp.map(i => i.service_name).join(' + ');
-
-    // Upsert customer by WA (ignores duplicate — nama tidak di-overwrite)
-    let customerId: string | null = null;
-    let phone = form.phone.replace(/\D/g, '');
-    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    
-    if (phone && phone.length > 5) {
-      const { data: customer } = await supabase
-        .from('customers')
-        .upsert(
-          { wa_number: phone, name: form.customer_name },
-          { onConflict: 'wa_number', ignoreDuplicates: true }
-        )
-        .select('id').single();
-      if (!customer) {
-        // ignoreDuplicates returns nothing if conflict; fetch existing
-        const { data: existing } = await supabase
-          .from('customers').select('id').eq('wa_number', phone).single();
-        customerId = existing?.id ?? null;
-      } else {
-        customerId = customer.id;
+    if (status === 'Completed') {
+      const { data: items } = await supabase.from('booking_items').select('*, therapist_id').eq('booking_id', id);
+      const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total').eq('id', id).single();
+      if (items && bk) {
+        const totalPrice = Number(bk.price) || 0;
+        const sharedDisc = Number(bk.shared_discount_total) || 0;
+        await Promise.all(items.map(async (item: any) => {
+          if (!item.therapist_id) return;
+          const t = therapists.find(x => x.id === item.therapist_id);
+          const pct = t?.commission_pct ?? 30;
+          const sharedDiscPct = totalPrice > 0 ? sharedDisc / totalPrice : 0;
+          const earned = Math.round(Math.max(0, Number(item.price) * (1 - sharedDiscPct)) * pct / 100);
+          await supabase.from('booking_items').update({ commission_earned: earned }).eq('id', item.id);
+        }));
       }
     }
-
-    const payload = {
-      customer_name: form.customer_name,
-      phone: phone || form.phone,
-      booking_date: form.booking_date,
-      booking_time: form.booking_time,
-      status: form.status,
-      notes: form.notes,
-      service_name: displayName,
-      price: totalPrice,
-      bhp_cost: totalBhp,
-      final_price: Math.max(0, totalPrice - (form.discount_total || 0)),
-      discount_total: form.discount_total,
-      shared_discount_total: form.shared_discount_total,
-      customer_id: customerId,
-    };
-
-    let bookingId: string;
-    if (editId) {
-      await supabase.from('bookings').update(payload).eq('id', editId);
-      bookingId = editId;
-    } else {
-      const { data: newBooking } = await supabase.from('bookings').insert(payload).select('id').single();
-      bookingId = newBooking!.id;
-    }
-
-    // Replace booking_items
-    await supabase.from('booking_items').delete().eq('booking_id', bookingId);
-    await supabase.from('booking_items').insert(
-      itemsWithBhp.map((item, idx) => {
-        let earned = 0;
-        if (form.status === 'Completed' && item.therapist_id) {
-          const t = therapists.find(x => x.id === item.therapist_id);
-          const pct = t ? t.commission_pct : 30; // fallback default
-          const sharedDiscountPerGross = totalPrice > 0 ? (form.shared_discount_total || 0) / totalPrice : 0;
-          const itemSharedDiscount = Number(item.price) * sharedDiscountPerGross;
-          const terapisBase = Math.max(0, Number(item.price) - itemSharedDiscount);
-          earned = Math.round(terapisBase * pct / 100);
-        }
-
-        return {
-          booking_id:   bookingId,
-          service_id:   item.service_id || null,
-          service_name: item.service_name,
-          price:        Number(item.price),
-          bhp_cost:     item.bhp_cost,
-          duration:     item.duration || null,
-          therapist_id: item.therapist_id || null,
-          commission_earned: earned,
-          sort_order:   idx,
-          parent_bundle_name: item.parent_bundle_name || null
-        };
-      })
-    );
-
-    await fetchData();
-    setShowForm(false);
-    setEditId(null);
-    setForm(EMPTY_FORM);
-    setBookingItems([EMPTY_ITEM()]);
-    setSaving(false);
   };
+
+  const openAdd = () => { setEditId(null); setShowForm(true); };
+  const openEdit = (b: Booking) => { setEditId(b.id); setShowForm(true); };
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    // Fix #2: prevent silent deletion of Completed bookings that have commission earned
     const target = bookings.find(b => b.id === deleteId);
     if (target?.status === 'Completed') {
-      const confirmed = window.confirm(
-        `Booking ini berstatus COMPLETED dan komisi terapis mungkin sudah tercatat.\n\nMenghapus akan menyebabkan data laporan tidak balance.\n\nYakin ingin tetap menghapus?`
-      );
+      const confirmed = window.confirm(`Booking ini berstatus COMPLETED dan komisi terapis mungkin sudah tercatat.\n\nMenghapus akan menyebabkan data laporan tidak balance.\n\nYakin ingin tetap menghapus?`);
       if (!confirmed) { setDeleteId(null); return; }
     }
     setDeleting(true);
@@ -275,51 +129,7 @@ export default function BookingsPage() {
     setDeleting(false);
   };
 
-  // Booking items helpers
-  const addItem = () => setBookingItems(prev => [...prev, EMPTY_ITEM()]);
-  const onServiceSelect = (tempId: number, serviceName: string) => {
-    const s = services.find(x => x.name === serviceName);
-    if (!s) {
-      setBookingItems(prev => prev.map(i => i.tempId === tempId ? { ...i, service_name: serviceName, service_id: '' } : i));
-      return;
-    }
 
-    if (s.is_bundle && s.bundle_child_ids && s.bundle_child_ids.length > 0) {
-      const children = s.bundle_child_ids.map(cid => services.find(x => x.id === cid)).filter(Boolean) as Service[];
-      if (children.length > 0) {
-        setBookingItems(prev => {
-          const newItems = [...prev];
-          const idx = newItems.findIndex(i => i.tempId === tempId);
-          if (idx > -1) {
-            newItems[idx] = { ...newItems[idx], service_id: children[0].id, service_name: children[0].name, price: children[0].price, parent_bundle_name: s.name };
-            for (let i = 1; i < children.length; i++) {
-              newItems.splice(idx + i, 0, {
-                tempId: Date.now() + i,
-                service_id: children[i].id,
-                service_name: children[i].name,
-                price: children[i].price,
-                duration: '',
-                parent_bundle_name: s.name
-              });
-            }
-          }
-          return newItems;
-        });
-        return;
-      }
-    }
-
-    setBookingItems(prev => prev.map(i => i.tempId === tempId ? {
-      ...i, service_id: s.id, service_name: s.name, price: s.price, parent_bundle_name: ''
-    } : i));
-  };
-  const removeItem = (tempId: number) => setBookingItems(prev => prev.filter(i => i.tempId !== tempId));
-  const updateItem = (tempId: number, patch: Partial<BookingItem>) =>
-    setBookingItems(prev => prev.map(i => i.tempId === tempId ? { ...i, ...patch } : i));
-
-
-
-  const totalItemsPrice = bookingItems.reduce((s, i) => s + Number(i.price), 0);
 
   const sendWA = (b: Booking) => {
     const template = reminderTemplate ||
@@ -539,152 +349,16 @@ export default function BookingsPage() {
       )}
 
       {/* Add / Edit Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
-          <div className="relative w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-2xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-3 z-10 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="font-semibold text-zinc-900 dark:text-white">{editId ? 'Edit Booking' : 'Tambah Booking'}</h3>
-              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"><X size={16} /></button>
-            </div>
-
-            {/* Customer info */}
-            <div className="relative">
-              <input className="admin-input" placeholder="Nama Pelanggan" value={form.customer_name}
-                onFocus={() => setShowNameSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
-                onChange={e => {
-                  setForm(f => ({ ...f, customer_name: e.target.value }));
-                  setShowNameSuggestions(true);
-                }} />
-              {showNameSuggestions && form.customer_name && (
-                <div className="absolute z-20 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-                  {customers.filter(c => c.name?.toLowerCase().includes(form.customer_name.toLowerCase()) && c.name?.toLowerCase() !== form.customer_name.toLowerCase()).map(c => (
-                    <div key={c.id} className="px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer text-zinc-900 dark:text-white"
-                         onClick={() => {
-                           setForm(f => ({ ...f, customer_name: c.name, phone: c.wa_number || f.phone }));
-                           setShowNameSuggestions(false);
-                         }}>
-                      <p className="font-medium">{c.name}</p>
-                      <p className="text-xs text-zinc-500">{c.wa_number}</p>
-                    </div>
-                  ))}
-                  {customers.filter(c => c.name?.toLowerCase().includes(form.customer_name.toLowerCase()) && c.name?.toLowerCase() !== form.customer_name.toLowerCase()).length === 0 && (
-                    <div className="px-3 py-2 text-xs text-zinc-500">Buat pelanggan baru</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <input className="admin-input" placeholder="Nomor WhatsApp (62xxx)" value={form.phone}
-                onFocus={() => setShowPhoneSuggestions(true)}
-                onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 200)}
-                onChange={e => {
-                  setForm(f => ({ ...f, phone: e.target.value }));
-                  setShowPhoneSuggestions(true);
-                }} />
-              {showPhoneSuggestions && form.phone && form.phone !== '62' && (
-                <div className="absolute z-20 w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg mt-1 max-h-40 overflow-y-auto">
-                  {customers.filter(c => c.wa_number?.includes(form.phone) && c.wa_number !== form.phone).map(c => (
-                    <div key={c.id} className="px-3 py-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 cursor-pointer text-zinc-900 dark:text-white"
-                         onClick={() => {
-                           setForm(f => ({ ...f, customer_name: c.name || f.customer_name, phone: c.wa_number }));
-                           setShowPhoneSuggestions(false);
-                         }}>
-                      <p className="font-medium">{c.name}</p>
-                      <p className="text-xs text-zinc-500">{c.wa_number}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Multi-service items */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-medium text-zinc-500">Layanan yang Dipesan</label>
-                <button onClick={addItem} className="text-xs text-earth-primary font-semibold hover:underline flex items-center gap-1">
-                  <Plus size={11} /> Tambah Layanan
-                </button>
-              </div>
-              <div className="space-y-2">
-                {bookingItems.map((item, idx) => (
-                  <div key={item.tempId} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 border border-zinc-200 dark:border-zinc-700 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-zinc-400 w-4">{idx + 1}</span>
-                      <select className="admin-input text-xs flex-1"
-                        value={item.service_name}
-                        onChange={e => onServiceSelect(item.tempId, e.target.value)}>
-                        <option value="">-- Pilih Layanan --</option>
-                        {['packages', 'services', 'reflexology', 'addons', 'split_items'].map(cat => (
-                          <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
-                            {services.filter(s => s.category === cat).map(s => (
-                              <option key={s.id} value={s.name}>{s.name} — {formatRp(s.price)}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
-                      {bookingItems.length > 1 && (
-                        <button onClick={() => removeItem(item.tempId)} className="text-red-400 hover:text-red-500 p-1 shrink-0">
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pl-6">
-                      <input className="admin-input text-xs font-mono" placeholder="Nama layanan" value={item.service_name}
-                        onChange={e => updateItem(item.tempId, { service_name: e.target.value })} />
-                      <input type="number" className="admin-input text-xs font-mono text-right" placeholder="Harga"
-                        value={item.price || ''}
-                        onChange={e => updateItem(item.tempId, { price: Number(e.target.value) })} />
-                    </div>
-                    <div className="pl-6 pt-1">
-                      <select className="admin-input text-xs bg-white dark:bg-zinc-900 border-dashed"
-                        value={item.therapist_id ?? ''}
-                        onChange={e => updateItem(item.tempId, { therapist_id: e.target.value })}>
-                        <option value="">-- Assign Terapis (opsional) --</option>
-                        {therapists.map(t => (
-                          <option key={t.id} value={t.id}>{t.name} {isOwner ? `(Fee ${t.commission_pct}%)` : ''}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {bookingItems.length > 1 && (
-                <div className="flex justify-between items-center mt-2 px-1">
-                  <span className="text-xs text-zinc-400">{bookingItems.length} layanan · 1 kunjungan</span>
-                  <span className="text-sm font-mono font-semibold text-earth-primary">{formatRp(totalItemsPrice)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Date / Time */}
-            <div className="grid grid-cols-2 gap-3">
-              <input type="date" className="admin-input" value={form.booking_date}
-                onChange={e => setForm(f => ({ ...f, booking_date: e.target.value }))} />
-              <input type="time" className="admin-input" value={form.booking_time}
-                onChange={e => setForm(f => ({ ...f, booking_time: e.target.value }))} />
-            </div>
-
-            <select className="admin-input" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <textarea className="admin-input resize-none" rows={2} placeholder="Catatan (opsional)"
-              value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowForm(false)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
-              <button onClick={saveBooking}
-                disabled={saving || !form.customer_name || !form.booking_date || bookingItems.every(i => !i.service_name)}
-                className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {editId ? 'Update' : 'Simpan'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BookingFormModal
+        open={showForm}
+        onClose={() => { setShowForm(false); setEditId(null); }}
+        onSaved={fetchData}
+        editBookingId={editId}
+        therapists={therapists}
+        services={services}
+        customers={customers}
+        isOwner={isOwner}
+      />
 
       {/* Delete Confirmation */}
       {deleteId && (

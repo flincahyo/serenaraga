@@ -8,7 +8,7 @@ import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 type Settings = Record<string, string>;
 
 const ALL_KEYS = [
-  'operational_hours', 'service_area',
+  'operational_hours', 'service_area', 'default_buffer_time',
   'whatsapp_number', 'whatsapp_booking_message',
   'whatsapp_reminder_message',
   'invoice_footer_text', 'invoice_social_text',
@@ -71,7 +71,7 @@ export default function SettingsPage() {
         id="operasional" title="Operasional"
         icon={<Clock size={15} className="text-earth-primary" />}
         saving={saving === 'operasional'} saved={saved === 'operasional'}
-        onSave={() => saveSection('operasional', ['operational_hours', 'service_area'])}
+        onSave={() => saveSection('operasional', ['operational_hours', 'service_area', 'default_buffer_time'])}
       >
         <Field label="Jam Operasional">
           <input className="admin-input" value={settings['operational_hours'] ?? ''}
@@ -82,6 +82,11 @@ export default function SettingsPage() {
           <input className="admin-input" value={settings['service_area'] ?? ''}
             onChange={e => set('service_area', e.target.value)}
             placeholder="Melayani Area Yogyakarta" />
+        </Field>
+        <Field label="Waktu Buffer Transport (Menit)" hint="Jeda standar antar-booking untuk perjalanan terapis/persiapan (contoh: 30 menit).">
+          <input className="admin-input" type="number" min="0" step="5" value={settings['default_buffer_time'] ?? ''}
+            onChange={e => set('default_buffer_time', e.target.value)}
+            placeholder="30" />
         </Field>
       </SectionCard>
 

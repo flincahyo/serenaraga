@@ -5,6 +5,7 @@ import Pricelist from "@/components/Pricelist";
 import BookingForm from "@/components/BookingForm";
 import FAQ from "@/components/FAQ";
 import TestimonialsCarousel from "@/components/TestimonialsCarousel";
+import PublicScheduleWidget from "@/components/PublicScheduleWidget";
 import FloatingWhatsApp from "@/components/FloatingWhatsApp";
 import Image from 'next/image';
 
@@ -53,6 +54,7 @@ export default function Home() {
       <Pricelist />
       <TestimonialsCarousel />
       <FAQ />
+      <PublicScheduleWidget />
       <BookingForm />
       <FloatingWhatsApp />
 

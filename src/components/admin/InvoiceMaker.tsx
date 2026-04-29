@@ -14,7 +14,7 @@ type TransportEntry = { id: string; therapist_id: string; fee: number | ''; pct:
 type Service = { id: string; name: string; price: number; details: string; category: string; is_bundle?: boolean; bundle_child_ids?: string[] };
 type Booking = {
   id: string; customer_name: string; phone: string;
-  service_name: string; booking_date: string; price: number; status: string;
+  service_name: string; booking_date: string; booking_time?: string; price: number; status: string;
 };
 type Discount = {
   id: string; name: string; type: string; value_type: string; value: number;
@@ -71,6 +71,7 @@ const InvoiceMaker = () => {
   const [customerName, setCustomerName]   = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [date, setDate]                   = useState('');
+  const [bookingTime, setBookingTime]     = useState('');
   const [items, setItems]                 = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
   const [services, setServices]           = useState<Service[]>([]);
   const [bookings, setBookings]           = useState<Booking[]>([]);
@@ -103,8 +104,8 @@ const InvoiceMaker = () => {
 
   const fetchAll = useCallback(async () => {
     const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }, { data: therapistData }] = await Promise.all([
-      supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids').order('category').order('sort_order'),
-      supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,price,status')
+      supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids,estimated_duration').order('category').order('sort_order'),
+      supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,booking_time,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
     supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days']),
       supabase.from('discounts').select('*').eq('is_active', true),
@@ -132,6 +133,65 @@ const InvoiceMaker = () => {
     setInvoiceNumber(genInvoiceNo());
     setDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }));
   }, []);
+
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+  const [scheduleData, setScheduleData] = useState<{ shifts: any[], offs: any[], bks: any[] }>({ shifts: [], offs: [], bks: [] });
+
+  useEffect(() => {
+    if (!date) return;
+    const loadDaySchedule = async () => {
+      const dW = new Date(date).getDay();
+      const [{data:s}, {data:o}, {data:b}] = await Promise.all([
+        supabase.from('therapist_shifts').select('*').eq('day_of_week', dW),
+        supabase.from('therapist_timeoffs').select('*').eq('off_date', date),
+        supabase.from('booking_items').select('therapist_id, bookings!inner(id, booking_time, status)').eq('bookings.booking_date', date)
+      ]);
+      setScheduleData({ shifts: s||[], offs: o||[], bks: b||[] });
+    };
+    loadDaySchedule();
+  }, [date, supabase]);
+
+  useEffect(() => {
+    if (!bookingTime) { setConflictWarning(null); return; }
+    
+    for (const item of items) {
+       if (item.therapist_id) {
+           const tid = item.therapist_id;
+           const tname = therapists.find(t=>t.id===tid)?.name;
+           
+           const off = scheduleData.offs.find(o => o.therapist_id === tid);
+           if (off && off.is_full_day) {
+             setConflictWarning(`⚠️ Terapis ${tname} sedang Cuti/Libur Penuh hari ini!`);
+             return;
+           }
+           const shift = scheduleData.shifts.find(s => s.therapist_id === tid);
+           if (shift && !shift.is_working) {
+             setConflictWarning(`⚠️ ${tname} sedang Off/Libur reguler di hari ini.`);
+             return;
+           }
+           if (shift && shift.break_start_time && shift.break_end_time) {
+             if (bookingTime >= shift.break_start_time && bookingTime <= shift.break_end_time) {
+                setConflictWarning(`⚠️ Jam ${bookingTime} berbenturan dengan Jam Istirahat ${tname} (${shift.break_start_time.slice(0,5)}-${shift.break_end_time.slice(0,5)}).`);
+                return;
+             }
+           }
+           
+           const overlappingBk = scheduleData.bks.find(b => {
+             if (b.therapist_id !== tid || b.bookings.status === 'Canceled' || b.bookings.id === selectedBookingId || !b.bookings.booking_time) return false;
+             // approximate 2 hr window conflict warning
+             const h1 = parseInt(b.bookings.booking_time.split(':')[0]);
+             const h2 = parseInt(bookingTime.split(':')[0]);
+             return Math.abs(h1 - h2) < 2;
+           });
+           
+           if (overlappingBk) {
+             setConflictWarning(`🚨 Peringatan: ${tname} kemungkinan memiliki booking lain pada jam ${overlappingBk.bookings.booking_time.slice(0,5)}! Mohon cek Tracker Gantt.`);
+             return;
+           }
+       }
+    }
+    setConflictWarning(null);
+  }, [items, bookingTime, scheduleData, selectedBookingId, therapists]);
 
   // Reset save guard whenever a new booking is selected
   useEffect(() => { hasSavedRef.current = false; }, [selectedBookingId]);
@@ -208,6 +268,7 @@ const InvoiceMaker = () => {
       // Reset transport entries and pool when clearing booking selection
       setTransportEntries([{ id: Date.now().toString(), therapist_id: '', fee: '', pct: 100 }]);
       setTransportTherapistPool([]);
+      setBookingTime('');
       return;
     }
     const bk = bookings.find(b => b.id === bookingId);
@@ -215,6 +276,7 @@ const InvoiceMaker = () => {
     setCustomerName(bk.customer_name);
     setCustomerPhone(bk.phone ?? '');
     if (bk.booking_date) setDate(bk.booking_date);
+    if (bk.booking_time) setBookingTime(bk.booking_time);
 
     // Load booking_items (multi-service)
     const { data: bkItems } = await supabase
@@ -282,14 +344,14 @@ const InvoiceMaker = () => {
           const newItems = [...prev];
           const idx = newItems.findIndex(i => i.id === itemId);
           if (idx > -1) {
-            newItems[idx] = { ...newItems[idx], name: children[0].name, price: children[0].price, details: children[0].details || '', parent_bundle_name: s.name };
+            newItems[idx] = { ...newItems[idx], name: children[0].name, price: children[0].price, duration: (children[0] as any).estimated_duration ? String((children[0] as any).estimated_duration) : '', details: children[0].details || '', parent_bundle_name: s.name };
             for (let i = 1; i < children.length; i++) {
               newItems.splice(idx + i, 0, {
                 id: Date.now() + i,
                 therapist_id: '',
                 name: children[i].name,
                 price: children[i].price,
-                duration: '',
+                duration: (children[i] as any).estimated_duration ? String((children[i] as any).estimated_duration) : '',
                 details: children[i].details || '',
                 parent_bundle_name: s.name
               });
@@ -301,9 +363,8 @@ const InvoiceMaker = () => {
       }
     }
 
-    const durationMatch = s.details?.match(/(\d+)\s*m(?:enit)?/i);
     setItems(p => p.map(i => i.id === itemId ? {
-      ...i, name: s.name, price: s.price, duration: durationMatch?.[1] ? `${durationMatch[1]}m` : '', details: s.details, parent_bundle_name: ''
+      ...i, name: s.name, price: s.price, duration: (s as any).estimated_duration ? String((s as any).estimated_duration) : '', details: s.details, parent_bundle_name: ''
     } : i));
   };
 
@@ -583,15 +644,19 @@ const InvoiceMaker = () => {
           {selectedBookingId && <p className="text-[10px] text-zinc-400 mt-2">Data terisi. Kamu tetap bisa edit dan tambah item di bawah.</p>}
         </div>
 
-        {/* No + Date */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
+        {/* No + Date + Time */}
+        <div className="grid grid-cols-6 gap-3">
+          <div className="col-span-2">
             <label className="text-xs font-medium text-zinc-500 mb-1.5 block">No. Invoice</label>
             <input type="text" value={invoiceNumber} readOnly className="admin-input font-mono text-xs opacity-60 cursor-not-allowed" />
           </div>
-          <div>
+          <div className="col-span-2">
             <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Tanggal</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="admin-input" />
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="admin-input text-xs" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Waktu / Jam</label>
+            <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} className="admin-input text-xs" />
           </div>
         </div>
 
@@ -722,11 +787,16 @@ const InvoiceMaker = () => {
         )}
 
         {/* Items */}
-        <div>
+        <div className="relative">
           <div className="flex justify-between items-center mb-2">
             <label className="text-xs font-medium text-zinc-500">Daftar Layanan</label>
             <button onClick={addItem} className="text-xs text-earth-primary font-semibold hover:underline">+ Tambah Item</button>
           </div>
+          {conflictWarning && (
+            <div className="mb-3 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400">
+              {conflictWarning}
+            </div>
+          )}
           <div className="space-y-3">
             {items.map(item => (
               <div key={item.id} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-2 border border-zinc-200 dark:border-zinc-700">

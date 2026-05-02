@@ -263,17 +263,72 @@ export default function TherapistsPage() {
     setFetchingPayout(false);
   };
 
+  // ── Shared capture helper: temporarily unlocks parent overflow constraints ──
+  // html-to-image uses getBoundingClientRect() which returns only the visible
+  // portion. We walk up ancestors, remove any overflow clipping, capture the
+  // full content, then restore everything.
+  const captureSlip = async (): Promise<string | null> => {
+    if (!slipRef.current) return null;
+    const el = slipRef.current;
+
+    // Collect all clipping ancestors
+    type Saved = { el: HTMLElement; overflow: string; height: string; maxHeight: string };
+    const saved: Saved[] = [];
+    let cur = el.parentElement;
+    while (cur && cur !== document.body) {
+      const cs = window.getComputedStyle(cur);
+      if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+        saved.push({ el: cur, overflow: cur.style.overflow, height: cur.style.height, maxHeight: cur.style.maxHeight });
+        cur.style.overflow = 'visible';
+        cur.style.height = 'auto';
+        cur.style.maxHeight = 'none';
+      }
+      cur = cur.parentElement;
+    }
+
+    // Also unlock the slipRef overflow for full render
+    const elOverflow = el.style.overflow;
+    el.style.overflow = 'visible';
+
+    // Wait for reflow + fonts
+    await new Promise(r => requestAnimationFrame(r));
+    await document.fonts.ready;
+
+    const scale = Math.min(window.devicePixelRatio || 2, 3);
+    const fullHeight = el.scrollHeight;
+
+    let dataUrl: string | null = null;
+    try {
+      dataUrl = await toPng(el, {
+        cacheBust: true,
+        pixelRatio: scale,
+        width: 400,
+        height: fullHeight,
+      });
+    } catch (e) {
+      console.error('Error capturing slip', e);
+    }
+
+    // Restore all
+    el.style.overflow = elOverflow;
+    saved.forEach(s => {
+      s.el.style.overflow = s.overflow;
+      s.el.style.height = s.height;
+      s.el.style.maxHeight = s.maxHeight;
+    });
+
+    return dataUrl;
+  };
+
   const generateSlipImage = async () => {
     if (!slipRef.current) return;
     setGeneratingSlip(true);
-    try {
-      const dataUrl = await toPng(slipRef.current, { cacheBust: true, pixelRatio: 2 });
+    const dataUrl = await captureSlip();
+    if (dataUrl) {
       const link = document.createElement('a');
       link.download = `Slip_${payoutTherapist?.name}_${payoutStart}.png`;
       link.href = dataUrl;
       link.click();
-    } catch (e) {
-      console.error('Error generating image', e);
     }
     setGeneratingSlip(false);
   };
@@ -281,23 +336,20 @@ export default function TherapistsPage() {
   const shareToWhatsApp = async () => {
     if (!slipRef.current) return;
     setGeneratingSlip(true);
-    try {
-      const dataUrl = await toPng(slipRef.current, { cacheBust: true, pixelRatio: 2 });
+    const dataUrl = await captureSlip();
+    if (dataUrl) {
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `Slip_${payoutTherapist?.name}_${payoutStart}.png`, { type: 'image/png' });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file] }); return; }
-        catch (e) { if ((e as Error).name === 'AbortError') return; }
+        try { await navigator.share({ files: [file] }); setGeneratingSlip(false); return; }
+        catch (e) { if ((e as Error).name === 'AbortError') { setGeneratingSlip(false); return; } }
       }
       const phone = payoutTherapist?.phone?.replace(/\D/g, '') || '';
       if (phone) window.open(`https://wa.me/${phone}`, '_blank');
-      // Always fallback download
       const link = document.createElement('a');
       link.download = file.name;
       link.href = dataUrl;
       link.click();
-    } catch (e) {
-      console.error('Error generating image', e);
     }
     setGeneratingSlip(false);
   };
@@ -461,19 +513,21 @@ export default function TherapistsPage() {
             </div>
 
             <div className="flex-1 overflow-visible relative flex flex-col lg:flex-row gap-6 min-h-0">
-              {/* Slip Preview off-screen block that gets generated */}
-              <div className="flex-1 overflow-y-auto bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 flex justify-center items-start">
-                <div
-                  ref={slipRef}
-                  className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden"
-                  style={{ width: '400px', maxWidth: '100%', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
-                >
+              {/* Slip Preview */}
+              <div className="flex-1 bg-zinc-100 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto overflow-y-auto">
+                {/* Scale wrapper for mobile — full 400px, horizontally scrollable on mobile */}
+                <div className="flex justify-center items-start" style={{ minWidth: 400 }}>
+                  <div
+                    ref={slipRef}
+                    className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden"
+                    style={{ width: 400, boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}
+                  >
                   {/* Top Accent Strip */}
                   <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
 
                   {/* Watermark Logo */}
                   <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -translate-y-16">
-                    <img src="/serenalogo2.svg" alt="watermark" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
+                    <img src="/serenalogo2.svg" alt="watermark" crossOrigin="anonymous" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
                   </div>
 
                   <div className="relative z-10 p-8 mt-2">
@@ -484,6 +538,7 @@ export default function TherapistsPage() {
                           <img 
                             src="/serenalogo2.svg" 
                             alt="SerenaRaga" 
+                            crossOrigin="anonymous"
                             className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
                           />
                         </div>
@@ -593,10 +648,11 @@ export default function TherapistsPage() {
                         "*Nilai komisi bersifat bersih setelah penyesuaian diskon operasional. Biaya bahan habis pakai murni ditanggung oleh manajemen."
                       </p>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                    </div> {/* end relative z-10 content */}
+                  </div> {/* end slipRef */}
+                </div> {/* end minWidth scale wrapper */}
+              </div> {/* end preview scroll container */}
+            </div> {/* end flex row */}
 
             <div className="pt-6 mt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-3">
               <button onClick={() => setShowPayout(false)} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors">Tutup</button>

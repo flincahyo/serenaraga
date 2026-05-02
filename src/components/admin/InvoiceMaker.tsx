@@ -452,17 +452,60 @@ const InvoiceMaker = () => {
     return loyal ? `🏅 ${loyal.name}` : null;
   };
 
+  // ── Shared capture helper — unlocks parent overflow before toPng ──
+  // html-to-image uses getBoundingClientRect() which returns visible area only;
+  // we temporarily remove parent clipping so the full invoice height is captured.
+  const captureInvoice = async (): Promise<{ dataUrl: string; blob: Blob } | null> => {
+    if (!invoiceRef.current) return null;
+    const el = invoiceRef.current;
+
+    type Saved = { el: HTMLElement; overflow: string; height: string; maxHeight: string };
+    const saved: Saved[] = [];
+    let cur = el.parentElement;
+    while (cur && cur !== document.body) {
+      const cs = window.getComputedStyle(cur);
+      if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+        saved.push({ el: cur, overflow: cur.style.overflow, height: cur.style.height, maxHeight: cur.style.maxHeight });
+        cur.style.overflow = 'visible';
+        cur.style.height = 'auto';
+        cur.style.maxHeight = 'none';
+      }
+      cur = cur.parentElement;
+    }
+    const elOverflow = el.style.overflow;
+    el.style.overflow = 'visible';
+
+    await new Promise(r => requestAnimationFrame(r));
+    await document.fonts.ready;
+
+    const scale = Math.min(window.devicePixelRatio || 2, 3);
+    const fullHeight = el.scrollHeight;
+
+    let result: { dataUrl: string; blob: Blob } | null = null;
+    try {
+      const dataUrl = await toPng(el, { cacheBust: true, pixelRatio: scale, width: 480, height: fullHeight });
+      const blob = await (await fetch(dataUrl)).blob();
+      result = { dataUrl, blob };
+    } catch (e) { console.error(e); }
+
+    el.style.overflow = elOverflow;
+    saved.forEach(s => {
+      s.el.style.overflow = s.overflow;
+      s.el.style.height = s.height;
+      s.el.style.maxHeight = s.maxHeight;
+    });
+
+    return result;
+  };
+
   const generateImage = async () => {
     if (!invoiceRef.current) return null;
     setGenerating(true);
-    try {
-      const dataUrl = await toPng(invoiceRef.current, { cacheBust: true, pixelRatio: 2 });
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      return { dataUrl, blob };
-    } catch (e) { console.error(e); return null; }
-    finally { setGenerating(false); }
+    const result = await captureInvoice();
+    setGenerating(false);
+    return result;
   };
+
 
   // ── Save: complete booking + record discounts ──
   const completeAndSave = async () => {
@@ -983,14 +1026,16 @@ const InvoiceMaker = () => {
       {/* ── PREVIEW SECTION ── */}
       <div className="space-y-3">
         <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest px-1">Preview Invoice</h3>
+        {/* overflow-x-auto wraps the 480px invoice so mobile can scroll horizontally */}
         <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg">
+          <div style={{ minWidth: 480 }}>
           <div ref={invoiceRef} className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden" style={{ width: 480, minHeight: 680 }}>
             {/* Top Accent Strip */}
             <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
             
             {/* Watermark Logo */}
             <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -translate-y-24">
-              <img src="/serenalogo2.svg" alt="watermark" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
+              <img src="/serenalogo2.svg" alt="watermark" crossOrigin="anonymous" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
             </div>
 
             {/* Content Container */}
@@ -1003,6 +1048,7 @@ const InvoiceMaker = () => {
                   <img 
                     src="/serenalogo2.svg" 
                     alt="SerenaRaga" 
+                    crossOrigin="anonymous"
                     className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
                   />
                 </div>
@@ -1114,9 +1160,10 @@ const InvoiceMaker = () => {
             </div>
             
             </div> {/* End of Content Container */}
-          </div>
-        </div>
-      </div>
+          </div> {/* end invoiceRef */}
+          </div> {/* end minWidth:480 wrapper */}
+        </div> {/* end overflow-x-auto */}
+      </div> {/* end space-y-3 preview section */}
     </div>
   );
 };

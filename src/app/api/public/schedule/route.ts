@@ -43,14 +43,30 @@ export async function GET() {
       supabase.from('therapist_shifts').select('therapist_id, day_of_week, start_time, end_time, is_working, break_start_time, break_end_time'),
       supabase.from('therapist_timeoffs').select('therapist_id, off_date, is_full_day, start_time, end_time, reason').gte('off_date', startDateStr).lte('off_date', endDateStr),
       supabase.from('booking_items').select('id, therapist_id, service_name, duration, bookings!inner(id, booking_date, booking_time, status)').neq('bookings.status', 'Canceled').gte('bookings.booking_date', startDateStr).lte('bookings.booking_date', endDateStr),
-      supabase.from('settings').select('value').eq('key', 'default_buffer_time').maybeSingle()
+      supabase.from('settings').select('key, value').in('key', ['default_buffer_time', 'minimum_viable_duration', 'therapist_last_order_prefs'])
     ]);
 
-    const therapists    = thRes.data  || [];
-    const shifts        = shRes.data  || [];
-    const timeoffs      = offRes.data || [];
-    const rawBookings   = bRes.data   || [];
-    const defaultBuffer = setRes.data?.value ? Number(setRes.data.value) : 30;
+    const therapists  = thRes.data  || [];
+    const shifts      = shRes.data  || [];
+    const timeoffs    = offRes.data || [];
+    const rawBookings = bRes.data   || [];
+
+    let defaultBuffer = 30;
+    let mvd = 120;
+    if (setRes.data) {
+      const bufSet = setRes.data.find(s => s.key === 'default_buffer_time');
+      if (bufSet && bufSet.value) defaultBuffer = Number(bufSet.value);
+      const mvdSet = setRes.data.find(s => s.key === 'minimum_viable_duration');
+      if (mvdSet && mvdSet.value) mvd = Number(mvdSet.value);
+    }
+    
+    let lastOrderPrefs: Record<string, boolean> = {};
+    if (setRes.data) {
+      const prefsSet = setRes.data.find(s => s.key === 'therapist_last_order_prefs');
+      if (prefsSet && prefsSet.value) {
+        try { lastOrderPrefs = JSON.parse(prefsSet.value); } catch(e) {}
+      }
+    }
 
     // Group booking_items by (booking_id + therapist_id) to prevent double-counting buffer
     const groupedMap: Record<string, { therapist_id: string; booking_date: string; booking_time: string; duration: number }> = {};
@@ -103,82 +119,84 @@ export async function GET() {
       const dow     = dayOfWeeks[i];
       const label   = labels[i];
 
-      let workingCount = 0;
-      const shopFreeBlocks: { s: number; e: number }[] = [];
+      const allSlots: { time: string; available: boolean }[] = [];
+      const gridSlotsMins: number[] = [];
+      
+      // Generate 60-min interval slots from 08:00 to 22:00
+      for (let m = 8 * 60; m <= 22 * 60; m += 60) {
+        gridSlotsMins.push(m);
+      }
 
-      therapists.forEach(th => {
-        const tid      = th.id;
-        const thShift  = shifts.find(s => s.therapist_id === tid && s.day_of_week === dow);
-        const thOff    = timeoffs.find(o => o.therapist_id === tid && o.off_date === dateStr);
+      for (const slotMins of gridSlotsMins) {
+        const slotEndMins = slotMins + mvd;
+        let isSlotAvailable = false;
 
-        // Full-day off → therapist completely unavailable today
-        if (thOff?.is_full_day) return;
-        // No shift defined or explicitly not working → skip
-        if (!thShift || !thShift.is_working) return;
+        for (const th of therapists) {
+          const tid = th.id;
+          const thShift = shifts.find(s => s.therapist_id === tid && s.day_of_week === dow);
+          const thOff = timeoffs.find(o => o.therapist_id === tid && o.off_date === dateStr);
 
-        workingCount++;
-        let tFree: { s: number; e: number }[] = [{ s: timeToMins(thShift.start_time), e: timeToMins(thShift.end_time) }];
+          // Full day off or not working
+          if (thOff?.is_full_day) continue;
+          if (!thShift || !thShift.is_working) continue;
 
-        const removeBlock = (start: number, end: number) => {
-          const newFree: { s: number; e: number }[] = [];
-          for (const f of tFree) {
-            if (end <= f.s || start >= f.e) {
-              newFree.push(f);            // no overlap — keep as-is
-            } else {
-              if (start > f.s) newFree.push({ s: f.s,   e: start }); // left remainder
-              if (end   < f.e) newFree.push({ s: end,   e: f.e   }); // right remainder
+          const shiftStart = timeToMins(thShift.start_time);
+          const shiftEnd = timeToMins(thShift.end_time);
+          const isLastOrderFlexible = lastOrderPrefs[tid] === true;
+
+          // If flexible, slot just needs to start before shift end. If strict, entire MVD must fit within shift.
+          if (isLastOrderFlexible) {
+            if (slotMins < shiftStart || slotMins > shiftEnd) continue;
+          } else {
+            if (slotMins < shiftStart || slotEndMins > shiftEnd) continue;
+          }
+
+          let collision = false;
+
+          // Check break collision
+          if (thShift.break_start_time && thShift.break_end_time) {
+            const bs = timeToMins(thShift.break_start_time);
+            const be = timeToMins(thShift.break_end_time);
+            if (slotMins < be && bs < slotEndMins) collision = true;
+          }
+          if (collision) continue;
+
+          // Check partial timeoff collision
+          if (thOff && !thOff.is_full_day && thOff.start_time && thOff.end_time) {
+            const os = timeToMins(thOff.start_time);
+            const oe = timeToMins(thOff.end_time);
+            if (slotMins < oe && os < slotEndMins) collision = true;
+          }
+          if (collision) continue;
+
+          // Check booking collisions
+          const thBookings = groupedBookings.filter(b => b.therapist_id === tid && b.booking_date === dateStr);
+          for (const bk of thBookings) {
+            const bs = timeToMins(bk.booking_time);
+            const be = bs + bk.duration + defaultBuffer;
+            if (slotMins < be && bs < slotEndMins) {
+              collision = true;
+              break;
             }
           }
-          tFree = newFree;
-        };
+          if (collision) continue;
 
-        // Remove break time
-        if (thShift.break_start_time && thShift.break_end_time) {
-          removeBlock(timeToMins(thShift.break_start_time), timeToMins(thShift.break_end_time));
-        }
-        // Remove partial day-off window
-        if (thOff && !thOff.is_full_day && thOff.start_time && thOff.end_time) {
-          removeBlock(timeToMins(thOff.start_time), timeToMins(thOff.end_time));
+          // At least 1 therapist can take this slot
+          isSlotAvailable = true;
+          break;
         }
 
-        // Remove each booking window (duration + travel buffer)
-        const thBookings = groupedBookings.filter(b => b.therapist_id === tid && b.booking_date === dateStr);
-        for (const bk of thBookings) {
-          const start = timeToMins(bk.booking_time);
-          removeBlock(start, start + bk.duration + defaultBuffer);
-        }
-
-        // A slot must be at least 90 min (shortest realistic service 60m + 30m min buffer)
-        tFree = tFree.filter(f => (f.e - f.s) >= 90);
-        shopFreeBlocks.push(...tFree);
-      });
-
-      if (workingCount === 0 || shopFreeBlocks.length === 0) {
-        publicSchedule.push({ date: dateStr, label, timeText: 'FULL BOOKED', freeBlocks: [], isFull: true });
-        continue;
+        allSlots.push({
+          time: minsToTime(slotMins),
+          available: isSlotAvailable
+        });
       }
 
-      // Merge overlapping free blocks across all therapists (union — any therapist can take it)
-      shopFreeBlocks.sort((a, b) => a.s - b.s);
-      const mergedBlocks: { s: number; e: number }[] = [shopFreeBlocks[0]];
-
-      for (let j = 1; j < shopFreeBlocks.length; j++) {
-        const curr = shopFreeBlocks[j];
-        const last = mergedBlocks[mergedBlocks.length - 1];
-        if (curr.s <= last.e) {
-          last.e = Math.max(last.e, curr.e);
-        } else {
-          mergedBlocks.push(curr);
-        }
-      }
-
-      const timeParts = mergedBlocks.map(b => `${minsToTime(b.s)} - ${minsToTime(b.e)}`);
       publicSchedule.push({
         date: dateStr,
         label,
-        timeText: timeParts.join(' & '),
-        freeBlocks: mergedBlocks,
-        isFull: false,
+        allSlots,
+        isFull: !allSlots.some(s => s.available),
       });
     }
 

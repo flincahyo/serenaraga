@@ -269,9 +269,23 @@ export default function SchedulePage() {
       supabase.from('therapist_shifts').select('*').in('therapist_id', thIds),
       supabase.from('therapist_timeoffs').select('*').in('therapist_id', thIds).gte('off_date', startDate).lte('off_date', endDate),
       (supabase.from('booking_items').select('therapist_id, duration, bookings!inner(id, booking_date, booking_time, status)').in('therapist_id', thIds).gte('bookings.booking_date', startDate).lte('bookings.booking_date', endDate).neq('bookings.status', 'Canceled') as any),
-      supabase.from('settings').select('value').eq('key', 'default_buffer_time').single()
+      supabase.from('settings').select('key, value').in('key', ['default_buffer_time', 'minimum_viable_duration', 'therapist_last_order_prefs'])
     ]);
-    const defaultBuffer = settingData?.value ? Number(settingData.value) : 30;
+    
+    let defaultBuffer = 30;
+    let mvd = 120;
+    let lastOrderPrefs: Record<string, boolean> = {};
+    
+    if (settingData) {
+      const bufSet = settingData.find(s => s.key === 'default_buffer_time');
+      if (bufSet && bufSet.value) defaultBuffer = Number(bufSet.value);
+      const mvdSet = settingData.find(s => s.key === 'minimum_viable_duration');
+      if (mvdSet && mvdSet.value) mvd = Number(mvdSet.value);
+      const prefsSet = settingData.find(s => s.key === 'therapist_last_order_prefs');
+      if (prefsSet && prefsSet.value) {
+        try { lastOrderPrefs = JSON.parse(prefsSet.value); } catch(e) {}
+      }
+    }
 
     const timeToMins = (t: string) => {
       if (!t) return 0;
@@ -293,7 +307,15 @@ export default function SchedulePage() {
         const thShift = shifts?.find(s => s.therapist_id === tid && s.day_of_week === dayOfWeek);
         if (thShift && thShift.is_working) {
            workingCount++;
-           let tFree: {s: number, e: number}[] = [{ s: timeToMins(thShift.start_time), e: timeToMins(thShift.end_time) }];
+           let shiftStart = timeToMins(thShift.start_time);
+           let shiftEnd = timeToMins(thShift.end_time);
+           
+           let trueShiftEnd = shiftEnd;
+           if (lastOrderPrefs[tid] === true) {
+             trueShiftEnd += mvd;
+           }
+
+           let tFree: {s: number, e: number}[] = [{ s: shiftStart, e: trueShiftEnd }];
            
            const removeBlock = (start: number, end: number) => {
              const newFree: {s: number, e: number}[] = [];
@@ -333,9 +355,16 @@ export default function SchedulePage() {
              removeBlock(bk.start, bk.start + bk.dur + defaultBuffer);
            }
            
-           // FIX ISSUE 8: align with public API — require ≥90m (60m min service + 30m buffer)
-           // so the Share Jadwal preview matches what the public schedule widget shows.
-           tFree = tFree.filter(f => (f.e - f.s) >= 90);
+           // Filter gaps based on the dynamic MVD setting
+           tFree = tFree.filter(f => (f.e - f.s) >= mvd);
+           
+           // Snap to full hours (60 min grid) to match landing page UI, and cap at strict shiftEnd
+           tFree = tFree.map(f => {
+              let newS = Math.ceil(f.s / 60) * 60;
+              let newE = Math.floor(Math.min(f.e, shiftEnd) / 60) * 60;
+              return { s: newS, e: newE };
+           }).filter(f => f.s <= f.e); // Keep only valid ranges after snapping
+           
            shopFreeBlocks.push(...tFree);
         }
       });
@@ -363,7 +392,15 @@ export default function SchedulePage() {
       }
 
       // Format to string
-      const timeParts = mergedBlocks.map(b => `${minsToTime(b.s)} - ${minsToTime(b.e)}`);
+      const timeParts = mergedBlocks.map(b => {
+        const gap = b.e - b.s;
+        // If the physical gap is smaller than the MVD (e.g., a Last Order scenario)
+        // Only print the Start Time so customers don't visually see a "short" range.
+        if (gap < mvd) {
+          return minsToTime(b.s);
+        }
+        return `${minsToTime(b.s)} - ${minsToTime(b.e)}`;
+      });
       const timeText = timeParts.join(' & ');
 
       return { ...day, active: true, timeText };

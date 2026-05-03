@@ -57,6 +57,7 @@ export default function TherapistsPage() {
   const [timeoffs, setTimeoffs] = useState<any[]>([]);
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [newTimeoff, setNewTimeoff] = useState({ date: '', reason: '', is_full_day: true, start: '', end: '' });
+  const [allowLastOrder, setAllowLastOrder] = useState<boolean>(false);
 
   useEffect(() => { fetchTherapists(); }, []);
 
@@ -103,10 +104,20 @@ export default function TherapistsPage() {
     setLoadingSchedule(true);
     
     // Fetch typical shifts (0 to 6) and operational hours
-    const [{ data: shiftData }, { data: settingData }] = await Promise.all([
+    const [{ data: shiftData }, { data: settingData }, { data: prefsData }] = await Promise.all([
       supabase.from('therapist_shifts').select('*').eq('therapist_id', t.id),
-      supabase.from('settings').select('value').eq('key', 'operational_hours').single()
+      supabase.from('settings').select('value').eq('key', 'operational_hours').single(),
+      supabase.from('settings').select('value').eq('key', 'therapist_last_order_prefs').single()
     ]);
+
+    if (prefsData && prefsData.value) {
+      try {
+        const prefs = JSON.parse(prefsData.value);
+        setAllowLastOrder(!!prefs[t.id]);
+      } catch(e) {}
+    } else {
+      setAllowLastOrder(false);
+    }
 
     let defStart = '09:00:00';
     let defEnd = '21:00:00';
@@ -152,6 +163,16 @@ export default function TherapistsPage() {
       break_end_time: s.break_end_time || null
     }));
     await supabase.from('therapist_shifts').upsert(payload, { onConflict: 'therapist_id, day_of_week' });
+
+    // Save allow_last_order setting to JSON prefs
+    const { data: existPrefs } = await supabase.from('settings').select('value').eq('key', 'therapist_last_order_prefs').single();
+    let prefs: Record<string, boolean> = {};
+    if (existPrefs && existPrefs.value) {
+      try { prefs = JSON.parse(existPrefs.value); } catch(e){}
+    }
+    prefs[scheduleTherapist.id] = allowLastOrder;
+    await supabase.from('settings').upsert({ key: 'therapist_last_order_prefs', value: JSON.stringify(prefs) });
+
     setSaving(false);
     alert('Jadwal rutin berhasil disimpan.');
   };
@@ -645,7 +666,7 @@ export default function TherapistsPage() {
 
                     <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px dashed #e4e4e7', paddingTop: '20px' }}>
                       <p style={{ fontSize: '9.5px', fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: '16px', lineHeight: 1.5 }}>
-                        "*Nilai komisi bersifat bersih setelah penyesuaian diskon operasional. Biaya bahan habis pakai murni ditanggung oleh manajemen."
+                        &quot;*Nilai komisi bersifat bersih setelah penyesuaian diskon operasional. Biaya bahan habis pakai murni ditanggung oleh manajemen.&quot;
                       </p>
                     </div>
                     </div> {/* end relative z-10 content */}
@@ -701,7 +722,17 @@ export default function TherapistsPage() {
                 <div>
                   <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 p-3 rounded-xl text-xs mb-4 flex items-start gap-2">
                     <Clock size={14} className="mt-0.5 shrink-0" />
-                    <p>Atur rentang jam kerja mingguan. Jangan lupa atur "Jam Break" (opsional) untuk menghindari booking di saat istirahat siang terapis.</p>
+                    <p>Atur rentang jam kerja mingguan. Jangan lupa atur &quot;Jam Break&quot; (opsional) untuk menghindari booking di saat istirahat siang terapis.</p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 mb-4 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-100 dark:border-purple-800/30">
+                    <div>
+                      <h4 className="text-sm font-bold text-purple-900 dark:text-purple-300">Izinkan Last Order di Jam Pulang?</h4>
+                      <p className="text-xs text-purple-700/70 dark:text-purple-400/70 mt-0.5 max-w-lg">Jika aktif, terapis bebas menerima order kapan saja asal MULAI sebelum jam pulangnya (layanan akan melampaui jam kerja). Jika mati, seluruh durasi layanan WAJIB selesai sebelum jam pulang (Strict).</p>
+                    </div>
+                    <button onClick={() => setAllowLastOrder(!allowLastOrder)} className="p-1 rounded text-purple-400 hover:text-purple-600 transition-colors shrink-0">
+                      {allowLastOrder ? <ToggleRight size={32} className="text-purple-600" /> : <ToggleLeft size={32} />}
+                    </button>
                   </div>
                   
                   <div className="space-y-2">

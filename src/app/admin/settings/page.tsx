@@ -8,7 +8,7 @@ import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 type Settings = Record<string, string>;
 
 const ALL_KEYS = [
-  'operational_hours', 'service_area', 'default_buffer_time',
+  'operational_hours', 'service_area', 'default_buffer_time', 'minimum_viable_duration',
   'whatsapp_number', 'whatsapp_booking_message',
   'whatsapp_reminder_message',
   'invoice_footer_text', 'invoice_social_text',
@@ -71,7 +71,7 @@ export default function SettingsPage() {
         id="operasional" title="Operasional"
         icon={<Clock size={15} className="text-earth-primary" />}
         saving={saving === 'operasional'} saved={saved === 'operasional'}
-        onSave={() => saveSection('operasional', ['operational_hours', 'service_area', 'default_buffer_time'])}
+        onSave={() => saveSection('operasional', ['operational_hours', 'service_area', 'default_buffer_time', 'minimum_viable_duration'])}
       >
         <Field label="Jam Operasional">
           <input className="admin-input" value={settings['operational_hours'] ?? ''}
@@ -87,6 +87,11 @@ export default function SettingsPage() {
           <input className="admin-input" type="number" min="0" step="5" value={settings['default_buffer_time'] ?? ''}
             onChange={e => set('default_buffer_time', e.target.value)}
             placeholder="30" />
+        </Field>
+        <Field label="Minimum Viable Duration / MVD (Menit)" hint="Asumsi durasi standar (termasuk buffer) yang dipakai untuk mengecek ketersediaan slot di widget publik (default: 120 menit).">
+          <input className="admin-input" type="number" min="30" step="15" value={settings['minimum_viable_duration'] ?? '120'}
+            onChange={e => set('minimum_viable_duration', e.target.value)}
+            placeholder="120" />
         </Field>
       </SectionCard>
 

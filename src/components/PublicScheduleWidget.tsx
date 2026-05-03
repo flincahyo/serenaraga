@@ -4,16 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarCheck, CalendarX, Sparkles } from 'lucide-react';
 
-interface FreeBlock {
-  s: number;
-  e: number;
+interface TimeSlot {
+  time: string;
+  available: boolean;
 }
 
 interface PublicDaySchedule {
   date: string;
   label: string;
-  timeText: string;
-  freeBlocks: FreeBlock[];
+  allSlots: TimeSlot[];
   isFull: boolean;
 }
 
@@ -22,15 +21,7 @@ export default function PublicScheduleWidget() {
   const [loading, setLoading] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Kanban timeline config
-  const START_HOUR = 8;
-  const END_HOUR = 23;
-  const TOTAL_MINUTES = (END_HOUR - START_HOUR) * 60;
-  
-  const minutesToPct = (mins: number) => {
-    let bounded = Math.max(START_HOUR * 60, Math.min(END_HOUR * 60, mins));
-    return ((bounded - (START_HOUR * 60)) / TOTAL_MINUTES) * 100;
-  };
+
 
   useEffect(() => {
     const fetchSchedule = async () => {
@@ -84,41 +75,19 @@ export default function PublicScheduleWidget() {
           <div className="bg-white rounded-3xl border border-gray-100 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] overflow-hidden">
             {/* Legend */}
             <div className="px-6 py-4 bg-gray-50/50 border-b border-gray-100 flex flex-wrap items-center gap-6 text-[11px] font-bold tracking-wider text-text-secondary">
-              <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-100 border border-emerald-200"></span> SLOT KOSONG</span>
+              <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-100 border border-emerald-200"></span> SLOT TERSEDIA</span>
               <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-50 border border-red-100"></span> FULL BOOKED</span>
             </div>
 
-            {/* Timetable Header */}
-            <div className="hidden md:flex ml-[120px] lg:ml-[160px] border-b border-gray-100 h-10 relative">
-               {Array.from({ length: END_HOUR - START_HOUR + 1 }).map((_, i) => {
-                 const hour = START_HOUR + i;
-                 // Labels only every 2 hours to avoid clutter
-                 if (hour % 2 !== 0 && hour !== START_HOUR && hour !== END_HOUR) return null;
-                 return (
-                   <div key={i} className="absolute top-0 bottom-0 flex flex-col justify-end pb-2 -translate-x-1/2" style={{ left: `${(i / (END_HOUR - START_HOUR)) * 100}%` }}>
-                      <span className="text-[10px] font-semibold text-gray-400">{hour.toString().padStart(2, '0')}:00</span>
-                   </div>
-                 );
-               })}
-            </div>
-
             <div className="divide-y divide-gray-50 flex flex-col relative w-full">
-               {/* Vertical grid lines (desktop only) */}
-               <div className="hidden md:flex absolute top-0 bottom-0 ml-[120px] lg:ml-[160px] right-0 pointer-events-none z-0">
-                 {Array.from({ length: END_HOUR - START_HOUR }).map((_, i) => (
-                    <div key={i} className={`h-full border-l border-gray-100/50 ${i % 2 !== 0 ? 'bg-gray-50/30' : 'bg-transparent'}`} style={{ width: `${100 / (END_HOUR - START_HOUR)}%` }}></div>
-                 ))}
-               </div>
-
                {(isExpanded ? schedule : schedule.slice(0, 7)).map((day) => {
                   const [dayName, dateName] = day.label.split(', ');
                   return (
                     <div 
                       key={day.date} 
-                      onClick={() => scrollToBooking(day.date)}
-                      className="group flex flex-col md:flex-row relative z-10 hover:bg-gray-50/50 transition-colors cursor-pointer"
+                      className="group flex flex-col md:flex-row relative z-10 hover:bg-gray-50/50 transition-colors"
                     >
-                      <div className="w-full md:w-[120px] lg:w-[160px] shrink-0 p-4 md:py-5 md:px-6 flex flex-row md:flex-col items-center md:items-start justify-between md:justify-center bg-white md:bg-transparent md:border-r border-gray-100 border-dashed">
+                      <div className="w-full md:w-[160px] lg:w-[200px] shrink-0 p-4 md:py-6 md:px-6 flex flex-row md:flex-col items-center md:items-start justify-between md:justify-center bg-white md:bg-transparent md:border-r border-gray-100 border-dashed">
                         <div>
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{dayName}</p>
                           <p className="text-sm font-black text-text-primary mt-0.5">{dateName}</p>
@@ -132,80 +101,28 @@ export default function PublicScheduleWidget() {
                                 <CalendarCheck size={14} />
                              </div>
                            )}
-                           <svg className="w-4 h-4 text-gray-300 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
                         </div>
                       </div>
 
-                      {/* Timeline Area Desktop */}
-                      <div className="hidden md:block flex-1 relative h-20">
-                         {day.isFull ? (
-                           // Show full blocked area for the day
-                           <div className="absolute inset-y-3 left-4 right-4 rounded-xl bg-[repeating-linear-gradient(45deg,rgba(239,68,68,0.03),rgba(239,68,68,0.03)_5px,rgba(239,68,68,0.06)_5px,rgba(239,68,68,0.06)_10px)] bg-red-50 border border-red-100/50 flex items-center justify-center overflow-hidden transition-all group-hover:bg-red-100/50">
-                             <div className="flex items-center gap-2 bg-white/60 px-4 py-1.5 rounded-full border border-red-100 backdrop-blur-sm shadow-sm">
-                               <CalendarX size={14} className="text-red-500" />
-                               <span className="text-[10px] font-black tracking-widest text-red-500">FULL BOOKED</span>
-                             </div>
-                           </div>
-                         ) : (
-                           // Render the exact free blocks
-                           <>
-                             {day.freeBlocks?.map((bk, i) => {
-                               const leftPct = minutesToPct(bk.s);
-                               const widthPct = minutesToPct(bk.e) - leftPct;
-                               
-                               // Calculate duration in hours to decide if we show text inside
-                               const durMins = bk.e - bk.s;
-                               const showText = durMins >= 120; // 2 hours
-
-                               const formatTime = (mins: number) => {
-                                 const h = Math.floor(mins / 60);
-                                 const m = mins % 60;
-                                 return `${String(h).padStart(2,'0')}.${String(m).padStart(2,'0')}`;
-                               };
-
-                               return (
-                                 <div 
-                                   key={i} 
-                                   className="absolute inset-y-4 rounded-lg bg-emerald-50/80 border border-emerald-200 shadow-sm flex items-center justify-center overflow-hidden group-hover:bg-emerald-100/80 group-hover:border-emerald-300 transition-all group-hover:scale-[1.01] origin-left"
-                                   style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                                 >
-                                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-100/0 via-white/40 to-emerald-100/0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                   {showText && (
-                                     <span className="text-[10px] font-semibold text-emerald-700 whitespace-nowrap px-2 z-10 hidden lg:block">
-                                       {formatTime(bk.s)} - {formatTime(bk.e)}
-                                     </span>
-                                   )}
-                                 </div>
-                               );
-                             })}
-                           </>
-                         )}
+                      {/* Time Slots Area */}
+                      <div className="flex-1 p-4 md:p-6 flex items-center bg-white md:bg-transparent">
+                         <div className="flex flex-wrap gap-2.5 justify-start">
+                           {day.allSlots?.map((slot, i) => (
+                             <button 
+                               key={i} 
+                               onClick={() => slot.available && scrollToBooking(day.date)}
+                               disabled={!slot.available}
+                               className={`px-4 py-2 text-sm font-bold rounded-lg shadow-sm transition-all ${
+                                 slot.available 
+                                   ? 'bg-emerald-50/80 hover:bg-emerald-500 hover:text-white border border-emerald-200 text-emerald-700 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
+                                   : 'bg-red-50/50 border border-red-100 text-red-400 opacity-60 cursor-not-allowed line-through'
+                               }`}
+                             >
+                               {slot.time}
+                             </button>
+                           ))}
+                         </div>
                       </div>
-
-                      {/* Timeline Area Mobile Fallback */}
-                      <div className="md:hidden px-4 pb-5 pt-1 bg-white">
-                        {day.isFull ? (
-                          <div className="w-full rounded-lg bg-[repeating-linear-gradient(45deg,rgba(239,68,68,0.03),rgba(239,68,68,0.03)_5px,rgba(239,68,68,0.06)_5px,rgba(239,68,68,0.06)_10px)] bg-red-50/50 border border-red-100/30 p-3 flex items-center justify-center">
-                             <span className="text-[10px] font-black tracking-widest text-red-500/80">SELURUH TERAPIS PENUH</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2 justify-start">
-                            {day.freeBlocks?.map((bk, i) => {
-                               const formatTime = (mins: number) => {
-                                 const h = Math.floor(mins / 60);
-                                 const m = mins % 60;
-                                 return `${String(h).padStart(2,'0')}.${String(m).padStart(2,'0')}`;
-                               };
-                               return (
-                                 <span key={i} className="px-3.5 py-1.5 bg-emerald-50/50 border border-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg shadow-sm">
-                                   {formatTime(bk.s)} - {formatTime(bk.e)}
-                                 </span>
-                               );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
                     </div>
                   );
                })}

@@ -98,6 +98,11 @@ const InvoiceMaker = () => {
   const [customDiscountAmount, setCustomDiscountAmount] = useState('');
   const [therapists, setTherapists] = useState<{id: string; name: string; commission_pct: number}[]>([]);
   const [reEngageDays, setReEngageDays]           = useState(60);
+  // Voucher
+  const [voucherCode, setVoucherCode]             = useState('');
+  const [voucherChecking, setVoucherChecking]     = useState(false);
+  const [voucherError, setVoucherError]           = useState('');
+  const [voucherApplied, setVoucherApplied]       = useState<{id:string;code:string;label:string;value:number;value_type:string} | null>(null);
   const [returningPromos, setReturningPromos]     = useState<Discount[]>([]); // suggested returning customer promos
 
   const supabase = createClient();
@@ -412,6 +417,29 @@ const InvoiceMaker = () => {
 
   const removeApplied = (discountId: string) =>
     setAppliedDiscounts(prev => prev.filter(a => a.discountId !== discountId));
+
+  // ── Voucher ops ──
+  const checkVoucher = async () => {
+    if (!voucherCode.trim()) return;
+    setVoucherChecking(true);
+    setVoucherError('');
+    try {
+      const res = await fetch(`/api/vouchers/validate?code=${encodeURIComponent(voucherCode.trim().toUpperCase())}`);
+      const json = await res.json();
+      if (!json.valid) { setVoucherError(json.error || 'Voucher tidak valid.'); }
+      else { setVoucherApplied({ id: json.voucher.id, code: voucherCode.trim().toUpperCase(), label: `Voucher: ${json.voucher.name}`, value: json.voucher.value, value_type: json.voucher.value_type }); }
+    } catch { setVoucherError('Gagal memeriksa voucher.'); }
+    setVoucherChecking(false);
+  };
+
+  const applyVoucher = () => {
+    if (!voucherApplied) return;
+    const amount = voucherApplied.value_type === 'percentage' ? Math.round(grossTotal * voucherApplied.value / 100) : voucherApplied.value;
+    if (appliedDiscounts.find(a => a.discountId === `voucher_${voucherApplied.id}`)) return;
+    setAppliedDiscounts(prev => [...prev, { discountId: `voucher_${voucherApplied.id}`, label: voucherApplied.label, value_type: voucherApplied.value_type, value: voucherApplied.value, amount, is_owner_borne: true }]);
+    setVoucherApplied(null);
+    setVoucherCode('');
+  };
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
   const sharedDiscountAmount = appliedDiscounts.filter(a => !a.is_owner_borne).reduce((s, a) => s + a.amount, 0);
@@ -812,6 +840,37 @@ const InvoiceMaker = () => {
                 <button onClick={addManualDiscount} className="admin-btn-primary py-1.5 px-3 shrink-0">
                   <Check size={13} />
                 </button>
+              )}
+            </div>
+
+            {/* Voucher Code */}
+            <div className="pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-700/50">
+              <p className="text-[10px] font-semibold text-earth-primary mb-1.5 flex items-center gap-1">🎁 Kode Voucher / Gift Card</p>
+              <div className="flex gap-2">
+                <input
+                  placeholder="SRAGA-XXXX"
+                  value={voucherCode}
+                  onChange={e => { setVoucherCode(e.target.value.toUpperCase()); setVoucherError(''); setVoucherApplied(null); }}
+                  className="admin-input text-xs flex-1 font-mono tracking-widest uppercase"
+                  onKeyDown={e => e.key === 'Enter' && checkVoucher()}
+                />
+                <button onClick={checkVoucher} disabled={!voucherCode.trim() || voucherChecking} className="admin-btn-ghost py-1.5 px-3 shrink-0 text-xs disabled:opacity-50">
+                  {voucherChecking ? <Loader2 size={13} className="animate-spin" /> : 'Cek'}
+                </button>
+              </div>
+              {voucherError && <p className="text-[11px] text-red-500 mt-1">{voucherError}</p>}
+              {voucherApplied && (
+                <div className="mt-2 flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{voucherApplied.label}</p>
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
+                      Potongan: {voucherApplied.value_type === 'flat' ? formatRp(voucherApplied.value) : `${voucherApplied.value}% dari total`}
+                    </p>
+                  </div>
+                  <button onClick={applyVoucher} className="admin-btn-primary text-xs py-1 px-3">
+                    <Check size={12} /> Pakai
+                  </button>
+                </div>
               )}
             </div>
 

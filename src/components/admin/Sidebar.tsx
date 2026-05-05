@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown, Gift
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -38,6 +38,7 @@ const OWNER_NAV_GROUPS = [
       { name: 'Surat Resmi',    icon: FileText,        href: '/admin/letters' },
       { name: 'Share Jadwal',   icon: Share2,          href: '/admin/schedule' },
       { name: 'Diskon & Promo', icon: Tag,             href: '/admin/discounts' },
+      { name: 'Voucher',        icon: Gift,            href: '/admin/vouchers' },
       { name: 'Konten',         icon: Image,           href: '/admin/content' },
     ]
   },

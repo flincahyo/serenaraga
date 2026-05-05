@@ -49,6 +49,10 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate]   = useState<string | null>(null);
   const [detailBooking, setDetailBooking] = useState<Booking | null>(null);
   const [summaryPeriod, setSummaryPeriod] = useState<'today' | 'month'>('today');
+  const [summaryMonth, setSummaryMonth] = useState(() => {
+    const { y, m } = getWIBParts(new Date());
+    return `${y}-${String(m+1).padStart(2,'0')}`;
+  });
 
   const supabase = createClient();
 
@@ -83,10 +87,14 @@ export default function DashboardPage() {
 
   const now          = new Date();
   const todayStr     = toWIBDateStr(now);
-  const { y:wibY, m:wibM } = getWIBParts(now);
-  const startOfMonth = `${wibY}-${String(wibM+1).padStart(2,'0')}-01`;
 
-  const monthBookings  = bookings.filter(b => b.booking_date >= startOfMonth);
+  const [selYStr, selMStr] = summaryMonth.split('-');
+  const selYNum = Number(selYStr);
+  const selMNum = Number(selMStr); // 1-12
+  const selectedMonthStart = `${summaryMonth}-01`;
+  const selectedMonthEnd   = `${summaryMonth}-${String(new Date(selYNum, selMNum, 0).getDate()).padStart(2,'0')}`;
+
+  const monthBookings  = bookings.filter(b => b.booking_date >= selectedMonthStart && b.booking_date <= selectedMonthEnd);
   const completedMonth = monthBookings.filter(b => b.status === 'Completed');
   const calcTerapisCut = (b: any, fallbackPct: number) => {
     if (b.booking_items && b.booking_items.length > 0) {
@@ -106,10 +114,10 @@ export default function DashboardPage() {
   const todayBookings = bookings.filter(b => b.booking_date === todayStr);
   const todayActive   = todayBookings.filter(b => b.status === 'Confirmed' || b.status === 'Pending');
 
-  const prevWibM     = wibM === 0 ? 11 : wibM - 1;
-  const prevWibY     = wibM === 0 ? wibY - 1 : wibY;
-  const prevMonthStart = `${prevWibY}-${String(prevWibM+1).padStart(2,'0')}-01`;
-  const prevMonthEnd   = `${prevWibY}-${String(prevWibM+1).padStart(2,'0')}-${String(new Date(wibY,wibM,0).getDate()).padStart(2,'0')}`;
+  const prevMNum       = selMNum === 1 ? 12 : selMNum - 1;
+  const prevYNum       = selMNum === 1 ? selYNum - 1 : selYNum;
+  const prevMonthStart = `${prevYNum}-${String(prevMNum).padStart(2,'0')}-01`;
+  const prevMonthEnd   = `${prevYNum}-${String(prevMNum).padStart(2,'0')}-${String(new Date(prevYNum,prevMNum,0).getDate()).padStart(2,'0')}`;
   const prevMonthBkg   = bookings.filter(b => b.booking_date >= prevMonthStart && b.booking_date <= prevMonthEnd);
   const bookingChange  = prevMonthBkg.length > 0 ? Math.round(((monthBookings.length - prevMonthBkg.length) / prevMonthBkg.length) * 100) : 0;
 
@@ -224,8 +232,8 @@ export default function DashboardPage() {
     { label: 'Proyeksi (Aktif)', value: formatRp(calcProjected), icon: Clock, change: '', up: true, sub: 'Potensi dari jadwal sisa' },
     { label: 'Estimasi Bersih (Net)', value: formatRp(calcNet), icon: TrendingUp, change: `Owner ${ownerPct}%`, up: true, sub: 'Setelah potong komisi & BHP' },
   ] : [
-    { label: 'Booking Bulan Ini', value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
-    { label: 'Pendapatan Kotor', value: formatRp(calcGross), icon: TrendingUp, change: '', up: true, sub: 'Transaksi selesai bulan ini' },
+    { label: `Booking ${MONTHS_ID[selMNum - 1]}`, value: String(monthBookings.length), icon: ShoppingBag, change: bookingChange >= 0 ? `+${bookingChange}%` : `${bookingChange}%`, up: bookingChange >= 0 },
+    { label: 'Pendapatan Kotor', value: formatRp(calcGross), icon: TrendingUp, change: '', up: true, sub: `Transaksi selesai ${MONTHS_ID[selMNum - 1]}` },
     { label: 'Penghasilan Bersih', value: formatRp(calcNet), icon: Wallet, change: `Owner ${ownerPct}%`, up: true, sub: 'Setelah terapis & BHP' },
     { label: 'Jadwal Hari Ini', value: String(todayBookings.length), icon: Star, change: todayBookings.length > 0 ? `${todayActive.length} aktif` : '', up: true },
   ];
@@ -237,15 +245,26 @@ export default function DashboardPage() {
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Dashboard</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{today}</p>
         </div>
-        <div className="flex bg-white dark:bg-zinc-900 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800 self-start sm:self-auto shadow-sm">
-          <button
-            onClick={() => setSummaryPeriod('today')}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'today' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
-          >Hari Ini</button>
-          <button
-            onClick={() => setSummaryPeriod('month')}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'month' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
-          >Bulan Ini</button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex bg-white dark:bg-zinc-900 p-1 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-sm">
+            <button
+              onClick={() => setSummaryPeriod('today')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'today' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+            >Hari Ini</button>
+            <button
+              onClick={() => setSummaryPeriod('month')}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${summaryPeriod === 'month' ? 'bg-earth-primary text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}
+            >Bulanan</button>
+          </div>
+          
+          {summaryPeriod === 'month' && (
+            <input 
+              type="month" 
+              value={summaryMonth}
+              onChange={(e) => setSummaryMonth(e.target.value)}
+              className="px-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm focus:outline-none focus:ring-1 focus:ring-earth-primary/50"
+            />
+          )}
         </div>
       </div>
 
@@ -278,7 +297,7 @@ export default function DashboardPage() {
           {calcGross > 0 && (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-zinc-100 dark:border-zinc-800">
-                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Rincian Bagi Hasil {summaryPeriod === 'today' ? 'Hari Ini' : 'Bulan Ini'}</p>
+                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Rincian Bagi Hasil {summaryPeriod === 'today' ? 'Hari Ini' : MONTHS_ID[selMNum - 1]}</p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-zinc-800">
                 <div className="px-5 py-4">

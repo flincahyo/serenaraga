@@ -6,7 +6,7 @@ import { BadgeCheck, ShieldCheck, Clock, Droplets, Wallet, CalendarHeart } from 
 const WhyChooseUs = () => {
   const reasons = [
     {
-      title: "Terapis Bersertifikasi",
+      title: "Terapis Terampil",
       description: "Seluruh terapis kami terlatih profesional dan setara standar spa premium.",
       icon: <BadgeCheck className="w-5 h-5 md:w-7 md:h-7" strokeWidth={1.2} />
     },

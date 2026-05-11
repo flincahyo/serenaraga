@@ -4,10 +4,15 @@ import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Whether we're on a sub-page (not the home page)
+  const isSubPage = pathname !== '/';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,11 +22,19 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // On sub-pages, anchor links need to go back to home first
+  const anchorHref = (anchor: string) => isSubPage ? `/${anchor}` : anchor;
+
   const navLinks = [
-    { name: 'Beranda', href: '#home' },
-    { name: 'Menu Layanan', href: '#menu' },
-    { name: 'Tentang', href: '#about' },
-    { name: 'Booking', href: '#booking' },
+    { name: 'Beranda', href: anchorHref('#home') },
+    { name: 'Menu Layanan', href: anchorHref('#menu') },
+    { name: 'Tentang', href: anchorHref('#about') },
+    { name: 'Booking', href: anchorHref('#booking') },
+  ];
+
+  const pageLinks = [
+    { name: 'Karir', href: '/karir' },
+    { name: 'Partnership', href: '/partnership' },
   ];
 
   return (
@@ -29,7 +42,7 @@ const Navbar = () => {
       <motion.nav 
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 80, damping: 20, mass: 1 }}
+        transition={{ type: "tween", duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
         className={`fixed left-0 right-0 z-50 flex justify-center transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
           isScrolled ? 'top-4 px-4' : 'top-0 px-0'
         }`}
@@ -64,11 +77,29 @@ const Navbar = () => {
                   <span className="absolute inset-x-3 bottom-1 h-px bg-earth-primary/30 transform scale-x-0 origin-left group-hover:scale-x-100 transition-transform duration-300 ease-out" />
                 </Link>
               ))}
+              {/* Divider + Page Links — fade out smoothly when navbar is compact */}
+              <span className={`w-px h-4 bg-earth-primary/15 mx-1 transition-all duration-500 ${isScrolled ? 'opacity-0 w-0 mx-0' : 'opacity-100'}`} />
+              <div className={`flex items-center gap-1 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${isScrolled ? 'max-w-0 opacity-0' : 'max-w-[200px] opacity-100'}`}>
+                {pageLinks.map((link) => (
+                  <Link 
+                    key={link.name}
+                    href={link.href} 
+                    className={`relative px-3 py-2 text-sm font-medium transition-colors group outline-none whitespace-nowrap ${
+                      pathname === link.href 
+                        ? 'text-earth-primary' 
+                        : 'text-text-primary/60 hover:text-earth-primary'
+                    }`}
+                  >
+                    {link.name}
+                    <span className="absolute inset-x-3 bottom-1 h-px bg-earth-primary/30 transform scale-x-0 origin-left group-hover:scale-x-100 transition-transform duration-300 ease-out" />
+                  </Link>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center gap-3 border-l border-earth-primary/10 pl-6">
               <Link 
-                href="#schedule" 
+                href={anchorHref('#schedule')} 
                 className="group flex items-center gap-2 text-earth-primary text-sm font-semibold px-5 py-2.5 rounded-full bg-earth-primary/5 hover:bg-earth-primary/10 active:scale-[0.97] transition-all duration-300 ease-out outline-none"
               >
                 <span className="relative flex h-2 w-2">
@@ -78,7 +109,7 @@ const Navbar = () => {
                 Cek Jadwal
               </Link>
               <Link 
-                href="#booking" 
+                href={anchorHref('#booking')} 
                 className="bg-earth-primary text-white text-sm font-semibold px-7 py-2.5 rounded-full hover:bg-earth-dark hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(139,94,60,0.2)] active:translate-y-0 active:scale-[0.97] active:shadow-none transition-all duration-300 ease-out outline-none"
               >
                 Pesan Sekarang
@@ -88,10 +119,34 @@ const Navbar = () => {
 
           {/* Mobile Toggle */}
           <button 
-            className="md:hidden text-text-primary outline-none p-2 active:scale-90 transition-transform" 
+            className="md:hidden text-text-primary outline-none p-2 transition-transform active:scale-90 relative w-9 h-9 flex items-center justify-center" 
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
-            {isMobileMenuOpen ? <X size={26} strokeWidth={1.5} /> : <Menu size={26} strokeWidth={1.5} />}
+            <AnimatePresence mode="wait" initial={false}>
+              {isMobileMenuOpen ? (
+                <motion.span
+                  key="close"
+                  initial={{ opacity: 0, rotate: -45 }}
+                  animate={{ opacity: 1, rotate: 0 }}
+                  exit={{ opacity: 0, rotate: 45 }}
+                  transition={{ type: "tween", duration: 0.2, ease: "easeInOut" }}
+                  className="absolute"
+                >
+                  <X size={24} strokeWidth={1.5} />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="menu"
+                  initial={{ opacity: 0, rotate: 45 }}
+                  animate={{ opacity: 1, rotate: 0 }}
+                  exit={{ opacity: 0, rotate: -45 }}
+                  transition={{ type: "tween", duration: 0.2, ease: "easeInOut" }}
+                  className="absolute"
+                >
+                  <Menu size={24} strokeWidth={1.5} />
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         </div>
 
@@ -99,10 +154,10 @@ const Navbar = () => {
         <AnimatePresence>
           {isMobileMenuOpen && (
             <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 200, damping: 25 }}
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ type: "tween", duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
               className="absolute top-[calc(100%+1rem)] left-4 right-4 bg-white/90 backdrop-blur-2xl border border-white/60 shadow-[0_20px_40px_rgba(0,0,0,0.08)] rounded-[2rem] overflow-hidden md:hidden"
             >
               <div className="flex flex-col gap-2 p-6">
@@ -111,11 +166,34 @@ const Navbar = () => {
                     key={link.name}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 + (idx * 0.05) }}
+                    transition={{ type: "tween", duration: 0.2, ease: "easeOut", delay: 0.05 + (idx * 0.04) }}
                   >
                     <Link
                       href={link.href}
                       className="block text-lg font-medium text-text-primary hover:text-earth-primary py-3 px-4 rounded-xl hover:bg-earth-primary/5 transition-colors outline-none"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      {link.name}
+                    </Link>
+                  </motion.div>
+                ))}
+
+                {/* Page links in mobile */}
+                <div className="h-px w-full bg-gray-100 my-1" />
+                {pageLinks.map((link, idx) => (
+                  <motion.div
+                    key={link.name}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: "tween", duration: 0.2, ease: "easeOut", delay: 0.18 + (idx * 0.04) }}
+                  >
+                    <Link
+                      href={link.href}
+                      className={`block text-base font-medium py-3 px-4 rounded-xl transition-colors outline-none ${
+                        pathname === link.href
+                          ? 'text-earth-primary bg-earth-primary/5'
+                          : 'text-text-primary/70 hover:text-earth-primary hover:bg-earth-primary/5'
+                      }`}
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       {link.name}
@@ -128,11 +206,11 @@ const Navbar = () => {
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ type: "tween", duration: 0.2, ease: "easeOut", delay: 0.26 }}
                   className="flex flex-col gap-3 mt-2"
                 >
                   <Link 
-                    href="#schedule" 
+                    href={anchorHref('#schedule')} 
                     className="flex items-center justify-center gap-3 text-earth-primary py-3.5 rounded-full bg-earth-primary/5 font-semibold active:scale-[0.98] transition-transform outline-none"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -143,7 +221,7 @@ const Navbar = () => {
                     Cek Jadwal Langsung
                   </Link>
                   <Link 
-                    href="#booking" 
+                    href={anchorHref('#booking')} 
                     className="bg-earth-primary text-white py-3.5 rounded-full font-semibold text-center shadow-md active:scale-[0.98] transition-transform outline-none"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
@@ -160,3 +238,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+

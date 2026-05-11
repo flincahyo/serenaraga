@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Clock, Info, Sparkles, Wind, Heart, ArrowRight } from 'lucide-react';
+import { Star, Clock, Info, Sparkles, Wind, Heart, ArrowRight, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase';
@@ -34,6 +34,7 @@ const Pricelist = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('packages');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     const fetchServices = async () => {
@@ -96,7 +97,7 @@ const Pricelist = () => {
   return (
     <section id="menu" className="py-24 bg-bg-cream scroll-mt-24">
       {/* Featured Highlights Section */}
-      <div className="container-custom mb-32">
+      <div className="container-custom mb-12 md:mb-16">
         <div className="text-center mb-16">
           <motion.span
             initial={{ opacity: 0 }}
@@ -168,74 +169,97 @@ const Pricelist = () => {
       </div>
 
       {/* Full Detailed Pricelist Section */}
-      <div className="container-custom pt-32 mt-16 border-t border-gray-100">
-        <div className="text-center mb-16">
-          <h3 className="text-3xl md:text-4xl font-serif italic text-text-primary mb-4">Menu Lengkap</h3>
-          <p className="text-xs text-earth-primary tracking-[0.2em] uppercase font-black">Detail Paket & Harga Seluruh Layanan</p>
-        </div>
-
-        {/* Tab Switcher */}
-        <div className="overflow-x-auto pb-4 mb-12 scrollbar-hide">
-          <div className="flex flex-nowrap md:justify-center gap-2 px-4 min-w-max mx-auto bg-white/50 backdrop-blur-sm p-2 rounded-full border border-gray-100 w-fit">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setActiveTab(cat.id)}
-                className={`flex-shrink-0 px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                  activeTab === cat.id
-                    ? 'bg-earth-primary text-white shadow-md'
-                    : 'text-text-secondary hover:bg-earth-primary/5'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* List Content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            className="bg-white rounded-[3rem] p-8 md:p-12 shadow-xl border border-gray-50"
+      <div className="container-custom pt-8 md:pt-16">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="flex items-center gap-2 px-8 py-3.5 bg-white border border-earth-primary/20 text-earth-primary rounded-full text-xs font-black uppercase tracking-widest shadow-sm hover:shadow-md hover:bg-earth-primary/5 transition-all"
           >
-            <div className="grid md:grid-cols-1 gap-0">
-              {activeItems.map((item) => (
-                <div key={item.id} className="group flex flex-col md:flex-row md:items-start justify-between gap-6 py-10 border-b border-gray-100 last:border-0 hover:bg-bg-soft/20 px-4 -mx-4 rounded-3xl transition-colors">
-                  <div className="max-w-2xl">
-                    <div className="flex flex-wrap items-center gap-3 mb-3">
-                      <h3 className="text-xl font-bold text-text-primary group-hover:text-earth-primary transition-colors">
-                        {item.name}
-                      </h3>
-                      {item.is_bestseller && (
-                        <span className="bg-amber-100 text-amber-800 text-[9px] uppercase tracking-wider font-black px-2 py-1 rounded-md flex items-center gap-1">
-                          <Star size={10} fill="currentColor" /> BEST SELLER
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm md:text-base text-text-secondary leading-relaxed font-medium">
-                      {item.details}
-                    </p>
-                  </div>
-                  <div className="flex items-baseline md:flex-col md:items-end gap-2 md:gap-0 flex-shrink-0">
-                    <span className="text-[10px] text-text-secondary/50 uppercase tracking-widest hidden md:block font-bold">Price</span>
-                    <span className="text-2xl font-serif font-bold text-earth-primary">
-                      IDR {formatPrice(item.price)}
-                    </span>
+            {isMenuOpen ? 'Tutup Menu Lengkap' : 'Lihat Menu Lengkap'}
+            <ChevronDown size={18} className={`transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.5, ease: "easeInOut" }}
+              className="overflow-hidden"
+            >
+              <div className="pt-4 pb-12">
+                <div className="text-center mb-12 flex flex-col items-center">
+                  <h3 className="text-3xl md:text-4xl font-serif italic text-text-primary mb-4">Menu Lengkap</h3>
+                  <p className="text-xs text-earth-primary tracking-[0.2em] uppercase font-black">Detail Paket & Harga Seluruh Layanan</p>
+                </div>
+                {/* Tab Switcher */}
+                <div className="overflow-x-auto pb-4 mb-12 scrollbar-hide">
+                  <div className="flex flex-nowrap md:justify-center gap-2 px-4 min-w-max mx-auto bg-white/50 backdrop-blur-sm p-2 rounded-full border border-gray-100 w-fit">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setActiveTab(cat.id)}
+                        className={`flex-shrink-0 px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                          activeTab === cat.id
+                            ? 'bg-earth-primary text-white shadow-md'
+                            : 'text-text-secondary hover:bg-earth-primary/5'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
 
-            <div className="mt-16 pt-10 border-t border-gray-50 grid md:grid-cols-3 gap-8 text-[10px] text-text-secondary/60">
-              <p className="flex gap-2 leading-relaxed"><Info size={14} className="flex-shrink-0 text-earth-primary" /> Harga & promo dapat berubah sesuai periode berlaku.</p>
-              <p className="flex gap-2 leading-relaxed"><Clock size={14} className="flex-shrink-0 text-earth-primary" /> Disarankan reservasi H-1 untuk jadwal terbaik.</p>
-              <p className="flex gap-2 leading-relaxed"><Star size={14} className="flex-shrink-0 text-earth-primary" /> Free Ongkir 10km pertama. Kirim shareloc untuk cek lokasi.</p>
-            </div>
-          </motion.div>
+                {/* List Content */}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={activeTab}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="bg-white rounded-[3rem] p-8 md:p-12 shadow-xl border border-gray-50"
+                  >
+                    <div className="grid md:grid-cols-1 gap-0">
+                      {activeItems.map((item) => (
+                        <div key={item.id} className="group flex flex-col md:flex-row md:items-start justify-between gap-6 py-10 border-b border-gray-100 last:border-0 hover:bg-bg-soft/20 px-4 -mx-4 rounded-3xl transition-colors">
+                          <div className="max-w-2xl">
+                            <div className="flex flex-wrap items-center gap-3 mb-3">
+                              <h3 className="text-xl font-bold text-text-primary group-hover:text-earth-primary transition-colors">
+                                {item.name}
+                              </h3>
+                              {item.is_bestseller && (
+                                <span className="bg-amber-100 text-amber-800 text-[9px] uppercase tracking-wider font-black px-2 py-1 rounded-md flex items-center gap-1">
+                                  <Star size={10} fill="currentColor" /> BEST SELLER
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm md:text-base text-text-secondary leading-relaxed font-medium">
+                              {item.details}
+                            </p>
+                          </div>
+                          <div className="flex items-baseline md:flex-col md:items-end gap-2 md:gap-0 flex-shrink-0">
+                            <span className="text-[10px] text-text-secondary/50 uppercase tracking-widest hidden md:block font-bold">Price</span>
+                            <span className="text-2xl font-serif font-bold text-earth-primary">
+                              IDR {formatPrice(item.price)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-16 pt-10 border-t border-gray-50 grid md:grid-cols-3 gap-8 text-[10px] text-text-secondary/60">
+                      <p className="flex gap-2 leading-relaxed"><Info size={14} className="flex-shrink-0 text-earth-primary" /> Harga & promo dapat berubah sesuai periode berlaku.</p>
+                      <p className="flex gap-2 leading-relaxed"><Clock size={14} className="flex-shrink-0 text-earth-primary" /> Disarankan reservasi H-1 untuk jadwal terbaik.</p>
+                      <p className="flex gap-2 leading-relaxed"><Star size={14} className="flex-shrink-0 text-earth-primary" /> Free Ongkir 10km pertama. Kirim shareloc untuk cek lokasi.</p>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
     </section>

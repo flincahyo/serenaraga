@@ -50,7 +50,7 @@ function VoucherCard({name,code,value,vt,svc,details,to,from,exp,mx,wa}:{name:st
   const tc = ['Voucher berlaku khusus untuk layanan Homecare Spa (Terapis datang ke rumah).','Wajib melakukan reservasi maksimal H-1 sebelum waktu kedatangan.',`Voucher bersifat ${mx}x pakai, tidak dapat diuangkan atau digabung promo lain.`];
   const subText = details || svc || '';
   return (
-    <div style={{width:1200,height:520,display:'flex',fontFamily:'Georgia,serif',background:'#FAF6EF',overflow:'hidden',position:'relative'}}>
+    <div style={{width:1200,height:520,display:'flex',fontFamily:'sans-serif',background:'#FAF6EF',overflow:'hidden',position:'relative'}}>
       
       {/* Left Dark Panel */}
       <div style={{width:200,height:'100%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(170deg,#2C1408 0%,#1A0A04 100%)',position:'relative'}}>

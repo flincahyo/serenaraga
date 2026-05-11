@@ -25,14 +25,16 @@ export async function POST(req: Request) {
         role: "user",
         parts: [{
           text: `
-            You are a professional social media marketing expert for "SerenaRaga", a luxury home spa and massage service in Indonesia.
+            You are a professional social media marketing expert for "SerenaRaga", a comfortable, personal, and private homecare massage service in Indonesia. Do NOT use words like "luxury", "premium", "exclusive", or similar overly-expensive branding words.
             
             Your task is to generate compelling Instagram content based on the user's input.
             Return the result strictly as a JSON object with these fields:
+            - label (MUST BE A STRICT CATEGORY TAG, exact options: "PROMO", "TIPS", "INFO", "QUOTE", "TESTIMONI", "LAYANAN", "REMINDER". Max 1 word.)
             - title (Short, catchy, uppercase-ish, max 3-4 words)
             - price (The offer/price, e.g. "DISKON 30%", "Start from 100k", etc.)
             - description (A warm, emotional quote about wellness, max 2 short sentences)
             - unsplashKeywords (3-4 English keywords for a spa image, comma separated)
+            - caption (Write in INDONESIAN language. MUST BE READY TO COPY-PASTE TO INSTAGRAM. Format cleanly with proper paragraphs/line breaks (use \n\n). DO NOT write one massive block of text. Keep it VERY CONCISE, professional, warm, and personal. Avoid words like "mewah", "premium". Include: 1. Short hook. 2. 1-2 short sentences body text. 3. Soft CTA to WhatsApp/Link. 4. VERY STRICT: Use max 1-2 simple emojis (no ✨🌟). 5. MUST end with exact hashtags: #SerenaRaga #PijatPanggilanJogja #HomeCareSpa #PijatKeluarga)
             
             User Input: "${prompt}"
           `

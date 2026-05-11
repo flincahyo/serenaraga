@@ -32,9 +32,12 @@ const Hero = ({ locationName = 'Jogja, Sleman, dan Bantul' }: HeroProps) => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
           >
-            <span className="inline-block px-5 py-2 rounded-full bg-earth-primary/10 text-earth-primary text-xs font-bold mb-8 tracking-widest uppercase">
-              Nyaman, Private, & Personal
-            </span>
+            <div className="flex items-center gap-4 mb-6 md:mb-8">
+              <div className="w-8 md:w-12 h-[1px] bg-earth-primary" />
+              <span className="text-[10px] md:text-xs font-black uppercase tracking-[0.3em] text-earth-primary">
+                Nyaman, Privat, & Personal
+              </span>
+            </div>
             <h1 className="text-4xl sm:text-5xl md:text-8xl mb-8 text-gradient leading-tight font-serif italic">
               Pijat Relaksasi <br />
               ke Rumah Anda

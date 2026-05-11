@@ -1,12 +1,12 @@
 'use client';
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { Sparkles, Download, CheckCircle2, Wand2, Globe, Upload, Pencil, Plus, Trash2, Type, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, Download, CheckCircle2, Wand2, Globe, Upload, Pencil, Plus, Trash2, Type, X, ChevronDown, ChevronUp, User, MessageSquare } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
 
 /* ═══════════════════════════════════════
    TYPES
 ═══════════════════════════════════════ */
-type Theme = 'aura' | 'zen' | 'editorial' | 'quote' | 'promo' | 'mythfact' | 'testimonial' | 'gradient' | 'minimal' | 'boldoverlay' | 'softpastel' | 'benefits' | 'luxurygold' | 'carousel' | 'announcement' | 'nightvibe' | 'earthy' | 'portrait' | 'pricelist' | 'dualtone' | 'collage';
+type Theme = 'aura' | 'zen' | 'editorial' | 'quote' | 'promo' | 'mythfact' | 'testimonial' | 'watestimonial' | 'gradient' | 'minimal' | 'boldoverlay' | 'softpastel' | 'benefits' | 'luxurygold' | 'carousel' | 'announcement' | 'nightvibe' | 'earthy' | 'portrait' | 'pricelist' | 'dualtone' | 'collage' | 'magazine' | 'polaroid' | 'split' | 'glass' | 'focus' | 'elegant' | 'vibrant' | 'classic' | 'modern';
 
 interface TextLayer {
   id: string;
@@ -41,6 +41,7 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: 'promo',        label: 'Promo' },
   { id: 'mythfact',     label: 'Mitos/Fakta' },
   { id: 'testimonial',  label: 'Testimoni' },
+  { id: 'watestimonial',label: 'Real WA Testimoni' },
   { id: 'gradient',     label: 'Gradient' },
   { id: 'minimal',      label: 'Minimal' },
   { id: 'boldoverlay',  label: 'Bold Text' },
@@ -55,6 +56,15 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: 'pricelist',    label: 'Price List' },
   { id: 'dualtone',     label: 'Dual Tone' },
   { id: 'collage',      label: 'Collage' },
+  { id: 'magazine',     label: 'Magazine' },
+  { id: 'polaroid',     label: 'Polaroid' },
+  { id: 'split',        label: 'Split Layout' },
+  { id: 'glass',        label: 'Glassmorphism' },
+  { id: 'focus',        label: 'Center Focus' },
+  { id: 'elegant',      label: 'Elegant Thin' },
+  { id: 'vibrant',      label: 'Vibrant' },
+  { id: 'classic',      label: 'Classic' },
+  { id: 'modern',       label: 'Modern Sharp' },
 ];
 
 const FONTS: { id: string; name: string; style: React.CSSProperties }[] = [
@@ -76,6 +86,7 @@ const TEMPLATE_FONTS: Record<Theme, string[]> = {
   promo: ['serif-bold', 'sans-bold', 'wide-caps'],
   mythfact: ['sans-bold', 'sans-clean', 'mono'],
   testimonial: ['serif-italic', 'sans-clean', 'wide-caps'],
+  watestimonial: ['sans-clean', 'sans-bold', 'mono'],
   gradient: ['serif-italic', 'wide-caps', 'serif-bold'],
   minimal: ['serif-italic', 'sans-clean', 'wide-caps'],
   boldoverlay: ['sans-bold', 'serif-bold', 'wide-caps'],
@@ -90,6 +101,15 @@ const TEMPLATE_FONTS: Record<Theme, string[]> = {
   pricelist: ['sans-bold', 'sans-clean', 'wide-caps'],
   dualtone: ['serif-italic', 'sans-bold', 'wide-caps'],
   collage: ['serif-italic', 'sans-bold', 'sans-clean'],
+  magazine: ['sans-bold', 'mono', 'wide-caps'],
+  polaroid: ['serif-italic', 'sans-clean', 'mono'],
+  split: ['sans-bold', 'serif-bold', 'wide-caps'],
+  glass: ['sans-clean', 'wide-caps', 'serif-italic'],
+  focus: ['serif-bold', 'sans-clean', 'wide-caps'],
+  elegant: ['gold-serif', 'serif-italic', 'wide-caps'],
+  vibrant: ['sans-bold', 'serif-bold', 'wide-caps'],
+  classic: ['serif-italic', 'serif-bold', 'sans-clean'],
+  modern: ['sans-bold', 'mono', 'wide-caps'],
 };
 
 const WA_PATH = "M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z";
@@ -133,6 +153,16 @@ function MiniPreview({ id }: { id: Theme }) {
             <div className="flex-1 bg-zinc-300" />
           </div>
           <div className="border-t-[2px] border-zinc-700 py-[4%] flex justify-center gap-1"><div className="h-[3px] w-[25%] bg-zinc-300 rounded-full" /><div className="h-[3px] w-[25%] bg-zinc-300 rounded-full" /></div>
+        </div>
+      </div>
+    ),
+    watestimonial: (
+      <div className="w-full h-full flex flex-col bg-zinc-100 overflow-hidden px-2 py-4 gap-2">
+        <L w="w-[40%]" h="h-[2px]" c="bg-zinc-300" />
+        <L w="w-[80%]" h="h-[6px]" c="bg-zinc-600 mx-auto" />
+        <div className="flex-1 w-[80%] mx-auto bg-white rounded-lg shadow-sm border border-zinc-200 mt-1 flex flex-col justify-end p-2 gap-1">
+           <L w="w-[30%]" h="h-[3px]" c="bg-green-100" />
+           <L w="w-[80%]" h="h-[10px]" c="bg-zinc-200" />
         </div>
       </div>
     ),
@@ -305,6 +335,78 @@ function MiniPreview({ id }: { id: Theme }) {
         </div>
       </div>
     ),
+    magazine: (
+      <div className="w-full h-full bg-white p-[6%]">
+        <div className="w-full h-full border-[1.5px] border-zinc-800 flex flex-col justify-between p-[4%]">
+          <L w="w-[90%]" h="h-[4px]" c="bg-zinc-800" />
+          <div className="w-full flex-[0_0_55%] bg-stone-300" />
+          <L w="w-[60%]" h="h-[2px]" c="bg-zinc-800 mx-auto" />
+        </div>
+      </div>
+    ),
+    polaroid: (
+      <div className="w-full h-full bg-[#f4f4f5] p-[8%] flex flex-col items-center">
+        <div className="w-full bg-white shadow-sm p-[6%] pb-[15%] flex flex-col items-center">
+          <div className="w-full aspect-square bg-stone-400" />
+          <div className="mt-[8%]"><L w="w-[60%]" h="h-[2px]" c="bg-zinc-400" /></div>
+        </div>
+      </div>
+    ),
+    split: (
+      <div className="w-full h-full flex flex-col">
+        <div className="flex-1 bg-stone-400" />
+        <div className="flex-1 bg-[#8b5e3c]/10 flex flex-col items-center justify-center gap-1">
+          <L w="w-[60%]" h="h-[3px]" c="bg-[#8b5e3c]" />
+          <L w="w-[40%]" h="h-[2px]" c="bg-zinc-500" />
+        </div>
+      </div>
+    ),
+    glass: (
+      <div className="w-full h-full bg-stone-300 relative flex items-center justify-center p-[8%]">
+        <div className="w-full py-[15%] bg-white/40 backdrop-blur-[2px] border border-white/60 rounded flex flex-col items-center gap-[4px] shadow-sm">
+          <L w="w-[70%]" h="h-[3px]" c="bg-zinc-800" />
+          <L w="w-[40%]" h="h-[2px]" c="bg-zinc-600" />
+        </div>
+      </div>
+    ),
+    focus: (
+      <div className="w-full h-full bg-stone-200 flex flex-col items-center justify-center relative p-[8%] gap-[10%]">
+        <L w="w-[40%]" h="h-[3px]" c="bg-zinc-800" />
+        <div className="w-[55%] aspect-square rounded-full bg-stone-400 shadow-inner" />
+        <L w="w-[30%]" h="h-[2px]" c="bg-zinc-600" />
+      </div>
+    ),
+    elegant: (
+      <div className="w-full h-full bg-white border-[3px] border-stone-100 flex flex-col items-center justify-center p-3 gap-[5px]">
+        <L w="w-[1px]" h="h-[8px]" c="bg-stone-300" />
+        <L w="w-[70%]" h="h-[2px]" c="bg-stone-500" />
+        <L w="w-[50%]" h="h-[1.5px]" c="bg-stone-400" />
+        <L w="w-[1px]" h="h-[8px]" c="bg-stone-300" />
+      </div>
+    ),
+    vibrant: (
+      <div className="w-full h-full bg-gradient-to-tr from-[#8b5e3c] via-[#e8b877] to-[#fdfaf5] p-3 flex flex-col items-center justify-center gap-[4px]">
+        <L w="w-[80%]" h="h-[4px]" c="bg-white shadow-sm" />
+        <L w="w-[60%]" h="h-[2px]" c="bg-white/70" />
+      </div>
+    ),
+    classic: (
+      <div className="w-full h-full bg-[#3d2b1f] p-[5%] flex flex-col justify-between">
+        <div className="flex justify-center mt-2"><L w="w-[30%]" h="h-[2px]" c="bg-[#d4b996]" /></div>
+        <div className="flex-1 bg-stone-500/40 m-2 border border-[#d4b996]/30" />
+        <div className="flex justify-center mb-2"><L w="w-[50%]" h="h-[3px]" c="bg-[#d4b996]" /></div>
+      </div>
+    ),
+    modern: (
+      <div className="w-full h-full bg-zinc-900 relative">
+        <div className="absolute top-[25%] left-0 bg-[#8b5e3c] py-[6%] px-[8%] w-[85%] rounded-r flex items-center">
+          <L w="w-[80%]" h="h-[3px]" c="bg-white" />
+        </div>
+        <div className="absolute bottom-[25%] right-0 bg-white/10 py-[4%] px-[6%] w-[65%] rounded-l flex items-center justify-end">
+          <L w="w-[50%]" h="h-[2px]" c="bg-white/50" />
+        </div>
+      </div>
+    ),
   };
 
   return <>{templates[id] ?? <div className="w-full h-full bg-zinc-300" />}</>;
@@ -327,20 +429,30 @@ function Logo({ invert = true, scale = 1 }: { invert?: boolean; scale?: number }
 }
 
 function Pills({ dark = true }: { dark?: boolean }) {
+  const textColor = dark ? 'text-white/90' : 'text-[#3d2b1f]';
+  const iconColor = dark ? 'text-[#f5dfb8]' : 'text-[#8b5e3c]';
+  const dividerColor = dark ? 'bg-white/20' : 'bg-[#8b5e3c]/20';
+
   return (
-    <div className="w-full flex justify-center">
-      <div className="flex items-center gap-6 flex-wrap justify-center">
-        <div className={`${dark ? 'bg-white' : 'bg-[#8b5e3c]'} rounded-full px-7 py-3 flex items-center gap-4 shadow-xl`}>
-          <div className={`w-[50px] h-[50px] ${dark ? 'bg-[#25D366]' : 'bg-white/20'} rounded-full flex items-center justify-center -ml-4 p-2 flex-shrink-0`}>
-            <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 24 24"><path d={WA_PATH} /></svg>
-          </div>
-          <span className={`text-[28px] font-bold ${dark ? 'text-[#8b5e3c]' : 'text-white'}`}>0895-1835-9037</span>
+    <div className="w-full flex justify-center mt-2">
+      <div className={`flex items-center gap-5 px-4 py-5 border-t ${dark ? 'border-white/10' : 'border-[#8b5e3c]/10'} w-full justify-center`}>
+        <div className={`flex items-center gap-3 ${textColor} whitespace-nowrap`}>
+          <svg className={`w-[32px] h-[32px] ${iconColor} flex-shrink-0`} fill="currentColor" viewBox="0 0 24 24"><path d={WA_PATH} /></svg>
+          <span className="text-[32px] font-medium tracking-wide">0895-1835-9037</span>
         </div>
-        <div className={`${dark ? 'bg-white' : 'bg-[#8b5e3c]'} rounded-full px-7 py-3 flex items-center gap-4 shadow-xl`}>
-          <div className={`w-[50px] h-[50px] ${dark ? 'bg-[#8b5e3c]' : 'bg-white/20'} rounded-full flex items-center justify-center -ml-4`}>
-            <Globe className="w-6 h-6 text-white" />
-          </div>
-          <span className={`text-[28px] font-bold ${dark ? 'text-[#8b5e3c]' : 'text-white'}`}>www.serenaraga.fit</span>
+        
+        <div className={`w-[2px] h-[36px] ${dividerColor} flex-shrink-0`} />
+        
+        <div className={`flex items-center gap-3 ${textColor} whitespace-nowrap`}>
+          <svg className={`w-[32px] h-[32px] ${iconColor} flex-shrink-0`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+          <span className="text-[32px] font-medium tracking-wide">@serena.raga</span>
+        </div>
+        
+        <div className={`w-[2px] h-[36px] ${dividerColor} flex-shrink-0`} />
+        
+        <div className={`flex items-center gap-3 ${textColor} whitespace-nowrap`}>
+          <Globe className={`w-[32px] h-[32px] ${iconColor} flex-shrink-0`} />
+          <span className="text-[32px] font-medium tracking-wide">www.serenaraga.fit</span>
         </div>
       </div>
     </div>
@@ -354,20 +466,33 @@ function ET({ value, onChange, className, tag = 'p', dark = true }: { value: str
   const focused = useRef(false);
   const Tag = tag as any;
 
-  // Set content on mount and whenever value changes externally (e.g. AI fill)
+  const highlightClass = dark ? 'text-[#f5dfb8] drop-shadow-md' : 'text-earth-primary';
+
   useEffect(() => {
-    if (ref.current && !focused.current && ref.current.innerText !== value) {
-      ref.current.innerText = value;
+    if (ref.current && !focused.current) {
+      if (value.includes('**')) ref.current.innerHTML = value.replace(/\*\*(.*?)\*\*/g, `<span class="${highlightClass}">$1</span>`);
+      else ref.current.innerText = value;
     }
-  }, [value]);
+  }, [value, dark, highlightClass]);
 
   return (
     <Tag
       ref={ref}
       contentEditable
       suppressContentEditableWarning
-      onFocus={() => { focused.current = true; }}
-      onBlur={(e: React.FocusEvent<HTMLElement>) => { focused.current = false; onChange(e.currentTarget.innerText); }}
+      onFocus={() => { 
+        focused.current = true; 
+        if (ref.current) ref.current.innerText = value;
+      }}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => { 
+        focused.current = false; 
+        const val = e.currentTarget.innerText;
+        onChange(val); 
+        if (ref.current) {
+          if (val.includes('**')) ref.current.innerHTML = val.replace(/\*\*(.*?)\*\*/g, `<span class="${highlightClass}">$1</span>`);
+          else ref.current.innerText = val;
+        }
+      }}
       onInput={(e: React.FormEvent<HTMLElement>) => onChange(e.currentTarget.innerText)}
       className={`${className} cursor-text outline-none`}
       style={{ caretColor: dark ? 'white' : '#8b5e3c' }}
@@ -409,12 +534,27 @@ export default function FeedEditor() {
   const bgFileRef      = useRef<HTMLInputElement>(null); // second image for collage
 
   const [isGen,        setIsGen      ] = useState(false);
+  const [isGenWeek,    setIsGenWeek  ] = useState(false);
   const [downloaded,   setDownloaded ] = useState(false);
   const [theme,        setTheme      ] = useState<Theme>('aura');
   const [bgImage,      setBgImage    ] = useState('/featured-renewal.png');
   const [bgImage2,     setBgImage2   ] = useState('/featured-renewal.png');
+  const [waImage,      setWaImage    ] = useState<string>('');
   const [aiPrompt,     setAiPrompt   ] = useState('');
+  const [caption,      setCaption    ] = useState('');
   const [showTextPanel,setShowTextPanel] = useState(false);
+  const [showTemplates,setShowTemplates] = useState(false);
+
+  // Weekly Bulk state
+  const [bulkCount, setBulkCount] = useState(6);
+  const [format, setFormat] = useState('single');
+  const [matrix, setMatrix] = useState('campur');
+  const [angle, setAngle] = useState('default');
+  const [weeklyPlan, setWeeklyPlan] = useState<any[]>([]);
+  const [activeDayIdx, setActiveDayIdx] = useState<number>(-1);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState<Record<number, boolean>>({});
 
   // Editable template fields
   const [label,  setLabel ] = useState('FLASH SALE');
@@ -455,10 +595,134 @@ export default function FeedEditor() {
   const [dragging,      setDragging     ] = useState<DragState | null>(null);
 
   // Upload
-  const onUpload  = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) setBgImage(URL.createObjectURL(f)); }, []);
-  const onUpload2 = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) setBgImage2(URL.createObjectURL(f)); }, []);
+  const onUpload  = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { 
+    const f = e.target.files?.[0]; 
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setBgImage(url);
+      if (activeDayIdx !== -1) {
+        setWeeklyPlan(plan => {
+          const newPlan = [...plan];
+          if (newPlan[activeDayIdx]) newPlan[activeDayIdx].bgImage = url;
+          return newPlan;
+        });
+      }
+    }
+  }, [activeDayIdx]);
+  const onUpload2 = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { 
+    const f = e.target.files?.[0]; 
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setBgImage2(url); 
+      if (activeDayIdx !== -1) {
+        setWeeklyPlan(plan => {
+          const newPlan = [...plan];
+          if (newPlan[activeDayIdx]) newPlan[activeDayIdx].bgImage2 = url;
+          return newPlan;
+        });
+      }
+    }
+  }, [activeDayIdx]);
 
-  // AI
+  const onUploadWA = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { 
+    const f = e.target.files?.[0]; 
+    if (f) {
+      const url = URL.createObjectURL(f);
+      setWaImage(url); 
+      if (activeDayIdx !== -1) {
+        setWeeklyPlan(plan => {
+          const newPlan = [...plan];
+          if (newPlan[activeDayIdx]) newPlan[activeDayIdx].waImage = url;
+          return newPlan;
+        });
+      }
+    }
+  }, [activeDayIdx]);
+
+  // Load a day into editor
+  const loadDayIntoEditor = (index: number) => {
+    const day = weeklyPlan[index];
+    if (!day) return;
+    setActiveDayIdx(index);
+    setTheme(day.theme as Theme);
+    setLabel(day.label || day.title?.split(' ')[0]?.toUpperCase() || label);
+    setTitle(day.title || '');
+    setPrice(day.price || '');
+    setDesc(day.description || '');
+    if (day.quote) setQuote(`"${day.quote}"`);
+    if (day.author) setAuthor(day.author);
+    if (day.myth) setMyth(day.myth);
+    if (day.fact) setFact(day.fact);
+    if (day.caption) setCaption(day.caption);
+    setBgImage(day.bgImage || '/featured-renewal.png');
+    setBgImage2(day.bgImage2 || '/featured-renewal.png');
+    setWaImage(day.waImage || '');
+  };
+
+  // Generate Image for a specific day
+  const generateImageForDay = async (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const day = weeklyPlan[index];
+    if (!day) return;
+    
+    setIsGeneratingImage(prev => ({ ...prev, [index]: true }));
+    try {
+      const imagePrompt = `${day.title}. ${day.description || day.quote || day.myth || ''}`;
+      const res = await fetch('/api/ai/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: imagePrompt })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      
+      if (data.imageUrl) {
+        setWeeklyPlan(plan => {
+          const newPlan = [...plan];
+          newPlan[index] = { ...newPlan[index], bgImage: data.imageUrl };
+          return newPlan;
+        });
+        if (activeDayIdx === index) {
+          setBgImage(data.imageUrl);
+        }
+      }
+    } catch(err) {
+      console.error(err);
+      alert('Gagal membuat gambar latar AI.');
+    } finally {
+      setIsGeneratingImage(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  // AI Weekly Generate
+  const onGenerateWeek = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsGenWeek(true);
+    try {
+      const res = await fetch('/api/ai/generate-week', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ prompt: aiPrompt, count: bulkCount, format, matrix, angle }) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (Array.isArray(data) && data.length === bulkCount) {
+        setWeeklyPlan(data);
+        // Load day 1 automatically
+        setActiveDayIdx(0);
+        const day = data[0];
+        setTheme(day.theme as Theme);
+        setLabel(day.label || day.title?.split(' ')[0]?.toUpperCase() || label);
+        setTitle(day.title || '');
+        setPrice(day.price || '');
+        setDesc(day.description || '');
+        if (day.quote) setQuote(`"${day.quote}"`);
+        if (day.author) setAuthor(day.author);
+        if (day.myth) setMyth(day.myth);
+        if (day.fact) setFact(day.fact);
+        if (day.caption) setCaption(day.caption);
+      }
+    } catch(e) { console.error(e); alert('Failed to generate week. See console.'); }
+    finally { setIsGenWeek(false); }
+  };
+
+  // AI Single Generate
   const onGenerate = async () => {
     if (!aiPrompt.trim()) return;
     setIsGen(true);
@@ -466,11 +730,12 @@ export default function FeedEditor() {
       const res  = await fetch('/api/ai/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ prompt: aiPrompt }) });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setLabel(data.title?.split(' ')[0]?.toUpperCase() || label);
+      setLabel(data.label || data.title?.split(' ')[0]?.toUpperCase() || label);
       setTitle(data.title || title);
       setPrice(data.price || price);
       setDesc(data.description || desc);
       setQuote(`"${data.description || desc}"`);
+      if (data.caption) setCaption(data.caption);
     } catch(e) { console.error(e); }
     finally { setIsGen(false); }
   };
@@ -521,6 +786,60 @@ export default function FeedEditor() {
       document.body.removeChild(offscreen);
     }
   };
+
+  // Download All (7 Days)
+  const onDownloadWeek = async () => {
+    setIsDownloadingAll(true);
+    setShowPreviewModal(false);
+    try {
+      for (let i = 0; i < weeklyPlan.length; i++) {
+        loadDayIntoEditor(i);
+        // Wait for React to render the new state into the DOM
+        await new Promise(r => setTimeout(r, 600)); 
+        
+        if (!postRef.current) continue;
+        
+        const offscreen = document.createElement('div');
+        offscreen.style.cssText = 'position:absolute;top:0;left:-99999px;width:1080px;height:1350px;overflow:hidden;pointer-events:none;z-index:-9999;';
+        document.body.appendChild(offscreen);
+
+        const clone = postRef.current.cloneNode(true) as HTMLElement;
+        clone.style.transform = 'none';
+        clone.style.transformOrigin = 'top left';
+        clone.style.position = 'relative';
+        clone.style.top = '0';
+        clone.style.left = '0';
+        clone.style.width = '1080px';
+        clone.style.height = '1350px';
+        offscreen.appendChild(clone);
+
+        try {
+          await new Promise(r => setTimeout(r, 80)); // let clone images settle
+          const url = await htmlToImage.toPng(clone, {
+            quality: 1,
+            pixelRatio: 2,
+            width: 1080,
+            height: 1350,
+            fetchRequestInit: { mode: 'cors' },
+          });
+          Object.assign(document.createElement('a'), {
+            download: `SerenaRaga_${weeklyPlan[i].dayName}_${weeklyPlan[i].theme}.png`,
+            href: url,
+          }).click();
+        } finally {
+          document.body.removeChild(offscreen);
+        }
+        await new Promise(r => setTimeout(r, 600)); // Delay between downloads
+      }
+      alert('✅ 7 Gambar berhasil didownload!');
+    } catch (err) {
+      console.error(err);
+      alert('Terjadi kesalahan saat download beruntun.');
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  };
+
 
 
   // Text layers CRUD
@@ -649,6 +968,48 @@ export default function FeedEditor() {
           <div className="pb-8"><Pills dark={false} /></div>
         </div>
       );
+      case 'watestimonial': return (
+          <div className="h-full bg-zinc-100 flex flex-col relative overflow-hidden">
+            <div className="absolute -top-[200px] -right-[200px] w-[600px] h-[600px] bg-green-200/50 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-[200px] -left-[200px] w-[600px] h-[600px] bg-earth-primary/20 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="relative z-10 flex-1 flex flex-col px-[60px] py-[80px]">
+              <div className="flex items-center justify-between mb-8">
+                <Logo invert={false} scale={0.7} />
+                <ET value={label} onChange={setLabel} className="text-[24px] font-bold text-zinc-500 uppercase tracking-widest bg-white px-6 py-2 rounded-full shadow-sm" dark={false} />
+              </div>
+              
+              <div className="flex-1 flex flex-col justify-center items-center mt-4">
+                <ET value={title} onChange={setTitle} className="text-[64px] font-serif font-bold text-zinc-800 leading-tight text-center mb-10 max-w-[90%]" tag="h1" dark={false} />
+                
+                {waImage ? (
+                  <div className="relative shadow-2xl rounded-[40px] overflow-hidden border-[8px] border-white w-[85%] max-w-[800px] bg-white transition-transform hover:scale-[1.02]">
+                    <div className="bg-[#075e54] text-white px-6 py-4 flex items-center gap-4">
+                      <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                        <User size={24} className="text-white" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-[22px]">Pelanggan SerenaRaga</div>
+                        <div className="text-white/80 text-[16px]">online</div>
+                      </div>
+                    </div>
+                    <img src={waImage} alt="WA Screenshot" className="w-full h-auto object-contain bg-[#efe6dd]" crossOrigin="anonymous" />
+                  </div>
+                ) : (
+                  <div className="w-[85%] max-w-[800px] aspect-[4/3] bg-zinc-200/50 rounded-[40px] border-4 border-dashed border-zinc-300 flex flex-col items-center justify-center text-zinc-400 gap-4">
+                    <MessageSquare size={64} className="opacity-50" />
+                    <p className="text-[28px] font-medium">Screenshot WA belum diupload</p>
+                    <p className="text-[20px]">Gunakan panel kiri untuk upload foto bukti chat.</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="mt-12">
+                <Pills dark={false} />
+              </div>
+            </div>
+          </div>
+        );
       case 'gradient': return (
         <>
           <div className="absolute inset-0"><img src={bgImage} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" /><div className="absolute inset-0 bg-gradient-to-br from-amber-900/90 via-stone-900/75 to-black/90" /><div className="absolute top-[-200px] right-[-200px] w-[800px] h-[800px] bg-earth-primary/20 rounded-full blur-3xl" /><div className="absolute bottom-[-200px] left-[-200px] w-[600px] h-[600px] bg-amber-600/20 rounded-full blur-3xl" /></div>
@@ -815,6 +1176,160 @@ export default function FeedEditor() {
           <div className="py-8 border-t border-zinc-100"><Pills dark={false} /></div>
         </div>
       );
+      case 'magazine': return (
+        <div className="bg-white flex flex-col h-full p-[65px]">
+          <div className="flex-1 border-[6px] border-zinc-900 flex flex-col overflow-hidden">
+            <div className="border-b-[6px] border-zinc-900 px-14 py-8 flex justify-between items-center"><Logo invert={false} scale={0.7} /></div>
+            <div className="flex-1 flex flex-col relative">
+              <div className="absolute inset-0"><img src={bgImage} alt="" className="w-full h-full object-cover grayscale-[20%]" crossOrigin="anonymous" /><div className="absolute inset-0 bg-white/10" /></div>
+              <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center p-[60px] bg-white/80 backdrop-blur-md m-[80px] border-[4px] border-zinc-900 shadow-2xl gap-6">
+                <ET value={label} onChange={setLabel} className="text-[28px] font-black uppercase tracking-[0.4em] text-zinc-900" dark={false} />
+                <ET value={title} onChange={setTitle} className="text-[85px] font-serif font-black text-zinc-900 leading-[0.9]" tag="h2" dark={false} />
+                <ET value={price} onChange={setPrice} className="text-[120px] font-serif font-black text-earth-primary leading-[0.85]" tag="h1" dark={false} />
+                <div className="w-[80%] h-[4px] bg-zinc-900 my-4" />
+                <ET value={desc} onChange={setDesc} className="text-[28px] text-zinc-700 leading-relaxed font-mono" dark={false} />
+              </div>
+            </div>
+            <div className="border-t-[6px] border-zinc-900 py-6"><Pills dark={false} /></div>
+          </div>
+        </div>
+      );
+      case 'polaroid': return (
+        <div className="h-full bg-[#f4f4f5] flex flex-col p-[80px] relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-earth-primary/10 rounded-full blur-3xl -mr-[100px] -mt-[100px]" />
+          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-stone-300/30 rounded-full blur-3xl -ml-[150px] -mb-[150px]" />
+          <div className="relative z-10 flex-1 bg-white shadow-2xl p-[50px] pb-[100px] flex flex-col items-center rotate-[1deg] hover:rotate-0 transition-transform duration-500">
+            <div className="w-full aspect-square bg-zinc-200 relative overflow-hidden shadow-inner mb-[60px]">
+              <img src={bgImage} alt="" className="absolute inset-0 w-full h-full object-cover" crossOrigin="anonymous" />
+            </div>
+            <Logo invert={false} scale={0.8} />
+            <div className="flex flex-col items-center text-center gap-6 w-[80%] mt-[60px]">
+              <ET value={title} onChange={setTitle} className="text-[64px] font-serif italic text-zinc-800 leading-[1.1]" tag="h2" dark={false} />
+              <ET value={price} onChange={setPrice} className="text-[48px] font-bold text-earth-primary" tag="h1" dark={false} />
+              <div className="w-[100px] h-[2px] bg-zinc-300" />
+              <ET value={desc} onChange={setDesc} className="text-[28px] text-zinc-500 italic leading-relaxed font-serif" dark={false} />
+            </div>
+          </div>
+          <div className="absolute bottom-[30px] left-0 right-0 z-20"><Pills dark={false} /></div>
+        </div>
+      );
+      case 'split': return (
+        <div className="h-full flex flex-col bg-white">
+          <div className="flex-1 relative">
+            <img src={bgImage} alt="" className="absolute inset-0 w-full h-full object-cover" crossOrigin="anonymous" />
+            <div className="absolute inset-0 bg-black/20" />
+            <div className="absolute top-10 left-0 right-0"><Logo invert scale={0.8} /></div>
+          </div>
+          <div className="flex-1 bg-[#fdfaf5] flex flex-col justify-center px-[100px] gap-8 relative border-t-[8px] border-earth-primary">
+            <ET value={label} onChange={setLabel} className="text-[26px] font-bold uppercase tracking-[0.4em] text-earth-primary" dark={false} />
+            <ET value={title} onChange={setTitle} className="text-[85px] font-serif font-black text-zinc-900 leading-[0.9]" tag="h2" dark={false} />
+            <ET value={price} onChange={setPrice} className="text-[100px] font-black text-earth-primary leading-none" tag="h1" dark={false} />
+            <ET value={desc} onChange={setDesc} className="text-[32px] text-zinc-600 leading-relaxed max-w-[90%]" dark={false} />
+            <div className="absolute bottom-0 left-0 right-0"><Pills dark={false} /></div>
+          </div>
+        </div>
+      );
+      case 'glass': return (
+        <div className="h-full relative flex items-center justify-center p-[60px]">
+          <div className="absolute inset-0"><img src={bgImage} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" /><div className="absolute inset-0 bg-stone-900/40" /></div>
+          <div className="relative z-10 w-full bg-white/20 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl p-[80px] flex flex-col items-center text-center gap-8">
+            <Logo invert scale={0.9} />
+            <ET value={label} onChange={setLabel} className="text-[28px] font-bold uppercase tracking-[0.4em] text-white/90 drop-shadow-sm mt-10" />
+            <ET value={title} onChange={setTitle} className="text-[95px] font-serif italic text-white leading-none drop-shadow-md" tag="h2" />
+            <ET value={price} onChange={setPrice} className="text-[110px] font-black text-[#f5dfb8] leading-none drop-shadow-lg" tag="h1" />
+            <div className="w-[120px] h-[3px] bg-white/40 my-4" />
+            <ET value={desc} onChange={setDesc} className="text-[32px] text-white/90 leading-relaxed" />
+          </div>
+          <div className="absolute bottom-[40px] left-0 right-0 z-20"><Pills /></div>
+        </div>
+      );
+      case 'focus': return (
+        <div className="h-full bg-[#e8e6e1] relative flex flex-col overflow-hidden">
+          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-white rounded-full blur-[100px] opacity-60" />
+          <div className="pt-[60px]"><Logo invert={false} scale={0.8} /></div>
+          <div className="flex-1 flex flex-col items-center justify-center z-10 gap-10">
+            <ET value={label} onChange={setLabel} className="text-[30px] font-bold uppercase tracking-[0.4em] text-zinc-500" dark={false} />
+            <div className="w-[600px] h-[600px] rounded-full overflow-hidden border-[15px] border-white shadow-2xl relative">
+              <img src={bgImage} alt="" className="absolute inset-0 w-full h-full object-cover" crossOrigin="anonymous" />
+            </div>
+            <div className="flex flex-col items-center text-center gap-4 mt-6">
+              <ET value={title} onChange={setTitle} className="text-[75px] font-serif font-black text-zinc-800 leading-none" tag="h2" dark={false} />
+              <ET value={price} onChange={setPrice} className="text-[60px] font-bold text-earth-primary" tag="h1" dark={false} />
+              <ET value={desc} onChange={setDesc} className="text-[28px] text-zinc-500 max-w-[800px] leading-relaxed mt-4" dark={false} />
+            </div>
+          </div>
+          <div className="pb-[40px]"><Pills dark={false} /></div>
+        </div>
+      );
+      case 'elegant': return (
+        <div className="h-full bg-white border-[25px] border-[#f5f0e6] flex flex-col p-[60px] relative">
+          <div className="absolute inset-[60px] border-[2px] border-zinc-200 pointer-events-none" />
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center gap-10 px-[60px]">
+            <Logo invert={false} scale={0.85} />
+            <div className="h-[60px] w-[2px] bg-zinc-300" />
+            <ET value={label} onChange={setLabel} className="text-[26px] font-light uppercase tracking-[0.6em] text-zinc-400" dark={false} />
+            <ET value={title} onChange={setTitle} className="text-[100px] font-serif italic text-zinc-800 leading-[1.1]" tag="h2" dark={false} />
+            <div className="w-[100px] h-[2px] bg-earth-primary/50" />
+            <ET value={price} onChange={setPrice} className="text-[55px] font-serif text-earth-primary leading-none" tag="h1" dark={false} />
+            <div className="h-[60px] w-[2px] bg-zinc-300" />
+            <ET value={desc} onChange={setDesc} className="text-[32px] text-zinc-500 font-light leading-relaxed max-w-[80%]" dark={false} />
+          </div>
+          <div className="mt-auto relative z-10"><Pills dark={false} /></div>
+        </div>
+      );
+      case 'vibrant': return (
+        <div className="h-full relative flex flex-col overflow-hidden bg-[#8b5e3c]">
+          <div className="absolute inset-0 mix-blend-overlay opacity-40"><img src={bgImage} alt="" className="w-full h-full object-cover grayscale" crossOrigin="anonymous" /></div>
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#8b5e3c] via-[#d48c44] to-[#f5dfb8] opacity-90" />
+          <div className="relative z-10 flex-1 flex flex-col p-[80px]">
+            <Logo invert scale={0.9} />
+            <div className="flex-1 flex flex-col justify-center text-center items-center gap-8">
+              <ET value={label} onChange={setLabel} className="text-[30px] font-black uppercase tracking-[0.4em] text-white/80 bg-black/10 px-8 py-3 rounded-full backdrop-blur-sm" />
+              <ET value={title} onChange={setTitle} className="text-[120px] font-black text-white leading-[0.9] drop-shadow-xl" tag="h2" />
+              <ET value={price} onChange={setPrice} className="text-[85px] font-bold text-[#4a2e1b] bg-white/90 px-10 py-4 rounded-[40px] shadow-2xl -rotate-2 transform hover:rotate-0 transition-transform" tag="h1" />
+              <ET value={desc} onChange={setDesc} className="text-[36px] font-medium text-white/90 leading-relaxed max-w-[85%] mt-8 drop-shadow-md" />
+            </div>
+          </div>
+          <div className="relative z-10 mb-8"><Pills /></div>
+        </div>
+      );
+      case 'classic': return (
+        <div className="h-full bg-[#2a1f18] p-[50px] flex flex-col relative">
+          <div className="absolute inset-[50px] border-[3px] border-[#d4b996]/30 pointer-events-none" />
+          <div className="relative z-10 pt-10"><Logo invert scale={0.8} /></div>
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-[80px] gap-8 mt-10">
+            <div className="w-[120px] h-[2px] bg-[#d4b996]" />
+            <ET value={label} onChange={setLabel} className="text-[26px] font-serif uppercase tracking-[0.4em] text-[#d4b996]/80" />
+            <ET value={title} onChange={setTitle} className="text-[95px] font-serif italic text-[#f5dfb8] leading-none" tag="h2" />
+            <div className="w-[120px] h-[2px] bg-[#d4b996]" />
+            <div className="w-full h-[350px] my-10 relative border-y-[4px] border-[#d4b996]/40 overflow-hidden">
+              <img src={bgImage} alt="" className="absolute inset-0 w-full h-full object-cover" crossOrigin="anonymous" />
+              <div className="absolute inset-0 bg-[#2a1f18]/30 mix-blend-color" />
+            </div>
+            <ET value={price} onChange={setPrice} className="text-[60px] font-serif font-bold text-[#d4b996] leading-none" tag="h1" />
+            <ET value={desc} onChange={setDesc} className="text-[30px] text-[#f5dfb8]/70 italic leading-relaxed" />
+          </div>
+          <div className="relative z-10 pb-8"><Pills /></div>
+        </div>
+      );
+      case 'modern': return (
+        <div className="h-full bg-zinc-950 relative flex flex-col overflow-hidden">
+          <div className="absolute inset-0"><img src={bgImage} alt="" className="w-full h-full object-cover opacity-50 grayscale-[50%]" crossOrigin="anonymous" /></div>
+          <div className="absolute top-[20%] left-0 w-[85%] bg-[#8b5e3c] py-[60px] pl-[80px] pr-[100px] rounded-r-[50px] shadow-2xl z-10">
+            <Logo invert scale={0.8} />
+            <div className="mt-10 flex flex-col gap-6">
+              <ET value={label} onChange={setLabel} className="text-[26px] font-mono uppercase tracking-[0.3em] text-white/60" />
+              <ET value={title} onChange={setTitle} className="text-[85px] font-black text-white leading-none tracking-tight" tag="h2" />
+              <ET value={price} onChange={setPrice} className="text-[65px] font-black text-[#f5dfb8] leading-none" tag="h1" />
+            </div>
+          </div>
+          <div className="absolute bottom-[22%] right-0 w-[70%] bg-white/10 backdrop-blur-xl border border-white/20 py-[50px] px-[80px] rounded-l-[50px] shadow-2xl z-20 flex flex-col justify-center">
+            <div className="w-[80px] h-[4px] bg-[#f5dfb8] mb-6" />
+            <ET value={desc} onChange={setDesc} className="text-[32px] text-white/90 leading-relaxed font-light" />
+          </div>
+          <div className="absolute bottom-[40px] w-full z-30"><Pills /></div>
+        </div>
+      );
     }
   })();
 
@@ -838,21 +1353,30 @@ export default function FeedEditor() {
 
           {/* Template Picker */}
           <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm">
-            <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-5">Template ({THEMES.length})</h3>
-            <div className="grid grid-cols-3 gap-3">
-              {THEMES.map(t => (
-                <button key={t.id} onClick={() => setTheme(t.id)}
-                  className={`group flex flex-col items-center gap-2 p-2 rounded-2xl border-2 transition-all ${theme === t.id ? 'border-earth-primary bg-earth-primary/5 shadow-sm' : 'border-zinc-100 dark:border-zinc-800 hover:border-earth-primary/30'}`}
-                >
-                  <div className="w-full aspect-[4/5] rounded-xl overflow-hidden">
-                    <MiniPreview id={t.id} />
-                  </div>
-                  <span className={`text-[9px] font-bold uppercase tracking-widest leading-tight text-center transition-colors ${theme === t.id ? 'text-earth-primary' : 'text-zinc-400 group-hover:text-earth-primary'}`}>
-                    {t.label}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <button 
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="w-full flex items-center justify-between group"
+            >
+              <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 group-hover:text-earth-primary transition-colors">Template ({THEMES.length})</h3>
+              {showTemplates ? <ChevronUp size={16} className="text-zinc-400 group-hover:text-earth-primary transition-colors" /> : <ChevronDown size={16} className="text-zinc-400 group-hover:text-earth-primary transition-colors" />}
+            </button>
+            
+            {showTemplates && (
+              <div className="grid grid-cols-3 gap-3 mt-5">
+                {THEMES.map(t => (
+                  <button key={t.id} onClick={() => setTheme(t.id)}
+                    className={`group flex flex-col items-center gap-2 p-2 rounded-2xl border-2 transition-all ${theme === t.id ? 'border-earth-primary bg-earth-primary/5 shadow-sm' : 'border-zinc-100 dark:border-zinc-800 hover:border-earth-primary/30'}`}
+                  >
+                    <div className="w-full aspect-[4/5] rounded-xl overflow-hidden">
+                      <MiniPreview id={t.id} />
+                    </div>
+                    <span className={`text-[9px] font-bold uppercase tracking-widest leading-tight text-center transition-colors ${theme === t.id ? 'text-earth-primary' : 'text-zinc-400 group-hover:text-earth-primary'}`}>
+                      {t.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Image Upload */}
@@ -876,6 +1400,17 @@ export default function FeedEditor() {
                 </button>
               </>
             )}
+              {theme === 'watestimonial' && (
+                <>
+                  <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={onUploadWA} />
+                  <button onClick={() => bgFileRef.current?.click()}
+                    className="w-full border-2 border-dashed border-green-200 dark:border-green-800 rounded-2xl py-5 flex items-center justify-center gap-3 hover:border-green-400/50 hover:bg-green-900/5 transition-all group mt-3"
+                  >
+                    <Upload size={18} className="text-green-400" />
+                    <p className="text-sm font-semibold text-green-500">Upload Screenshot WA</p>
+                  </button>
+                </>
+              )}
           </div>
 
           {/* Text Layers Panel */}
@@ -976,20 +1511,118 @@ export default function FeedEditor() {
           {/* AI Assist */}
           <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-100 dark:border-zinc-800 p-6 shadow-sm">
             <h3 className="text-xs font-black uppercase tracking-widest text-zinc-400 mb-4 flex items-center gap-2"><Wand2 size={14} className="text-earth-primary" /> AI Auto-Isi Teks</h3>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div>
+                  <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Format</label>
+                  <select value={format} onChange={e=>setFormat(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] px-2 py-1.5 outline-none font-medium">
+                    <option value="single">Single Post</option>
+                    <option value="carousel">Carousel</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Matrix</label>
+                  <select value={matrix} onChange={e=>setMatrix(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] px-2 py-1.5 outline-none font-medium">
+                    <option value="campur">Campur</option>
+                    <option value="8020">80/20 Rule</option>
+                    <option value="promo">Full Promo</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold uppercase tracking-widest text-zinc-400 block mb-1">Angle Psikologi</label>
+                  <select value={angle} onChange={e=>setAngle(e.target.value)} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] px-2 py-1.5 outline-none font-medium">
+                    <option value="default">Normal</option>
+                    <option value="fomo">FOMO</option>
+                    <option value="relatable">Relatable</option>
+                    <option value="curiosity">Curiosity</option>
+                  </select>
+                </div>
+              </div>
             <textarea value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} placeholder="Contoh: Promo pijat Ramadhan diskon 25%..." className="w-full text-sm p-4 rounded-2xl border border-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-earth-primary/20 resize-none mb-3 h-[90px]" />
-            <button onClick={onGenerate} disabled={isGen || !aiPrompt.trim()} className="w-full bg-zinc-900 dark:bg-earth-primary/90 text-white rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-30 disabled:cursor-not-allowed">
-              {isGen ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Meracik Teks…</> : <><Sparkles size={16} /> Generate Semua Teks</>}
-            </button>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button onClick={onGenerate} disabled={isGen || isGenWeek || !aiPrompt.trim()} className="w-full bg-zinc-900 dark:bg-zinc-800 text-white rounded-xl py-3 font-bold text-[11px] flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                {isGen ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Sparkles size={14} />} 1 Post
+              </button>
+              <div className="flex gap-1 w-full">
+                <select 
+                  value={bulkCount} 
+                  onChange={(e) => setBulkCount(Number(e.target.value))}
+                  disabled={isGen || isGenWeek}
+                  className="bg-earth-primary text-white rounded-l-xl px-2 py-3 font-bold text-[11px] outline-none cursor-pointer hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <option value={3}>3x</option>
+                  <option value={6}>6x</option>
+                  <option value={9}>9x</option>
+                </select>
+                <button onClick={onGenerateWeek} disabled={isGen || isGenWeek || !aiPrompt.trim()} className="flex-1 bg-earth-primary text-white rounded-r-xl py-3 font-bold text-[11px] flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-earth-primary/20">
+                  {isGenWeek ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Sparkles size={14} />} Bulk
+                </button>
+              </div>
+            </div>
+            
+            {caption && (
+              <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Hasil Caption IG/FB</h4>
+                  <button onClick={() => { navigator.clipboard.writeText(caption); alert('Caption disalin!'); }} className="text-[10px] font-bold uppercase tracking-wider text-earth-primary bg-earth-primary/10 px-3 py-1 rounded-full hover:bg-earth-primary/20 transition-colors">Copy</button>
+                </div>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl text-xs text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed max-h-[150px] overflow-y-auto">
+                  {caption}
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Weekly Plan Schedule */}
+          {weeklyPlan.length > 0 && (
+            <div className="bg-earth-primary/5 rounded-3xl border border-earth-primary/20 p-6 shadow-sm">
+              <h3 className="text-xs font-black uppercase tracking-widest text-earth-primary mb-4 flex items-center gap-2">📅 Draft Bulk Konten</h3>
+              <div className="grid grid-cols-1 gap-2">
+                {weeklyPlan.map((day, idx) => (
+                  <div key={idx} className={`rounded-xl border transition-all flex flex-col overflow-hidden ${activeDayIdx === idx ? 'bg-earth-primary/10 border-earth-primary shadow-sm' : 'bg-white border-zinc-200'}`}>
+                    <button 
+                      onClick={() => loadDayIntoEditor(idx)}
+                      className={`text-left px-4 py-3 flex items-center justify-between w-full hover:bg-earth-primary/5 transition-colors ${activeDayIdx === idx ? 'bg-earth-primary text-white' : 'text-zinc-600'}`}
+                    >
+                      <div>
+                        <p className="text-xs font-bold uppercase">{day.dayName}</p>
+                        <p className={`text-[10px] ${activeDayIdx === idx ? 'text-white/80' : 'text-zinc-400'}`}>Tema: {THEMES.find(t=>t.id===day.theme)?.label || day.theme}</p>
+                      </div>
+                      {activeDayIdx === idx && <CheckCircle2 size={16} />}
+                    </button>
+                    
+                    {activeDayIdx === idx && (
+                      <div className="px-4 py-3 bg-white dark:bg-zinc-900 border-t border-earth-primary/20 flex justify-end">
+                        <button 
+                          onClick={(e) => generateImageForDay(idx, e)}
+                          disabled={isGeneratingImage[idx]}
+                          className="bg-zinc-900 hover:bg-black dark:bg-earth-primary dark:hover:bg-earth-dark text-white px-4 py-2 rounded-xl text-[10px] font-bold flex items-center gap-2 transition-all disabled:opacity-50 shadow-sm"
+                        >
+                          {isGeneratingImage[idx] ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Wand2 size={12} />}
+                          {day.bgImage ? 'Regenerate Bg AI' : 'Generate Bg AI'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 rounded-2xl px-5 py-3 text-xs font-medium">
             <Pencil size={14} /> Klik teks template untuk edit. Drag text layer custom untuk memindahkan.
           </div>
 
           {/* Download */}
-          <button onClick={onDownload} className="w-full bg-earth-primary hover:bg-earth-dark text-white rounded-3xl py-5 flex items-center justify-center gap-3 font-bold text-base shadow-xl shadow-earth-primary/20 transition-all hover:scale-[1.02] active:scale-100">
-            {downloaded ? <><CheckCircle2 size={22} /> Tersimpan!</> : <><Download size={22} /> Download PNG HD</>}
-          </button>
+          <div className="space-y-3">
+            <button onClick={onDownload} className="w-full bg-zinc-900 hover:bg-black text-white rounded-2xl py-4 flex items-center justify-center gap-3 font-bold text-sm shadow-xl transition-all">
+              {downloaded ? <><CheckCircle2 size={18} /> Tersimpan!</> : <><Download size={18} /> Download Gambar Ini</>}
+            </button>
+            {weeklyPlan.length > 0 && (
+              <button onClick={() => setShowPreviewModal(true)} className="w-full bg-earth-primary hover:bg-earth-dark text-white rounded-2xl py-4 flex items-center justify-center gap-3 font-bold text-sm shadow-xl shadow-earth-primary/20 transition-all">
+                <Globe size={18} /> Preview & Download 1 Minggu
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ══ RIGHT PANEL: CANVAS ══ */}
@@ -1092,6 +1725,67 @@ export default function FeedEditor() {
         </div>
 
       </div>
+
+      {/* Preview 1 Minggu Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 md:p-10">
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-5xl h-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-8 py-6 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2"><Globe className="text-earth-primary" /> Preview Jadwal 1 Minggu</h2>
+                <p className="text-sm text-zinc-500">Review seluruh caption dan template sebelum mendownload 7 gambar sekaligus.</p>
+              </div>
+              <button onClick={() => setShowPreviewModal(false)} className="p-2 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors rounded-full">
+                <X size={20} className="text-zinc-600 dark:text-zinc-300" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 gap-6 bg-zinc-100/50 dark:bg-zinc-950">
+              {weeklyPlan.map((day, i) => (
+                <div key={i} className="flex gap-5 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900 shadow-sm hover:shadow-md transition-shadow">
+                  {/* Visual Preview */}
+                  <div className="w-[120px] shrink-0 flex flex-col gap-3">
+                    <div className="w-full aspect-[4/5] rounded-xl overflow-hidden shadow-md border border-zinc-100 dark:border-zinc-800 bg-zinc-100">
+                      <MiniPreview id={day.theme as Theme} />
+                    </div>
+                    <div className="text-center">
+                      <span className="bg-earth-primary/10 text-earth-primary font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-full inline-block mb-1">{day.dayName}</span>
+                      <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">{THEMES.find(t=>t.id===day.theme)?.label || day.theme}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Content Preview */}
+                  <div className="flex-1 space-y-3 min-w-0">
+                    <div>
+                      <h3 className="text-base font-serif font-bold text-zinc-900 dark:text-white leading-snug line-clamp-2" title={day.title}>{day.title}</h3>
+                      <p className="text-earth-primary font-black text-xs mt-1 uppercase tracking-wider">{day.price || day.label}</p>
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 italic">"{day.description || day.quote || day.myth}"</p>
+                    
+                    <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[9px] text-zinc-400 uppercase tracking-widest font-bold">Caption Text</p>
+                      </div>
+                      <div className="bg-zinc-50 dark:bg-zinc-950 rounded-lg p-2 max-h-[100px] overflow-y-auto">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed">{day.caption}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="px-8 py-5 border-t border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between">
+              <p className="text-xs text-zinc-500 font-medium">⚠️ Saat klik download, gambar akan diproses dan diunduh satu per satu secara otomatis. Mohon jangan tutup browser.</p>
+              <button onClick={onDownloadWeek} disabled={isDownloadingAll} className="bg-earth-primary hover:bg-earth-dark text-white px-8 py-4 rounded-2xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-earth-primary/20">
+                {isDownloadingAll ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Memproses 7 Gambar...</> : <><Download size={18} /> Download Semua (7 Post)</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
+

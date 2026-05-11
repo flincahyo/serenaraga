@@ -37,7 +37,7 @@ const BookingSection = () => {
   return (
     <section id="booking" className="py-24 bg-bg-cream scroll-mt-24">
       <div className="container-custom">
-        <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-earth-primary/10">
+        <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl shadow-earth-primary/5 border border-earth-primary/10 flex flex-col md:flex-row">
 
           {/* Left Column */}
           <div className="md:w-1/2 bg-earth-primary p-12 md:p-20 text-white flex flex-col justify-center">
@@ -67,15 +67,19 @@ const BookingSection = () => {
           </div>
 
           {/* Right Column */}
-          <div className="md:w-1/2 p-12 md:p-20 bg-bg-soft/30 flex flex-col justify-center items-center text-center">
+          <div className="md:w-1/2 p-12 md:p-20 bg-stone-50 flex flex-col justify-center items-center text-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
-              className="max-w-sm"
+              className="max-w-sm w-full"
             >
-              <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-lg mb-8 mx-auto">
-                <Sparkles size={32} className="text-earth-primary" />
+              <div className="relative flex items-center justify-center h-[50px] w-[220px] overflow-hidden mx-auto mb-8 opacity-90 mix-blend-multiply">
+                <img 
+                  src="/serenalogo2.svg" 
+                  alt="SerenaRaga" 
+                  className="absolute h-[250px] w-auto max-w-none object-contain -ml-5" 
+                />
               </div>
               <h3 className="text-2xl font-bold mb-4 text-text-primary">Nyaman &amp; Personal</h3>
               <p className="text-text-secondary text-sm mb-10 leading-relaxed">
@@ -84,9 +88,9 @@ const BookingSection = () => {
 
               <button
                 onClick={handleWhatsAppClick}
-                className="group relative w-full bg-emerald-600 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-4 hover:bg-emerald-700 transition-all transform hover:-translate-y-1 shadow-xl hover:shadow-2xl"
+                className="group relative w-full bg-[#128C7E] text-white py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-[#075E54] transition-all transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
               >
-                <MessageCircle size={28} />
+                <MessageCircle size={24} />
                 <span>Chat via WhatsApp</span>
                 <div className="absolute inset-0 rounded-2xl bg-white/20 scale-105 opacity-0 group-hover:opacity-100 transition-all pointer-events-none" />
               </button>

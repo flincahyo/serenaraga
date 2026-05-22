@@ -73,6 +73,7 @@ export default function VouchersPage() {
     amountPaid: 0,
     maxUses: 1,
     useExpiry: false,
+    expiryDate: '',
     tagline: '',
     terms1: 'Berlaku untuk layanan Home Service Massage di wilayah Yogyakarta (free transport max 10km).',
     terms2: 'Wajib melakukan reservasi maksimal H-1 sebelum kedatangan.',

@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Gift, Plus, Copy, Download, Check, X, Loader2, Tag, Clock, Users, RefreshCw, Ban, Eye } from 'lucide-react';
-import { toPng } from 'html-to-image';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Gift, Plus, Copy, Check, X, Loader2, Tag, Clock, Users, RefreshCw, Ban, Palette, Layers, ChevronRight, Printer, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 import { useUser } from '@/lib/user-context';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type Service = { id: string; name: string; price: number; category: string; category_label: string; details?: string; };
 type Voucher = {
@@ -17,10 +17,15 @@ type Voucher = {
   amount_paid: number | null; target_service: string | null;
 };
 
-const genCode = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'SRAGA-';
-  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+const genCode = (len = 4) => {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const numbers = '23456789';
+  let code = '';
+  for (let i = 0; i < len; i++) {
+    // Alternate Letter and Number for readability (e.g., K7M3P9)
+    const source = i % 2 === 0 ? letters : numbers;
+    code += source[Math.floor(Math.random() * source.length)];
+  }
   return code;
 };
 
@@ -31,9 +36,9 @@ const fmtDate = (d: string | null) => {
 };
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
-  active:  { label: 'Aktif',    cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' },
-  used:    { label: 'Terpakai', cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400' },
-  expired: { label: 'Expired',  cls: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400' },
+  active:  { label: 'Aktif',    cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50' },
+  used:    { label: 'Terpakai', cls: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700' },
+  expired: { label: 'Expired',  cls: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-100 dark:border-red-900/50' },
 };
 
 function getStatus(v: Voucher): 'active' | 'used' | 'expired' {
@@ -43,158 +48,21 @@ function getStatus(v: Voucher): 'active' | 'used' | 'expired' {
   return 'active';
 }
 
-function VoucherCard({name,code,value,vt,svc,details,to,from,exp,mx,wa}:{name:string;code:string;value:number;vt:string;svc?:string;details?:string;to?:string;from?:string;exp?:string|null;mx:number;wa?:string}) {
-  const vStr = vt==='flat'?`Rp ${Number(value).toLocaleString('id-ID')}`:`${value}%`;
-  const dStr = exp?new Date(exp).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'}):'Lifetime';
-  const waDisplay = wa?`0${wa.startsWith('62')?wa.slice(2):wa}`:'0895-1835-9037';
-  const tc = ['Voucher berlaku khusus untuk layanan Homecare Spa (Terapis datang ke rumah).','Wajib melakukan reservasi maksimal H-1 sebelum waktu kedatangan.',`Voucher bersifat ${mx}x pakai, tidak dapat diuangkan atau digabung promo lain.`];
-  const subText = details || svc || '';
-  return (
-    <div style={{width:1200,height:520,display:'flex',fontFamily:'sans-serif',background:'#FAF6EF',overflow:'hidden',position:'relative'}}>
-      
-      {/* Left Dark Panel */}
-      <div style={{width:200,height:'100%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(170deg,#2C1408 0%,#1A0A04 100%)',position:'relative'}}>
-        <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'radial-gradient(ellipse at 50% 50%,rgba(201,169,110,.15) 0%,transparent 70%)'}} />
-        
-        {/* Center Container for Logo & Text */}
-        <div style={{display:'flex',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:12,position:'relative',zIndex:1}}>
-          
-          {/* Vertical Logo (Left) */}
-          <div style={{width:45,height:160,position:'relative'}}>
-            {/* Cropping Wrapper */}
-            <div style={{position:'absolute',top:'50%',left:'50%',width:160,height:45,transform:'translate(-50%,-50%) rotate(-90deg)',overflow:'hidden'}}>
-              <img src="/serenalogo2.svg" style={{position:'absolute',top:'50%',left:-8,transform:'translateY(-50%)',height:180,width:'auto',maxWidth:'none',objectFit:'contain',filter:'brightness(0) invert(1)',opacity:.9}} crossOrigin="anonymous"/>
-            </div>
-          </div>
-
-          {/* Vertical Text (Right) */}
-          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:24}}>
-            <div style={{width:1,height:80,background:'linear-gradient(180deg,transparent,rgba(201,169,110,.6))'}}/>
-            <p style={{
-              fontSize:17,
-              letterSpacing:'.4em',
-              color:'rgba(201,169,110,.8)',
-              fontFamily:'sans-serif',
-              writingMode: 'vertical-rl',
-              transform: 'rotate(180deg)',
-              margin: 0,
-              whiteSpace: 'nowrap'
-            }}>
-              GIFT VOUCHER
-            </p>
-            <div style={{width:1,height:80,background:'linear-gradient(0deg,transparent,rgba(201,169,110,.6))'}}/>
-          </div>
-
-        </div>
-
-        {/* Social & Web Info */}
-        <div style={{position:'absolute',bottom:25,left:0,right:0,display:'flex',justifyContent:'center',zIndex:1}}>
-          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(201,169,110,.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-              </svg>
-              <p style={{fontSize:10,letterSpacing:'.1em',color:'rgba(201,169,110,.8)',fontFamily:'sans-serif',margin:0,fontWeight:600}}>@serena.raga</p>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(201,169,110,.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-              </svg>
-              <p style={{fontSize:10,letterSpacing:'.1em',color:'rgba(201,169,110,.8)',fontFamily:'sans-serif',margin:0,fontWeight:600}}>serenaraga.fit</p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <div style={{width:3,height:'100%',background:'linear-gradient(180deg,transparent 0%,#C9A96E 50%,transparent 100%)',flexShrink:0}}/>
-
-      {/* Right Content */}
-      <div style={{flex:1,height:'100%',display:'flex',flexDirection:'column',position:'relative'}}>
-        
-        {/* Watermark */}
-        <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:0,pointerEvents:'none',opacity:0.04}}>
-          <img src="/serenalogo.svg" style={{height:750,width:'auto',maxWidth:'none',objectFit:'contain',filter:'grayscale(100%) brightness(0)'}} crossOrigin="anonymous"/>
-        </div>
-        
-        {/* Main content body */}
-        <div style={{flex:1,padding:'35px 45px 15px',display:'flex',flexDirection:'column',position:'relative',zIndex:1,overflow:'hidden'}}>
-          {/* Top row */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',height:60,flexShrink:0}}>
-            <div style={{position:'relative',width:200,height:60,overflow:'hidden'}}>
-              <img src="/serenalogo.svg" style={{position:'absolute',top:'50%',left:-8,transform:'translateY(-50%)',height:160,width:'auto',maxWidth:'none',objectFit:'contain'}} crossOrigin="anonymous"/>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <p style={{fontSize:11,letterSpacing:'.18em',color:'#8B6340',fontFamily:'sans-serif',fontWeight:'bold',marginBottom:4,marginTop:0}}>SPECIAL GIFT VOUCHER</p>
-              <p style={{fontSize:11,letterSpacing:'.06em',color:'#8B6340',fontFamily:'sans-serif',margin:0}}>KODE : <span style={{fontFamily:'monospace',fontWeight:'bold',letterSpacing:'.14em'}}>{code}</span></p>
-            </div>
-          </div>
-
-          {/* Center */}
-          <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',textAlign:'center'}}>
-            <p style={{fontSize:14,color:'#8B6B4E',fontStyle:'italic',marginBottom:12,marginTop:0}}>{to?`Dipersembahkan untuk ${to}${from?` dari ${from}`:''}`:svc?'Voucher ini berlaku untuk layanan:':'Special Gift Voucher'}</p>
-            <h2 style={{fontSize:60,fontWeight:'bold',color:'#5A3418',lineHeight:1.1,marginBottom:10,marginTop:0}}>{name||'Gift Voucher'}</h2>
-            {subText&&<p style={{fontSize:13,color:'#7A6555',fontFamily:'sans-serif',maxWidth:650,lineHeight:1.5,marginBottom:14,marginTop:0}}>{subText}</p>}
-            <div style={{width:200,height:1,background:'linear-gradient(90deg,transparent,#C9A870,transparent)',margin:'6px auto'}}/>
-            <p style={{fontSize:13,letterSpacing:'.22em',fontWeight:'bold',color:'#8B6340',fontFamily:'sans-serif',margin:'10px 0'}}>SENILAI {vStr.toUpperCase()}</p>
-            <div style={{width:200,height:1,background:'linear-gradient(90deg,transparent,#C9A870,transparent)',margin:'6px auto'}}/>
-          </div>
-        </div>
-
-        {/* Bottom strip */}
-        <div style={{height:100,flexShrink:0,background:'transparent',padding:'0 45px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:40,position:'relative',zIndex:1,borderTop:'1px solid #EADDD2',boxSizing:'border-box'}}>
-          <div style={{flex:1}}>
-            <p style={{fontSize:9,letterSpacing:'.18em',fontWeight:'bold',color:'#6B4E37',fontFamily:'sans-serif',marginBottom:6,marginTop:0}}>SYARAT &amp; KETENTUAN SERENARAGA:</p>
-            {tc.map((t,i)=>(<div key={i} style={{display:'flex',gap:6,marginBottom:3}}><span style={{fontSize:10,color:'#7A6050',fontFamily:'sans-serif',flexShrink:0,lineHeight:1.3}}>•</span><p style={{fontSize:10,color:'#7A6050',fontFamily:'sans-serif',lineHeight:1.3,margin:0}}>{t}</p></div>))}
-          </div>
-          
-          {/* Vertical Divider */}
-          <div style={{width:1,height:45,background:'#EADDD2',flexShrink:0}}/>
-
-          <div style={{display:'flex',gap:60,flexShrink:0,alignItems:'center'}}>
-            <div style={{textAlign:'center'}}>
-              <p style={{fontSize:10,letterSpacing:'.1em',fontWeight:600,color:'#9BA3AF',fontFamily:'sans-serif',marginBottom:6,marginTop:0}}>VALID HINGGA</p>
-              <p style={{fontSize:16,fontWeight:700,color:'#2D3748',fontFamily:'sans-serif',margin:0}}>{dStr}</p>
-            </div>
-            <div style={{textAlign:'center'}}>
-              <p style={{fontSize:10,letterSpacing:'.1em',fontWeight:600,color:'#9BA3AF',fontFamily:'sans-serif',marginBottom:6,marginTop:0}}>RESERVASI (WHATSAPP)</p>
-              <div style={{display:'flex',alignItems:'center',gap:6,justifyContent:'center'}}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#25D366">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-                </svg>
-                <p style={{fontSize:16,fontWeight:700,color:'#25D366',fontFamily:'sans-serif',margin:0}}>{waDisplay}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
 export default function VouchersPage() {
   const { user } = useUser();
   const router = useRouter();
-  const previewRef = useRef<HTMLDivElement>(null);
 
-  const [tab, setTab] = useState<'list' | 'create'>('list');
+  const [tab, setTab] = useState<'list' | 'create' | 'bulk'>('list');
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState('');
-  const [previewVoucher, setPreviewVoucher] = useState<Voucher | null>(null);
-  const [waNumber, setWaNumber] = useState('');
   const [filterStatus, setFilterStatus] = useState<'semua' | 'active' | 'used' | 'expired'>('semua');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id?: string, batch?: string, type: 'delete' | 'revoke' } | null>(null);
 
   const [form, setForm] = useState({
-    code: genCode(),
+    code: `SRAGA-${genCode(4)}`,
     name: '',
     serviceId: '',
     customValue: 0,
@@ -205,7 +73,25 @@ export default function VouchersPage() {
     amountPaid: 0,
     maxUses: 1,
     useExpiry: false,
+    tagline: '',
+    terms1: 'Berlaku untuk layanan Home Service Massage di wilayah Yogyakarta (free transport max 10km).',
+    terms2: 'Wajib melakukan reservasi maksimal H-1 sebelum kedatangan.',
+    terms3: 'Voucher tidak dapat diuangkan atau digabungkan dengan promo lainnya.',
+  });
+
+  const [bulkForm, setBulkForm] = useState({
+    quantity: 100,
+    prefix: 'SRAGA',
+    name: '',
+    customValue: 0,
+    valueType: 'flat' as 'flat' | 'percentage',
+    maxUses: 1,
+    useExpiry: false,
     expiryDate: '',
+    tagline: '',
+    terms1: 'Berlaku untuk layanan Home Service Massage di wilayah Yogyakarta (free transport max 10km).',
+    terms2: 'Wajib melakukan reservasi maksimal H-1 sebelum kedatangan.',
+    terms3: 'Voucher tidak dapat diuangkan atau digabungkan dengan promo lainnya.',
   });
 
   const supabase = createClient();
@@ -215,21 +101,17 @@ export default function VouchersPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const [{ data: vs }, { data: svcs }, { data: settings }] = await Promise.all([
+    const [{ data: vs }, { data: svcs }] = await Promise.all([
       supabase.from('discounts').select('*').eq('is_voucher', true).order('created_at', { ascending: false }),
       supabase.from('services').select('id,name,price,category,category_label,details').neq('category', 'split_items').order('sort_order'),
-      supabase.from('settings').select('key,value').eq('key', 'wa_number'),
     ]);
     if (vs) setVouchers(vs as Voucher[]);
     if (svcs) setServices(svcs);
-    const wa = settings?.find(s => s.key === 'wa_number')?.value;
-    if (wa) setWaNumber(wa);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Owner-only guard
   if (user && user.role !== 'owner') {
     return (
       <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-zinc-500">
@@ -260,23 +142,85 @@ export default function VouchersPage() {
       target_service: form.serviceId || null,
       valid_from: null,
       valid_to: form.useExpiry && form.expiryDate ? form.expiryDate : null,
-      description: form.recipientName
-        ? `Gift dari ${form.buyerName || 'Anonim'} untuk ${form.recipientName}`
-        : null,
+      description: JSON.stringify({
+        tagline: form.tagline,
+        terms1: form.terms1,
+        terms2: form.terms2,
+        terms3: form.terms3,
+      }),
     };
     const { data, error } = await supabase.from('discounts').insert(payload).select().single();
     if (!error && data) {
-      setPreviewVoucher(data as Voucher);
       setTab('list');
       fetchData();
-      setForm({ code: genCode(), name: '', serviceId: '', customValue: 0, useServicePrice: true, valueType: 'flat', recipientName: '', buyerName: '', amountPaid: 0, maxUses: 1, useExpiry: false, expiryDate: '' });
+      setForm(f => ({ ...f, code: `SRAGA-${genCode(4)}`, name: '', serviceId: '', customValue: 0, useServicePrice: true, valueType: 'flat', recipientName: '', buyerName: '', amountPaid: 0, maxUses: 1, useExpiry: false, expiryDate: '', tagline: '' }));
     }
     setSaving(false);
   };
 
-  const handleRevoke = async (id: string) => {
-    if (!confirm('Nonaktifkan voucher ini?')) return;
-    await supabase.from('discounts').update({ is_active: false }).eq('id', id);
+  const handleCreateBulk = async () => {
+    if (!bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0) return;
+    setSaving(true);
+    
+    const prefix = bulkForm.prefix.trim().toUpperCase();
+    const generatedCodes = new Set<string>();
+    while (generatedCodes.size < bulkForm.quantity) {
+      // Menggunakan genCode(6) memberikan ~7 Juta kombinasi, cukup aman antar event dan lebih mudah diketik
+      generatedCodes.add(`${prefix}-${genCode(6)}`);
+    }
+    
+    const codesArray = Array.from(generatedCodes);
+    
+    const payload = codesArray.map((codeStr) => ({
+      code: codeStr,
+      name: bulkForm.name,
+      type: 'manual',
+      value_type: bulkForm.valueType,
+      value: bulkForm.customValue,
+      max_uses: bulkForm.maxUses,
+      uses_count: 0,
+      is_active: true,
+      is_owner_borne: true,
+      is_voucher: true,
+      buyer_name: `Batch: ${bulkForm.name}`, // Identifier for bulk batches
+      valid_to: bulkForm.useExpiry && bulkForm.expiryDate ? bulkForm.expiryDate : null,
+      description: JSON.stringify({
+        tagline: bulkForm.tagline,
+        terms1: bulkForm.terms1,
+        terms2: bulkForm.terms2,
+        terms3: bulkForm.terms3,
+      }),
+    }));
+
+    const { error } = await supabase.from('discounts').insert(payload);
+    if (!error) {
+      setTab('list');
+      fetchData();
+      setBulkForm(f => ({ ...f, quantity: 100, prefix: 'SRAGA', name: '', customValue: 0, valueType: 'flat', maxUses: 1, useExpiry: false, expiryDate: '', tagline: '' }));
+    } else {
+      alert("Gagal membuat bulk voucher.");
+    }
+    setSaving(false);
+  };
+
+  const handleRevoke = (id: string) => setDeleteConfirm({ id, type: 'revoke' });
+  const handleRevokeBatch = (batchName: string) => setDeleteConfirm({ batch: batchName, type: 'revoke' });
+  const handleDelete = (id: string) => setDeleteConfirm({ id, type: 'delete' });
+  const handleDeleteBatch = (batchName: string) => setDeleteConfirm({ batch: batchName, type: 'delete' });
+
+  const confirmAction = async () => {
+    if (!deleteConfirm) return;
+    const { id, batch, type } = deleteConfirm;
+    
+    if (type === 'revoke') {
+      if (id) await supabase.from('discounts').update({ is_active: false }).eq('id', id);
+      if (batch) await supabase.from('discounts').update({ is_active: false }).eq('buyer_name', `Batch: ${batch}`);
+    } else if (type === 'delete') {
+      if (id) await supabase.from('discounts').delete().eq('id', id);
+      if (batch) await supabase.from('discounts').delete().eq('buyer_name', `Batch: ${batch}`);
+    }
+    
+    setDeleteConfirm(null);
     fetchData();
   };
 
@@ -286,247 +230,531 @@ export default function VouchersPage() {
     setTimeout(() => setCopied(''), 2000);
   };
 
-  const downloadImage = async () => {
-    if (!previewRef.current) return;
-    setGenerating(true);
-    try {
-      const dataUrl = await toPng(previewRef.current, { quality: 0.95, width: 1200, height: 520, cacheBust: true, style: { transform: 'scale(1)', transformOrigin: 'top left' } });
-      const link = document.createElement('a');
-      link.download = `Voucher_${previewVoucher?.code ?? 'SerenaRaga'}.png`;
-      link.href = dataUrl;
-      link.click();
-    } catch (e) { console.error(e); }
-    setGenerating(false);
-  };
+  // Grouping logic for batches
+  const batches = vouchers.reduce((acc, v) => {
+    if (v.buyer_name?.startsWith('Batch: ')) {
+      const batchName = v.buyer_name.replace('Batch: ', '');
+      if (!acc[batchName]) acc[batchName] = [];
+      acc[batchName].push(v);
+    }
+    return acc;
+  }, {} as Record<string, Voucher[]>);
 
-  const filtered = vouchers.filter(v => {
+  const individualVouchers = vouchers.filter(v => !v.buyer_name?.startsWith('Batch: '));
+
+  const filteredIndividual = individualVouchers.filter(v => {
     if (filterStatus === 'semua') return true;
     return getStatus(v) === filterStatus;
   });
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 max-w-6xl mx-auto pb-20 relative">
+      
+      {/* Custom Confirm Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-zinc-900/40"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 10 }} 
+              className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-7 rounded-[2rem] shadow-2xl max-w-sm w-full"
+            >
+              <div className="flex items-start gap-4">
+                <div className={`p-4 rounded-2xl shrink-0 ${deleteConfirm.type === 'delete' ? 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400' : 'bg-orange-50 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400'}`}>
+                  {deleteConfirm.type === 'delete' ? <Trash2 size={24} /> : <Ban size={24} />}
+                </div>
+                <div className="mt-1">
+                  <h3 className="font-bold text-zinc-900 dark:text-white text-lg tracking-wide">
+                    {deleteConfirm.type === 'delete' ? 'Hapus Permanen?' : 'Nonaktifkan?'}
+                  </h3>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2 leading-relaxed">
+                    {deleteConfirm.type === 'delete' 
+                      ? 'Tindakan ini akan menghapus data secara permanen dari database. Data tidak dapat dikembalikan.' 
+                      : 'Voucher akan dinonaktifkan dan tidak bisa digunakan lagi oleh pelanggan untuk booking.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-8">
+                <button 
+                  onClick={() => setDeleteConfirm(null)}
+                  className="flex-1 px-4 py-3 rounded-xl font-bold text-sm tracking-wide text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-[0.98] transition-all duration-200"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={confirmAction}
+                  className={`flex-1 px-4 py-3 rounded-xl font-bold text-sm tracking-wide text-white shadow-sm active:scale-[0.98] transition-all duration-200 ${deleteConfirm.type === 'delete' ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-600/20'}`}
+                >
+                  {deleteConfirm.type === 'delete' ? 'Ya, Hapus' : 'Ya, Nonaktifkan'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Header Premium */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-zinc-200 dark:border-zinc-800">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
-            <Gift size={20} className="text-earth-primary" /> Voucher & Gift Card
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-3">
+            <Gift size={28} className="text-earth-primary" /> 
+            <span>Voucher & Gift Card</span>
           </h1>
-          <p className="text-sm text-zinc-500 mt-0.5">
-            {vouchers.filter(v => getStatus(v) === 'active').length} aktif · {vouchers.length} total
+          <p className="text-sm text-zinc-500 mt-2 tracking-wide font-medium">
+            Kelola diskon, gift card, dan cetak voucher massal (bulk).
           </p>
         </div>
-        <button onClick={() => setTab(tab === 'create' ? 'list' : 'create')} className="admin-btn-primary">
-          {tab === 'create' ? <X size={16} /> : <Plus size={16} />}
-          {tab === 'create' ? 'Batal' : 'Buat Voucher'}
-        </button>
+        
+        <div className="flex items-center gap-1.5 bg-zinc-100/60 dark:bg-zinc-800/60 p-1.5 rounded-[18px] shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)] border border-zinc-200/50 dark:border-zinc-700/50 backdrop-blur-md">
+          <button 
+            onClick={() => setTab('list')} 
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-300 active:scale-[0.98] ${tab === 'list' ? 'bg-white dark:bg-zinc-900 text-earth-primary shadow-[0_2px_10px_-3px_rgba(0,0,0,0.1)] ring-1 ring-black/5 dark:ring-white/10' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-200/40 dark:hover:bg-zinc-700/40'}`}
+          >
+            Daftar Voucher
+          </button>
+          <button 
+            onClick={() => setTab('create')} 
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-300 active:scale-[0.98] ${tab === 'create' ? 'bg-white dark:bg-zinc-900 text-earth-primary shadow-[0_2px_10px_-3px_rgba(0,0,0,0.1)] ring-1 ring-black/5 dark:ring-white/10' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-200/40 dark:hover:bg-zinc-700/40'}`}
+          >
+            Satuan
+          </button>
+          <button 
+            onClick={() => setTab('bulk')} 
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-300 flex items-center gap-2 active:scale-[0.98] ${tab === 'bulk' ? 'bg-earth-primary text-white shadow-md shadow-earth-primary/20' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-200/40 dark:hover:bg-zinc-700/40'}`}
+          >
+            <Layers size={16} /> Bulk
+          </button>
+        </div>
       </div>
 
-      {/* Create Form */}
-      {tab === 'create' && (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-5">
-          <h2 className="font-semibold text-zinc-900 dark:text-white text-sm">Detail Voucher</h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block">Nama Voucher *</label>
-              <input className="admin-input" placeholder="Gift Voucher Postnatal, Promo Lebaran..." value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center justify-between">
-                Kode Unik
-                <button onClick={() => setForm(f => ({ ...f, code: genCode() }))} className="text-earth-primary hover:underline text-[10px] font-bold flex items-center gap-1"><RefreshCw size={10} /> Generate Ulang</button>
-              </label>
-              <input className="admin-input font-mono tracking-widest uppercase" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
-            </div>
-          </div>
-
-          {/* Layanan & Nilai */}
-          <div className="border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Layanan & Nilai</p>
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block">Pilih Layanan (Opsional)</label>
-              <select className="admin-input" value={form.serviceId} onChange={e => setForm(f => ({ ...f, serviceId: e.target.value }))}>
-                <option value="">— Tidak terikat layanan spesifik —</option>
-                {services.map(s => <option key={s.id} value={s.id}>{s.name} ({fmtRp(s.price)})</option>)}
-              </select>
-            </div>
-            {form.serviceId && (
-              <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
-                <input type="checkbox" className="rounded" checked={form.useServicePrice} onChange={e => setForm(f => ({ ...f, useServicePrice: e.target.checked }))} />
-                Gunakan harga layanan ({fmtRp(selectedService?.price ?? 0)}) sebagai nilai voucher
-              </label>
-            )}
-            {(!form.useServicePrice || !form.serviceId) && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 mb-1 block">Tipe Nilai</label>
-                  <select className="admin-input" value={form.valueType} onChange={e => setForm(f => ({ ...f, valueType: e.target.value as 'flat' | 'percentage' }))}>
-                    <option value="flat">Nominal (Rp)</option>
-                    <option value="percentage">Persentase (%)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 mb-1 block">{form.valueType === 'flat' ? 'Nilai (Rp)' : 'Diskon (%)'}</label>
-                  <input type="number" className="admin-input font-mono" value={form.customValue || ''} onChange={e => setForm(f => ({ ...f, customValue: Number(e.target.value) }))} />
-                </div>
-              </div>
-            )}
-            <div className="px-3 py-2 bg-earth-primary/5 border border-earth-primary/15 rounded-lg text-xs text-earth-primary font-semibold">
-              Nilai Voucher: {form.valueType === 'flat' ? fmtRp(voucherValue) : `${voucherValue}%`}
-            </div>
-          </div>
-
-          {/* Gift Details */}
-          <div className="border border-zinc-100 dark:border-zinc-800 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Detail Gift (Opsional)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-zinc-500 mb-1 block">Nama Penerima</label>
-                <input className="admin-input" placeholder="Budi Wati..." value={form.recipientName} onChange={e => setForm(f => ({ ...f, recipientName: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-zinc-500 mb-1 block">Nama Pembeli</label>
-                <input className="admin-input" placeholder="Rina Dewi..." value={form.buyerName} onChange={e => setForm(f => ({ ...f, buyerName: e.target.value }))} />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block">Harga yang Dibayar Customer (Rp)</label>
-              <input type="number" className="admin-input font-mono" value={form.amountPaid || ''} onChange={e => setForm(f => ({ ...f, amountPaid: Number(e.target.value) }))} />
-            </div>
-          </div>
-
-          {/* Validity */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block">Maks. Pemakaian</label>
-              <input type="number" min={1} className="admin-input font-mono" value={form.maxUses} onChange={e => setForm(f => ({ ...f, maxUses: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-2">
-                <input type="checkbox" checked={form.useExpiry} onChange={e => setForm(f => ({ ...f, useExpiry: e.target.checked }))} />
-                Ada Tanggal Kadaluarsa?
-              </label>
-              {form.useExpiry && <input type="date" className="admin-input" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />}
-              {!form.useExpiry && <p className="text-xs text-zinc-400 mt-2">Lifetime (tidak ada batas waktu)</p>}
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button onClick={handleCreate} disabled={saving || !form.name || voucherValue <= 0} className="admin-btn-primary disabled:opacity-50">
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Gift size={14} />} Simpan & Generate Voucher
-            </button>
-          </div>
-
-          {/* Live Preview */}
-          <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-2">Live Preview Kartu</p>
-            <div className="relative w-full rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700" style={{ aspectRatio: '1200/520' }}>
-              <div className="absolute top-0 left-0 origin-top-left" ref={(el) => { if (el) { const pw = el.parentElement?.clientWidth || 0; el.style.transform = `scale(${pw / 1200})`; } }}>
-                <VoucherCard name={form.name || 'Nama Voucher'} code={form.code} value={voucherValue} vt={form.valueType} svc={selectedService?.name} details={selectedService?.details} to={form.recipientName || undefined} from={form.buyerName || undefined} exp={form.useExpiry ? (form.expiryDate || null) : null} mx={form.maxUses} wa={waNumber} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Preview generated voucher image */}
-      {previewVoucher && (
-        <div className="bg-white dark:bg-zinc-900 border border-earth-primary/20 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Eye size={16} className="text-earth-primary" /> Preview Kartu Voucher
-            </h2>
-            <div className="flex gap-2">
-              <button onClick={() => setPreviewVoucher(null)} className="admin-btn-ghost text-xs py-1.5 px-3"><X size={14} /> Tutup</button>
-              <button onClick={downloadImage} disabled={generating} className="admin-btn-primary text-xs py-1.5 px-3 disabled:opacity-60">
-                {generating ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Download
-              </button>
-            </div>
-          </div>
-
-          {/* Voucher Card Preview */}
-          <div className="relative w-full rounded-xl overflow-hidden border border-zinc-200" style={{ aspectRatio: '1200/520' }}>
-            <div className="absolute top-0 left-0 origin-top-left" ref={(el) => { if (el) { const pw = el.parentElement?.clientWidth || 0; el.style.transform = `scale(${pw / 1200})`; } }}>
-              <div ref={previewRef}>
-                <VoucherCard name={previewVoucher!.name} code={previewVoucher!.code} value={previewVoucher!.value} vt={previewVoucher!.value_type} svc={services.find(s => s.id === previewVoucher!.target_service)?.name} details={services.find(s => s.id === previewVoucher!.target_service)?.details} to={previewVoucher!.recipient_name ?? undefined} from={previewVoucher!.buyer_name ?? undefined} exp={previewVoucher!.valid_to} mx={previewVoucher!.max_uses ?? 1} wa={waNumber} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-
-      {/* Filter & List */}
-      {tab === 'list' && (
-        <>
-          <div className="flex gap-2 flex-wrap">
-            {(['semua', 'active', 'used', 'expired'] as const).map(f => (
-              <button key={f} onClick={() => setFilterStatus(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-colors ${
-                  filterStatus === f ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200'
-                }`}>
-                {f === 'semua' ? 'Semua' : STATUS_MAP[f]?.label ?? f}
-              </button>
-            ))}
-          </div>
-
-          {loading ? <AdminSkeleton rows={4} /> : filtered.length === 0 ? (
-            <div className="text-center py-16 text-sm text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <Gift size={32} className="mx-auto mb-3 opacity-30" />
-              {vouchers.length === 0 ? 'Belum ada voucher. Klik "Buat Voucher" untuk mulai.' : 'Tidak ada voucher dengan status ini.'}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filtered.map(v => {
-                const status = getStatus(v);
-                const sc = STATUS_MAP[status];
-                return (
-                  <div key={v.id} className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-4 flex items-start gap-4 ${status !== 'active' ? 'opacity-60' : ''}`}>
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-sm text-zinc-900 dark:text-white">{v.name}</p>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sc.cls}`}>{sc.label}</span>
-                        {v.recipient_name && <span className="text-[10px] text-zinc-500">untuk <strong>{v.recipient_name}</strong></span>}
-                      </div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <code className="font-mono text-sm font-bold text-earth-primary tracking-wider">{v.code}</code>
-                        <button onClick={() => handleCopy(v.code)} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors" title="Salin kode">
-                          {copied === v.code ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} className="text-zinc-400" />}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-zinc-400 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <Tag size={11} /> {v.value_type === 'flat' ? fmtRp(v.value) : `${v.value}%`}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Users size={11} /> {v.uses_count}/{v.max_uses ?? '∞'}× pakai
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock size={11} /> {fmtDate(v.valid_to)}
-                        </span>
-                        {v.buyer_name && <span>dari {v.buyer_name}</span>}
-                        {v.amount_paid && <span className="text-emerald-600 font-medium">Dibayar: {fmtRp(v.amount_paid)}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => setPreviewVoucher(v)} className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400" title="Lihat kartu voucher">
-                        <Eye size={15} />
-                      </button>
-                      {status === 'active' && (
-                        <button onClick={() => handleRevoke(v.id)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400" title="Nonaktifkan">
-                          <Ban size={14} />
-                        </button>
-                      )}
+      <AnimatePresence mode="wait">
+        
+        {/* TAB: LIST */}
+        {tab === 'list' && (
+          <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-10">
+            
+            {loading ? <AdminSkeleton rows={6} /> : (
+              <>
+                {/* Batches Section */}
+                {Object.keys(batches).length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 tracking-wide flex items-center gap-2">
+                      <Layers size={20} className="text-earth-primary" /> Batch Bulk Voucher
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {Object.entries(batches).map(([name, batchVouchers]) => {
+                        const activeCount = batchVouchers.filter(v => getStatus(v) === 'active').length;
+                        const sample = batchVouchers[0];
+                        return (
+                          <div key={name} className="group relative bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-earth-primary/5 rounded-bl-full -z-0" />
+                            <div className="relative z-10 flex flex-col h-full">
+                              <div className="flex justify-between items-start mb-4">
+                                <h3 className="font-bold text-zinc-900 dark:text-white text-base leading-tight pr-4">{name}</h3>
+                                <span className="bg-earth-primary/10 text-earth-primary text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider whitespace-nowrap">
+                                  {batchVouchers.length} Codes
+                                </span>
+                              </div>
+                              
+                              <div className="space-y-2 mb-6">
+                                <p className="text-xs text-zinc-500 flex items-center gap-2">
+                                  <Tag size={12} className="text-zinc-400" />
+                                  <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                                    {sample.value_type === 'flat' ? fmtRp(sample.value) : `${sample.value}%`}
+                                  </span>
+                                </p>
+                                <p className="text-xs text-zinc-500 flex items-center gap-2">
+                                  <Clock size={12} className="text-zinc-400" />
+                                  {fmtDate(sample.valid_to)}
+                                </p>
+                                <p className="text-xs text-zinc-500 flex items-center gap-2">
+                                  <Check size={12} className="text-emerald-500" />
+                                  {activeCount} aktif
+                                </p>
+                              </div>
+                              
+                              <div className="mt-auto flex items-center gap-2">
+                                <button 
+                                  onClick={() => router.push(`/admin/feed-studio-v2?batch=${encodeURIComponent(name)}`)}
+                                  className="flex-1 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 py-2.5 rounded-xl text-xs font-bold tracking-wide flex items-center justify-center gap-2 hover:bg-earth-primary dark:hover:bg-earth-primary hover:text-white transition-colors"
+                                >
+                                  <Printer size={14} /> Cetak Batch
+                                </button>
+                                  <button 
+                                    onClick={() => handleRevokeBatch(name)}
+                                    className="p-2.5 bg-zinc-100 text-zinc-500 rounded-xl hover:bg-zinc-200 transition-colors"
+                                    title="Nonaktifkan Seluruh Batch"
+                                  >
+                                    <Ban size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteBatch(name)}
+                                    className="p-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
+                                    title="Hapus Permanen Seluruh Batch"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                )}
+
+                {/* Individual Section */}
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 tracking-wide flex items-center gap-2">
+                      <Gift size={20} className="text-earth-primary" /> Voucher Individual
+                    </h2>
+                    
+                    <div className="flex gap-1.5 bg-zinc-100/60 dark:bg-zinc-800/60 p-1.5 rounded-2xl border border-zinc-200/50 dark:border-zinc-700/50">
+                      {(['semua', 'active', 'used', 'expired'] as const).map(f => (
+                        <button key={f} onClick={() => setFilterStatus(f)}
+                          className={`px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all duration-300 active:scale-[0.98] ${
+                            filterStatus === f ? 'bg-white dark:bg-zinc-700 text-earth-primary shadow-[0_2px_8px_-2px_rgba(0,0,0,0.1)] ring-1 ring-black/5 dark:ring-white/10' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300 hover:bg-zinc-200/40'
+                          }`}>
+                          {f === 'semua' ? 'Semua' : STATUS_MAP[f]?.label ?? f}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {filteredIndividual.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-zinc-400 bg-white dark:bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
+                      <Gift size={32} className="mx-auto mb-3 opacity-20" />
+                      Belum ada voucher individual di kategori ini.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {filteredIndividual.map(v => {
+                        const status = getStatus(v);
+                        const sc = STATUS_MAP[status];
+                        return (
+                          <div key={v.id} className={`bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col gap-4 ${status !== 'active' ? 'opacity-50 grayscale-[50%]' : ''}`}>
+                            
+                            {/* Top row */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="font-bold text-sm text-zinc-900 dark:text-white mb-1 line-clamp-1">{v.name}</h3>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${sc.cls}`}>
+                                  {sc.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                                <code className="font-mono text-xs font-bold text-earth-primary tracking-widest">{v.code}</code>
+                                <button onClick={() => handleCopy(v.code)} className="text-zinc-400 hover:text-zinc-600 transition-colors">
+                                  {copied === v.code ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* Middle details */}
+                            <div className="grid grid-cols-2 gap-y-2 gap-x-4 mt-2">
+                              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                <Tag size={12} className="text-zinc-400" />
+                                <span className="font-mono font-medium">{v.value_type === 'flat' ? fmtRp(v.value) : `${v.value}%`}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                <Users size={12} className="text-zinc-400" />
+                                <span>{v.uses_count}/{v.max_uses ?? '∞'} dipakai</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                <Clock size={12} className="text-zinc-400" />
+                                <span>{fmtDate(v.valid_to)}</span>
+                              </div>
+                            </div>
+                            
+                            {/* Bottom row / Actions */}
+                            <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800/50 flex justify-between items-center">
+                              <div className="text-[10px] text-zinc-400">
+                                {v.recipient_name && <span>Untuk <strong>{v.recipient_name}</strong></span>}
+                                {v.recipient_name && v.buyer_name && <span> · </span>}
+                                {v.buyer_name && <span>Dari <strong>{v.buyer_name}</strong></span>}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button onClick={() => router.push(`/admin/feed-studio-v2?mode=voucher&code=${encodeURIComponent(v.code)}&value=${encodeURIComponent(v.value)}&valueType=${encodeURIComponent(v.value_type)}&name=${encodeURIComponent(v.name)}&to=${encodeURIComponent(v.recipient_name || '')}&from=${encodeURIComponent(v.buyer_name || '')}&exp=${encodeURIComponent(v.valid_to || '')}&tagline=${encodeURIComponent(v.description || '')}`)} className="p-2 rounded-lg bg-zinc-50 hover:bg-earth-primary/10 text-zinc-500 hover:text-earth-primary transition-colors" title="Desain di Studio">
+                                  <Palette size={14} />
+                                </button>
+                                {status === 'active' && (
+                                  <button onClick={() => handleRevoke(v.id)} className="p-2 rounded-lg bg-zinc-50 hover:bg-zinc-200 text-zinc-400 hover:text-zinc-600 transition-colors" title="Nonaktifkan">
+                                    <Ban size={14} />
+                                  </button>
+                                )}
+                                <button onClick={() => handleDelete(v.id)} className="p-2 rounded-lg bg-zinc-50 hover:bg-red-50 text-zinc-400 hover:text-red-500 transition-colors" title="Hapus Permanen">
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* TAB: CREATE SINGLE */}
+        {tab === 'create' && (
+          <motion.div key="create" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-3xl mx-auto">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-6">Buat Voucher Satuan</h2>
+              
+              <div className="space-y-6">
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nama Voucher / Promo</label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" placeholder="Misal: Gift Postnatal, Promo Lebaran..." value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex justify-between">
+                      Kode Unik
+                      <button onClick={() => setForm(f => ({ ...f, code: `SRAGA-${genCode(4)}` }))} className="text-earth-primary hover:underline text-[10px] flex items-center gap-1"><RefreshCw size={10} /> Generate</button>
+                    </label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono tracking-widest uppercase focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} />
+                  </div>
+                </div>
+
+                {/* Value Configuration */}
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 space-y-5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Nilai & Layanan</h3>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-600">Pilih Layanan Spesifik (Opsional)</label>
+                    <select className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none focus:border-earth-primary transition-colors" value={form.serviceId} onChange={e => setForm(f => ({ ...f, serviceId: e.target.value }))}>
+                      <option value="">— Bisa dipakai untuk layanan apapun —</option>
+                      {services.map(s => <option key={s.id} value={s.id}>{s.name} ({fmtRp(s.price)})</option>)}
+                    </select>
+                  </div>
+                  
+                  {form.serviceId && (
+                    <label className="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                      <input type="checkbox" className="w-4 h-4 rounded text-earth-primary focus:ring-earth-primary border-zinc-300" checked={form.useServicePrice} onChange={e => setForm(f => ({ ...f, useServicePrice: e.target.checked }))} />
+                      <span className="font-medium">Samakan nilai voucher dengan harga layanan ({fmtRp(selectedService?.price ?? 0)})</span>
+                    </label>
+                  )}
+                  
+                  {(!form.useServicePrice || !form.serviceId) && (
+                    <div className="grid grid-cols-2 gap-5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-zinc-600">Tipe Nilai</label>
+                        <select className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" value={form.valueType} onChange={e => setForm(f => ({ ...f, valueType: e.target.value as 'flat' | 'percentage' }))}>
+                          <option value="flat">Nominal Rupiah (Rp)</option>
+                          <option value="percentage">Persentase (%)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-zinc-600">{form.valueType === 'flat' ? 'Jumlah (Rp)' : 'Diskon (%)'}</label>
+                        <input type="number" className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:border-earth-primary" value={form.customValue || ''} onChange={e => setForm(f => ({ ...f, customValue: Number(e.target.value) }))} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Usage Limits */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Maksimal Pemakaian</label>
+                    <input type="number" min={1} className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono outline-none" value={form.maxUses} onChange={e => setForm(f => ({ ...f, maxUses: Number(e.target.value) }))} />
+                    <p className="text-[10px] text-zinc-400">Isi 1 untuk sekali pakai.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-500 mt-1 cursor-pointer">
+                      <input type="checkbox" className="rounded" checked={form.useExpiry} onChange={e => setForm(f => ({ ...f, useExpiry: e.target.checked }))} />
+                      Batas Masa Berlaku
+                    </label>
+                    {form.useExpiry ? (
+                      <input type="date" className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" value={form.expiryDate} onChange={e => setForm(f => ({ ...f, expiryDate: e.target.value }))} />
+                    ) : (
+                      <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-400 flex items-center justify-center">
+                        Berlaku Seumur Hidup
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Gift Details */}
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-4">Informasi Pembeli / Penerima (Opsional)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-600">Penerima Voucher</label>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" placeholder="Cth: Budi" value={form.recipientName} onChange={e => setForm(f => ({ ...f, recipientName: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-600">Pembeli</label>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" placeholder="Cth: Wati" value={form.buyerName} onChange={e => setForm(f => ({ ...f, buyerName: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-600">Harga Dibayar (Rp) <span className="font-normal text-zinc-400 text-[10px] ml-1">Jika beli untuk orang lain</span></label>
+                    <input type="number" className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono outline-none" value={form.amountPaid || ''} onChange={e => setForm(f => ({ ...f, amountPaid: Number(e.target.value) }))} />
+                  </div>
+                  
+                  <div className="space-y-1.5 md:col-span-2 mt-2">
+                    <label className="text-xs font-medium text-zinc-600">Tagline / Pesan Singkat (Maks. 130 karakter)</label>
+                    <textarea maxLength={130} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none resize-none" rows={2} placeholder="Cth: Apresiasi untuk tubuhmu yang sudah lelah beraktivitas hari ini. Voucher Relaksasi Rp20.000 dari SerenaRaga." value={form.tagline} onChange={e => setForm(f => ({ ...f, tagline: e.target.value }))} />
+                  </div>
+                </div>
+
+                {/* Terms Details */}
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-4">Syarat & Ketentuan (Ditampilkan di PDF)</h3>
+                  <div className="space-y-3">
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">1.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={form.terms1} onChange={e => setForm(f => ({ ...f, terms1: e.target.value }))} />
+                    </div>
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">2.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={form.terms2} onChange={e => setForm(f => ({ ...f, terms2: e.target.value }))} />
+                    </div>
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">3.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={form.terms3} onChange={e => setForm(f => ({ ...f, terms3: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="text-sm">
+                    <span className="text-zinc-500">Nilai Final: </span>
+                    <strong className="text-earth-primary font-mono text-lg">{form.valueType === 'flat' ? fmtRp(voucherValue) : `${voucherValue}%`}</strong>
+                  </div>
+                  <button onClick={handleCreate} disabled={saving || !form.name || voucherValue <= 0} className="bg-earth-primary text-white px-8 py-3.5 rounded-xl font-bold tracking-wide hover:shadow-lg hover:shadow-earth-primary/30 transition-all disabled:opacity-50 disabled:shadow-none flex items-center gap-2">
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Gift size={18} />}
+                    Simpan & Terbitkan
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-        </>
-      )}
+          </motion.div>
+        )}
+
+        {/* TAB: BULK GENERATE */}
+        {tab === 'bulk' && (
+          <motion.div key="bulk" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-3xl mx-auto">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-8 shadow-sm">
+              
+              <div className="mb-8 bg-earth-primary/5 border border-earth-primary/20 rounded-2xl p-5 flex gap-4 items-start">
+                <div className="p-3 bg-earth-primary/10 rounded-full text-earth-primary shrink-0">
+                  <Layers size={24} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-zinc-900 dark:text-earth-400 mb-1">Generate Voucher Massal (Bulk)</h2>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                    Fitur ini akan men-generate puluhan atau ratusan kode voucher unik sekaligus. Cocok untuk event marketing offline, pembagian pamflet, atau bundling. 
+                    Setiap kode yang di-generate hanya bisa dipakai sesuai batas pemakaian.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-6">
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nama Batch / Promo *</label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" placeholder="Misal: Bazar JCC Hari 1" value={bulkForm.name} onChange={e => setBulkForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Prefix Kode Voucher</label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono uppercase focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" value={bulkForm.prefix} onChange={e => setBulkForm(f => ({ ...f, prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') }))} />
+                    <p className="text-[10px] text-zinc-400 font-mono">Hasil: {bulkForm.prefix || 'SRAGA'}-XXXXXX</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Jumlah Voucher</label>
+                    <input type="number" min={1} max={500} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-lg font-bold text-earth-primary font-mono outline-none focus:border-earth-primary text-center" value={bulkForm.quantity} onChange={e => setBulkForm(f => ({ ...f, quantity: Number(e.target.value) }))} />
+                    <p className="text-[10px] text-zinc-400 text-center">Max 500 per generate</p>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Tipe Diskon</label>
+                    <select className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" value={bulkForm.valueType} onChange={e => setBulkForm(f => ({ ...f, valueType: e.target.value as 'flat' | 'percentage' }))}>
+                      <option value="flat">Nominal (Rp)</option>
+                      <option value="percentage">Persentase (%)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Besar Nilai</label>
+                    <input type="number" className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:border-earth-primary" value={bulkForm.customValue || ''} onChange={e => setBulkForm(f => ({ ...f, customValue: Number(e.target.value) }))} />
+                  </div>
+                </div>
+
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-600">Batas Pakai Per Voucher</label>
+                    <input type="number" min={1} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm font-mono outline-none" value={bulkForm.maxUses} onChange={e => setBulkForm(f => ({ ...f, maxUses: Number(e.target.value) }))} />
+                    <p className="text-[10px] text-zinc-400">Umumnya 1x pakai untuk event.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-medium text-zinc-600 cursor-pointer">
+                      <input type="checkbox" className="rounded" checked={bulkForm.useExpiry} onChange={e => setBulkForm(f => ({ ...f, useExpiry: e.target.checked }))} />
+                      Tentukan Tanggal Kedaluwarsa
+                    </label>
+                    {bulkForm.useExpiry ? (
+                      <input type="date" className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none" value={bulkForm.expiryDate} onChange={e => setBulkForm(f => ({ ...f, expiryDate: e.target.value }))} />
+                    ) : (
+                      <div className="w-full bg-white/50 dark:bg-zinc-800/30 border border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-400 flex items-center justify-center">
+                        Tidak ada kadaluwarsa
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-1.5 md:col-span-2 mt-2">
+                    <label className="text-xs font-medium text-zinc-600">Tagline / Pesan Singkat (Maks. 130 karakter)</label>
+                    <textarea maxLength={130} className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm outline-none resize-none" rows={2} placeholder="Cth: Apresiasi untuk tubuhmu yang sudah lelah beraktivitas hari ini. Voucher Relaksasi Rp20.000 dari SerenaRaga." value={bulkForm.tagline} onChange={e => setBulkForm(f => ({ ...f, tagline: e.target.value }))} />
+                  </div>
+                </div>
+
+                {/* Terms Details */}
+                <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-4">Syarat & Ketentuan (Ditampilkan di PDF)</h3>
+                  <div className="space-y-3">
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">1.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={bulkForm.terms1} onChange={e => setBulkForm(f => ({ ...f, terms1: e.target.value }))} />
+                    </div>
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">2.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={bulkForm.terms2} onChange={e => setBulkForm(f => ({ ...f, terms2: e.target.value }))} />
+                    </div>
+                    <div className="flex gap-3 items-center">
+                      <span className="text-zinc-400 text-xs font-mono shrink-0">3.</span>
+                      <input className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2 text-xs outline-none" value={bulkForm.terms3} onChange={e => setBulkForm(f => ({ ...f, terms3: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
+                  <button onClick={handleCreateBulk} disabled={saving || !bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0} className="w-full md:w-auto bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-10 py-4 rounded-xl font-bold tracking-wide hover:shadow-xl transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-3">
+                    {saving ? <Loader2 size={18} className="animate-spin" /> : <Layers size={18} />}
+                    Generate {bulkForm.quantity} Voucher
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+      </AnimatePresence>
     </div>
   );
 }

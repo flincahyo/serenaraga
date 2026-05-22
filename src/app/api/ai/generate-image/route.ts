@@ -9,7 +9,7 @@ export async function POST(req: Request) {
     }
 
     // Force a consistent, comfortable, private home spa aesthetic without people or text
-    const enhancedPrompt = `A high-quality, professional photography background image for a home massage and wellness social media post. Visual style: minimalist, calming, comfortable, warm earthy tones, clean aesthetic, interior design, spa items. Scene: ${prompt}. ABSOLUTELY NO TEXT, NO LETTERS, NO WORDS in the image. ABSOLUTELY NO PEOPLE, NO MODELS, NO HUMANS in the image. Cinematic soft natural lighting.`;
+    const enhancedPrompt = `STILL LIFE, EMPTY ROOM, NO PEOPLE, NO HUMANS, NO MODELS, NO BODY PARTS. ABSOLUTELY NO TEXT, NO LETTERS, NO WORDS, NO FONTS. A high-quality, professional photography background image for a home massage and wellness social media post. Visual style: minimalist, calming, comfortable, warm earthy tones, clean aesthetic, interior design, spa items. Scene: ${prompt}. Cinematic soft natural lighting.`;
 
     const encodedPrompt = encodeURIComponent(enhancedPrompt);
     const seed = Math.floor(Math.random() * 100000000);

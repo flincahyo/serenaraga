@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Save, Loader2, Check, Clock, MapPin, Phone, MessageSquare, FileText, Percent, Info, RefreshCcw } from 'lucide-react';
+import { Save, Loader2, Check, Clock, MapPin, Phone, MessageSquare, FileText, Percent, Info, RefreshCcw, Upload, Image as ImageIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
@@ -50,6 +50,33 @@ export default function SettingsPage() {
     setSaving(null);
     setSaved(sectionId);
     setTimeout(() => setSaved(null), 2500);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setSaving(key);
+    try {
+      const fileName = `${key}_${Date.now()}.${file.name.split('.').pop()}`;
+      const { error } = await supabase.storage
+        .from('media')
+        .upload(fileName, file, { contentType: file.type });
+        
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+      set(key, publicUrl);
+      
+      // Auto save
+      await supabase.from('settings').upsert({ key, value: publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      setSaved(key);
+      setTimeout(() => setSaved(null), 2500);
+    } catch (err: any) {
+      alert("Gagal upload: " + err.message);
+    } finally {
+      setSaving(null);
+    }
   };
 
   const commission = Number(settings['terapis_commission_pct'] ?? 30);

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown, Gift
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown, ChevronLeft, ChevronRight, Gift, Video
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -34,7 +34,8 @@ const OWNER_NAV_GROUPS = [
   {
     label: 'Marketing & Publikasi',
     items: [
-      { name: 'Feed Studio',    icon: ImagePlay,       href: '/admin/feed-studio' },
+      { name: 'Feed Studio',    icon: ImagePlay,       href: '/admin/feed-studio-v2' },
+      { name: 'Reels Studio',   icon: Video,           href: '/admin/reels-studio' },
       { name: 'Surat Resmi',    icon: FileText,        href: '/admin/letters' },
       { name: 'Share Jadwal',   icon: Share2,          href: '/admin/schedule' },
       { name: 'Diskon & Promo', icon: Tag,             href: '/admin/discounts' },
@@ -69,9 +70,14 @@ const CASHIER_NAV_GROUPS = [
   }
 ];
 
-interface SidebarProps { open: boolean; onClose: () => void; }
+interface SidebarProps { 
+  open: boolean; 
+  onClose: () => void; 
+  isCollapsed?: boolean; 
+  onToggleCollapse?: () => void; 
+}
 
-const Sidebar = ({ open, onClose }: SidebarProps) => {
+const Sidebar = ({ open, onClose, isCollapsed, onToggleCollapse }: SidebarProps) => {
   const pathname = usePathname();
   const { user, logout } = useUser();
 
@@ -103,15 +109,16 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
 
       <aside className={`
         fixed left-0 top-0 h-full z-40 flex flex-col
-        w-64 bg-white dark:bg-zinc-950
+        bg-white dark:bg-zinc-950
         border-r border-zinc-100 dark:border-zinc-800
-        transition-transform duration-300 ease-in-out
+        transition-all duration-300 ease-in-out
         ${open ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0
+        ${isCollapsed ? 'w-20' : 'w-64'}
       `}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-100 dark:border-zinc-800">
-          <Link href="/admin/dashboard" className="flex flex-col leading-tight gap-1" onClick={onClose}>
+        <div className={`flex items-center justify-between py-5 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-300 ${isCollapsed ? 'px-0 justify-center' : 'px-6'}`}>
+          <Link href="/admin/dashboard" className={`flex flex-col leading-tight gap-1 overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100'}`} onClick={onClose}>
             <div className="relative flex items-center justify-start h-[32px] w-[140px] overflow-hidden -ml-2">
               <img 
                 src="/serenalogo2.svg" 
@@ -123,28 +130,40 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
               {user?.role === 'cashier' ? 'Kasir Panel' : 'Owner Panel'}
             </span>
           </Link>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center">
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                className="hidden lg:flex p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 active:scale-95 transition-all"
+              >
+                {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="lg:hidden p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar">
+        <nav className="flex-1 px-4 py-6 overflow-y-auto minimal-scrollbar">
           {navGroups.map((group, idx) => {
             const isExpanded = !!expandedGroups[group.label];
             return (
               <div key={idx} className="mb-6 last:mb-0">
                 <button 
-                  onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-2 mb-2 group/header cursor-pointer select-none"
+                  onClick={() => !isCollapsed && toggleGroup(group.label)}
+                  className={`w-full flex items-center justify-between mb-2 group/header select-none ${isCollapsed ? 'px-0 justify-center cursor-default' : 'px-2 cursor-pointer'}`}
                 >
-                  <h3 className="text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300 transition-colors">
+                  <h3 className={`text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 overflow-hidden hidden' : 'w-auto opacity-100 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-300'}`}>
                     {group.label}
                   </h3>
-                  <ChevronDown size={14} className={`text-zinc-400 dark:text-zinc-500 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                  {!isCollapsed && (
+                    <ChevronDown size={14} className={`text-zinc-400 dark:text-zinc-500 group-hover/header:text-zinc-600 dark:group-hover/header:text-zinc-400 transition-transform duration-200 ${isExpanded ? '' : '-rotate-90'}`} />
+                  )}
                 </button>
                 
                 <div 
@@ -152,22 +171,26 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
                 >
                   <div className="overflow-hidden space-y-0.5">
                     {group.items.map(({ name, icon: Icon, href }) => {
-                      const active = pathname === href;
+                      const active = pathname === href || pathname.startsWith(href + '/');
                       return (
                         <Link
                           key={href}
                           href={href}
                           onClick={onClose}
+                          title={isCollapsed ? name : undefined}
                           className={`
-                            flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all
+                            flex items-center gap-3 py-2.5 rounded-xl text-sm font-medium transition-all relative overflow-hidden
+                            ${isCollapsed ? 'px-0 justify-center mb-1' : 'px-3'}
                             ${active
                               ? 'bg-earth-primary shadow-sm text-white'
                               : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white'
                             }
                           `}
                         >
-                          <Icon size={18} className={active ? "opacity-100" : "opacity-75"} />
-                          {name}
+                          <Icon size={isCollapsed ? 20 : 18} className={`shrink-0 transition-all duration-300 ${active ? "opacity-100" : "opacity-75"}`} />
+                          <span className={`whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
+                            {name}
+                          </span>
                         </Link>
                       );
                     })}
@@ -179,36 +202,39 @@ const Sidebar = ({ open, onClose }: SidebarProps) => {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/10">
+        <div className={`border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/10 transition-all duration-300 ${isCollapsed ? 'p-2' : 'p-4'}`}>
           {/* User Profile Card */}
-          <div className="flex items-center gap-3 px-3 py-2 mb-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm">
-            <div className="w-9 h-9 rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0">
-              <span className="text-sm font-bold text-earth-primary">
+          <div className={`flex items-center mb-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm transition-all duration-300 overflow-hidden ${isCollapsed ? 'p-2 justify-center gap-0' : 'p-2 gap-3'}`}>
+            <div className={`rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0 transition-all duration-300 ${isCollapsed ? 'w-10 h-10' : 'w-9 h-9'}`}>
+              <span className={`font-bold text-earth-primary ${isCollapsed ? 'text-lg' : 'text-sm'}`}>
                 {user?.displayName?.charAt(0)?.toUpperCase() ?? 'A'}
               </span>
             </div>
-            <div className="leading-tight min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <p className="text-[13px] font-bold text-zinc-900 dark:text-white truncate">{user?.displayName ?? 'Admin'}</p>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${roleColor}`}>
-                  {roleBadge}
-                </span>
+            {!isCollapsed && (
+              <div className="leading-tight min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[13px] font-bold text-zinc-900 dark:text-white truncate">{user?.displayName ?? 'Admin'}</p>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md shrink-0 uppercase tracking-wider ${roleColor}`}>
+                    {roleBadge}
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-500 truncate mt-0.5">{user?.email ?? user?.username ?? ''}</p>
               </div>
-              <p className="text-[11px] text-zinc-500 truncate mt-0.5">{user?.email ?? user?.username ?? ''}</p>
-            </div>
+            )}
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shrink-0">
+          <div className={`flex items-center gap-2 transition-all duration-300 ${isCollapsed ? 'flex-col' : ''}`}>
+            <div className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shrink-0 flex items-center justify-center transition-all ${isCollapsed ? 'w-full py-2' : ''}`}>
               <ThemeToggle />
             </div>
             <button
               onClick={logout}
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-transparent dark:border-red-900/30 transition-all"
+              className={`flex items-center justify-center gap-2 rounded-xl text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-950/40 dark:hover:bg-red-900/60 border border-transparent dark:border-red-900/30 transition-all ${isCollapsed ? 'p-3 w-full' : 'flex-1 px-3 py-2.5'}`}
+              title="Logout"
             >
-              <LogOut size={15} />
-              Logout Session
+              <LogOut size={isCollapsed ? 18 : 15} />
+              {!isCollapsed && "Logout Session"}
             </button>
           </div>
         </div>

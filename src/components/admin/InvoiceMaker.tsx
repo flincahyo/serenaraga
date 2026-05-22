@@ -636,7 +636,7 @@ const InvoiceMaker = () => {
       await supabase.from('booking_discounts').insert(
         appliedDiscounts.map(a => ({
           booking_id: selectedBookingId,
-          discount_id: a.discountId.startsWith('custom_') ? null : a.discountId,
+          discount_id: a.discountId.startsWith('custom_') ? null : (a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId),
           discount_label: a.label,
           discount_value_type: a.value_type,
           discount_value: a.value,
@@ -647,10 +647,11 @@ const InvoiceMaker = () => {
       // Audit #2 Bug #4: re-fetch from DB before increment to avoid stale read race condition
       for (const a of appliedDiscounts) {
         if (a.discountId.startsWith('custom_')) continue;
-        const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', a.discountId).single();
+        const realId = a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId;
+        const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', realId).single();
         await supabase.from('discounts')
           .update({ uses_count: (fresh?.uses_count ?? 0) + 1 })
-          .eq('id', a.discountId);
+          .eq('id', realId);
       }
     }
 

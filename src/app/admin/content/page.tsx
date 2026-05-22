@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Check, X, ImageIcon, Loader2, Image as ImageIcon2, MessageSquare } from 'lucide-react';
+import { createClient } from '@/lib/supabase';
 import TestimonialEditor from '@/components/admin/TestimonialEditor';
 
 interface ImageSlot {
@@ -19,12 +20,30 @@ const defaultSlots: ImageSlot[] = [
   { id: 'signature', label: 'Signature Massage', description: 'Best seller card #1', preview: '/featured-refine.png', file: null, saving: false, saved: false },
   { id: 'traditional', label: 'Traditional Javanese', description: 'Best seller card #2', preview: '/featured-renewal.png', file: null, saving: false, saved: false },
   { id: 'reflexology', label: 'Foot Reflexology', description: 'Best seller card #3', preview: '/featured-lactaflow.png', file: null, saving: false, saved: false },
+  { id: 'career_poster_image', label: 'Karir Poster', description: 'Poster open recruitment', preview: null, file: null, saving: false, saved: false },
 ];
 
 export default function ContentPage() {
   const [activeTab, setActiveTab] = useState<'gambar' | 'testimoni'>('gambar');
   const [slots, setSlots] = useState<ImageSlot[]>(defaultSlots);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const supabase = createClient();
+      const { data } = await supabase.from('settings').select('key, value');
+      if (data) {
+        setSlots(prev => prev.map(s => {
+          const found = data.find(d => d.key === s.id);
+          if (found && found.value) {
+            return { ...s, preview: found.value };
+          }
+          return s;
+        }));
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const handleFile = (id: string, file: File) => {
     const url = URL.createObjectURL(file);
@@ -39,9 +58,27 @@ export default function ContentPage() {
 
   const handleUpload = async (id: string) => {
     setSlots(prev => prev.map(s => s.id === id ? { ...s, saving: true } : s));
-    // Simulate upload — replace with Supabase Storage upload when connected
-    await new Promise(r => setTimeout(r, 1200));
-    setSlots(prev => prev.map(s => s.id === id ? { ...s, saving: false, saved: true, file: null } : s));
+    const slot = slots.find(s => s.id === id);
+    if (!slot || !slot.file) return;
+
+    try {
+      const supabase = createClient();
+      const fileName = `${id}_${Date.now()}.${slot.file.name.split('.').pop()}`;
+      const { error } = await supabase.storage.from('media').upload(fileName, slot.file, { contentType: slot.file.type });
+      if (error) throw error;
+      
+      const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+      
+      await supabase.from('settings').upsert({ key: id, value: publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+      
+      setSlots(prev => prev.map(s => s.id === id ? { ...s, saving: false, saved: true, file: null, preview: publicUrl } : s));
+      setTimeout(() => {
+        setSlots(prev => prev.map(s => s.id === id ? { ...s, saved: false } : s));
+      }, 2500);
+    } catch(err: any) {
+      alert("Gagal upload: " + err.message);
+      setSlots(prev => prev.map(s => s.id === id ? { ...s, saving: false } : s));
+    }
   };
 
   const handleDiscard = (id: string, originalPreview: string | null) => {
@@ -82,7 +119,7 @@ export default function ContentPage() {
       <div className="flex items-start gap-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
         <ImageIcon size={16} className="text-blue-500 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-700 dark:text-blue-400">
-          Setelah Supabase Storage terhubung, gambar yang diunggah akan langsung live di website SerenaRaga tanpa perlu deploy ulang.
+          Gambar yang diunggah akan otomatis menggantikan gambar bawaan sistem (live update).
         </p>
       </div>
 

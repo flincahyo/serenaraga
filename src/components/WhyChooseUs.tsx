@@ -27,7 +27,7 @@ const WhyChooseUs = () => {
     },
     {
       title: "Harga Transparan",
-      description: "Tidak ada biaya tersembunyi. Semua harga sudah termasuk biaya transport.",
+      description: "Tidak ada biaya tersembunyi.",
       icon: <Wallet className="w-5 h-5 md:w-7 md:h-7" strokeWidth={1.2} />
     },
     {

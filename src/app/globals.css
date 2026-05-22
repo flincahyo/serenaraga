@@ -64,6 +64,29 @@ body {
     margin-inline: auto;
     padding: 0 1.5rem;
   }
+  
+  .hidden-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hidden-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .minimal-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .minimal-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .minimal-scrollbar::-webkit-scrollbar-thumb {
+    background: #d6d3d1; /* stone-300 */
+    border-radius: 10px;
+  }
+  .minimal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a8a29e; /* stone-400 */
+  }
 }
 
 /* Admin Panel — must be in @layer components so Tailwind utilities (pl-*, pr-*) can always override */

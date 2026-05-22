@@ -9,6 +9,7 @@ import { UserProvider } from '@/lib/user-context';
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
   // Login page — no sidebar
   if (pathname === '/admin') {
@@ -18,11 +19,16 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 print:bg-white">
       <div className="print:hidden">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar 
+          open={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)} 
+          isCollapsed={desktopCollapsed}
+          onToggleCollapse={() => setDesktopCollapsed(!desktopCollapsed)}
+        />
       </div>
 
       {/* Main Content */}
-      <div className="lg:pl-64 print:pl-0 flex flex-col min-h-screen print:min-h-0">
+      <div className={`transition-all duration-300 ease-in-out ${desktopCollapsed ? 'lg:pl-20' : 'lg:pl-64'} print:pl-0 flex flex-col min-h-screen print:min-h-0`}>
         {/* Top Bar (mobile only) */}
         <header className="sticky top-0 z-20 lg:hidden print:hidden flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-950 border-b border-zinc-100 dark:border-zinc-800">
           <button

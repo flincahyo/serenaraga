@@ -1,10 +1,37 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Share2, Image as ImageIcon, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste, Calendar, Pencil, Check, ChevronDown, ChevronUp, CheckCircle2, Ban } from 'lucide-react';
+import { Share2, Image as ImageIcon, Download, MessageCircle, RefreshCw, Eye, EyeOff, ClipboardPaste, Calendar, Pencil, Check, ChevronDown, ChevronUp, CheckCircle2, Ban, Globe, Palette, Loader2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
+
+function CanvasLogo({ invert = true, scale = 1 }: { invert?: boolean; scale?: number }) {
+  const h  = Math.round(90  * scale);
+  const iH = Math.round(420 * scale);
+  const ml = Math.round(-40 * scale);
+  return (
+    <div className="flex items-center justify-center w-full">
+      <div className="relative overflow-hidden flex items-center justify-center" style={{ width: Math.round(500 * scale), height: h }}>
+        <img src="/serenalogo2.svg" alt="SerenaRaga" className={`absolute w-auto max-w-none ${invert ? 'brightness-0 invert' : 'mix-blend-multiply'}`} style={{ height: iH, marginLeft: ml, marginTop: -4 }} crossOrigin="anonymous" />
+      </div>
+    </div>
+  );
+}
+
+const WAIco = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+  </svg>
+);
+
+const InstagramIco = ({ size = 20 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+  </svg>
+);
 
 type DaySchedule = {
   id: string;
@@ -84,6 +111,14 @@ export default function SchedulePage() {
   const [waNumber, setWaNumber] = useState('');
   const [socialText, setSocialText] = useState('serena.raga');
 
+  const [bgImageUrl, setBgImageUrl] = useState('/hero-bg.png');
+  const [bgPrompt, setBgPrompt] = useState('Aesthetic minimalist spa room with warm relaxing lighting');
+  const [isGeneratingBg, setIsGeneratingBg] = useState(false);
+
+  const [vignetteColor, setVignetteColor] = useState<'black'|'white'|'none'>('black');
+  const [vignetteIntensity, setVignetteIntensity] = useState(60);
+  const [darkenIntensity, setDarkenIntensity] = useState(40);
+
   const previewRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
 
@@ -113,6 +148,12 @@ export default function SchedulePage() {
           cleanSoc = cleanSoc.replace(/\s*\/?\s*www\.serenaraga\.fit/i, '');
           setSocialText(cleanSoc);
         }
+
+        const bgImgOpt = settingsData.find(r => r.key === 'schedule_bg_image');
+        if (bgImgOpt?.value) setBgImageUrl(bgImgOpt.value);
+        
+        const bgPrmptOpt = settingsData.find(r => r.key === 'schedule_bg_prompt');
+        if (bgPrmptOpt?.value) setBgPrompt(bgPrmptOpt.value);
       }
       setDefaultTimeText(timeText);
       
@@ -454,6 +495,34 @@ export default function SchedulePage() {
     }
   };
 
+  const generateBackground = async () => {
+    setIsGeneratingBg(true);
+    try {
+      const res = await fetch('/api/ai/grok-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visualSubject: bgPrompt,
+          seasonalNuance: 'elegant warm minimalist spa mood',
+        })
+      });
+      if (!res.ok) throw new Error('Failed to generate background via Grok');
+      const data = await res.json();
+      if (data.url) {
+        setBgImageUrl(data.url);
+        await supabase.from('settings').upsert([
+          { key: 'schedule_bg_image', value: data.url },
+          { key: 'schedule_bg_prompt', value: bgPrompt }
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Gagal generate background. Coba lagi.');
+    } finally {
+      setIsGeneratingBg(false);
+    }
+  };
+
   if (loading) return <AdminSkeleton rows={5} />;
 
   const visibleSchedules = schedules.filter(d => d.visible);
@@ -461,63 +530,78 @@ export default function SchedulePage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
-          <Share2 className="text-earth-primary" /> Share Jadwal
-        </h1>
-        <p className="text-sm text-zinc-500 mt-1">Atur ketersediaan jadwal dan hasilkan gambar untuk IG/WA Story.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">Share Jadwal</h1>
+          <p className="text-sm text-zinc-500 mt-1">Atur ketersediaan dan hasilkan gambar untuk Story IG / WA.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => generateImage('download')}
+            disabled={generating}
+            className="flex items-center gap-2 bg-earth-primary text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-earth-primary/90 disabled:opacity-50 transition-all shadow-sm"
+          >
+            <Download size={15} /> Unduh PNG
+          </button>
+          <button
+            onClick={() => generateImage('share')}
+            disabled={generating}
+            className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50 transition-all"
+          >
+            <MessageCircle size={15} /> Share WA/IG
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
         {/* LEFT PANEL: Editor */}
-        <div className="lg:col-span-3 space-y-5">
+        <div className="lg:col-span-3 space-y-4">
           {/* Smart Paste Block */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
             <button 
               onClick={() => setIsSmartPasteOpen(!isSmartPasteOpen)}
-              className="w-full flex justify-between items-center p-4 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+              className="w-full flex justify-between items-center px-5 py-3.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
             >
-              <h2 className="text-sm font-semibold dark:text-white flex items-center gap-2">
-                <ClipboardPaste size={16} className="text-earth-primary" /> Smart Paste
-              </h2>
-              <div className="flex items-center gap-2">
-                {isSmartPasteOpen ? <ChevronUp size={16} className="text-zinc-400" /> : <ChevronDown size={16} className="text-zinc-400" />}
-              </div>
+              <span className="text-sm font-semibold text-zinc-800 dark:text-white flex items-center gap-2">
+                <ClipboardPaste size={15} className="text-earth-primary" /> Smart Paste
+              </span>
+              <ChevronDown size={15} className={`text-zinc-400 transition-transform duration-200 ${isSmartPasteOpen ? 'rotate-180' : ''}`} />
             </button>
             
             {isSmartPasteOpen && (
-              <div className="px-4 pb-4 bg-zinc-50/50 dark:bg-zinc-900/30 border-t border-zinc-100 dark:border-zinc-800 pt-3">
-                <div className="flex justify-between items-end mb-3">
-                  <p className="text-[10px] text-zinc-400">
-                    Paste teks jadwal mentah dari WhatsApp atau Instagram. Sistem otomatis menyortir hari, jam, dan status FULL.
-                  </p>
-                  <button onClick={handleSmartPaste} disabled={!pasteText.trim()} className="admin-btn-primary text-xs py-1.5 px-3 disabled:opacity-50 shrink-0">
-                    Auto Format
-                  </button>
-                </div>
+              <div className="px-5 pb-5 border-t border-zinc-100 dark:border-zinc-800 pt-4 space-y-3">
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Paste teks jadwal mentah dari WhatsApp atau Instagram. Sistem otomatis menyortir hari, jam, dan status FULL.
+                </p>
                 <textarea
-                  className="admin-input h-28 text-xs font-mono resize-none w-full bg-white dark:bg-zinc-800/50 block"
-                  placeholder={`Contoh Paste:\nRabu, 15 April FULL\nKamis, 16 April 08.00\nJumat, 17 April 16.00-22.00`}
+                  className="admin-input h-28 text-xs font-mono resize-none w-full bg-zinc-50 dark:bg-zinc-800/50 block"
+                  placeholder={`Contoh:\nRabu, 15 April FULL\nKamis, 16 April 08.00\nJumat, 17 April 16.00-22.00`}
                   value={pasteText}
                   onChange={e => setPasteText(e.target.value)}
-                ></textarea>
+                />
+                <div className="flex justify-end">
+                  <button onClick={handleSmartPaste} disabled={!pasteText.trim()} className="flex items-center gap-1.5 bg-earth-primary text-white text-xs font-semibold px-4 py-2 rounded-lg disabled:opacity-40 transition-all hover:bg-earth-primary/90">
+                    <CheckCircle2 size={13} /> Auto Format
+                  </button>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col md:flex-row gap-3 md:items-center justify-between">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex flex-col md:flex-row gap-3 md:items-center justify-between">
               
               {/* Range Date Picker */}
-              <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg p-1.5 shadow-sm">
+              <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2">
+                <Calendar size={14} className="text-zinc-400 shrink-0" />
                 <input 
                   type="date" 
                   value={startDate} 
                   onChange={e => handleDateRangeChange(e.target.value, endDate)} 
                   className="text-xs font-medium bg-transparent border-none focus:ring-0 text-zinc-700 dark:text-zinc-300 w-[110px]" 
                 />
-                <span className="text-zinc-400 text-xs font-semibold px-1">-</span>
+                <span className="text-zinc-300 dark:text-zinc-600">–</span>
                 <input 
                   type="date" 
                   value={endDate} 
@@ -526,31 +610,31 @@ export default function SchedulePage() {
                 />
               </div>
 
-              {/* Quick Actions */}
-              <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1 md:pb-0">
+              {/* Quick Actions — all same visual weight */}
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                 <button 
                   onClick={autoGenerateFromTherapists} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-400 border border-purple-200/50 dark:border-purple-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-earth-primary/10 text-earth-primary hover:bg-earth-primary/20 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
                 >
-                  <RefreshCw size={14} /> Auto-Sync Data Terapis
+                  <RefreshCw size={13} /> Auto-Sync
                 </button>
                 <button 
                   onClick={() => setAllActive(true)} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
                 >
-                  <CheckCircle2 size={14} /> Semua Buka
+                  <CheckCircle2 size={13} /> Semua Buka
                 </button>
                 <button 
                   onClick={() => setAllActive(false)} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 border border-red-200/50 dark:border-red-800/50 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
                 >
-                  <Ban size={14} /> Semua FULL
+                  <Ban size={13} /> Semua FULL
                 </button>
                 <button 
                   onClick={resetAllHours} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 rounded-md text-xs font-medium transition-colors whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap"
                 >
-                  <RefreshCw size={14} /> Reset Jam
+                  <RefreshCw size={13} /> Reset Jam
                 </button>
               </div>
             </div>
@@ -574,7 +658,7 @@ export default function SchedulePage() {
               {/* Week 2 */}
               {weekMode === 2 && (
                 <>
-                  <div className="px-4 py-2 bg-earth-primary/5 border-b border-earth-primary/10">
+                  <div className="px-5 py-2.5 bg-earth-primary/5 border-y border-earth-primary/10">
                     <p className="text-[11px] font-bold text-earth-primary uppercase tracking-widest">Minggu 2</p>
                   </div>
                   {schedules.slice(7, 14).map(day => (
@@ -590,12 +674,61 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 space-y-3">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-3">
             <div className="flex justify-between items-center">
-              <h2 className="text-sm font-semibold dark:text-white">Custom Note / Promo</h2>
+              <h2 className="text-sm font-semibold text-zinc-800 dark:text-white flex items-center gap-2">
+                <ImageIcon size={15} className="text-earth-primary" /> Visual Background (Grok AI)
+              </h2>
+            </div>
+            <textarea
+              className="admin-input resize-none h-16 text-sm"
+              value={bgPrompt}
+              onChange={(e) => setBgPrompt(e.target.value)}
+              placeholder="Deskripsikan background aesthetic..."
+            />
+            <div className="flex justify-end">
+              <button
+                onClick={generateBackground}
+                disabled={isGeneratingBg || !bgPrompt.trim()}
+                className="flex items-center gap-2 bg-earth-primary text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-earth-primary/90 disabled:opacity-50 transition-all"
+              >
+                {isGeneratingBg ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} 
+                {isGeneratingBg ? 'Generating via Grok...' : 'Regenerate Background'}
+              </button>
+            </div>
+
+            {/* DESIGN TOOLS - Vignette & Darken */}
+            <div className="pt-4 mt-4 border-t border-zinc-100 dark:border-zinc-800">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-400 mb-3 flex items-center gap-2">
+                <Palette size={13} /> Tone Adjustments
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-500">Darken Overlay</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300">{darkenIntensity}%</span>
+                  </div>
+                  <input type="range" min="0" max="100" value={darkenIntensity} onChange={(e) => setDarkenIntensity(Number(e.target.value))} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-earth-primary" />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-zinc-500">Vignette Blur</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300">{vignetteIntensity}%</span>
+                  </div>
+                  <input type="range" min="0" max="100" value={vignetteIntensity} onChange={(e) => setVignetteIntensity(Number(e.target.value))} className="w-full h-1.5 bg-zinc-200 rounded-lg appearance-none cursor-pointer accent-earth-primary" disabled={vignetteColor === 'none'} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 space-y-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-sm font-semibold text-zinc-800 dark:text-white">Catatan / Promo</h2>
               {promos.length > 0 && (
                 <select
-                  className="admin-input py-1 text-xs w-48 bg-zinc-50 font-medium text-earth-primary"
+                  className="admin-input py-1 text-xs w-44 bg-zinc-50 dark:bg-zinc-800 font-medium text-earth-primary"
                   onChange={e => {
                     const p = promos.find((x: any) => x.id === e.target.value);
                     if (p) {
@@ -613,28 +746,11 @@ export default function SchedulePage() {
               )}
             </div>
             <textarea
-              className="admin-input resize-none h-24"
+              className="admin-input resize-none h-24 text-sm"
               value={promoNote}
               onChange={(e) => setPromoNote(e.target.value)}
-              placeholder="Kosongkan jika tidak ada notes."
+              placeholder="Kosongkan jika tidak ada catatan."
             />
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => generateImage('download')}
-              disabled={generating}
-              className="flex-1 admin-btn-primary justify-center py-2.5"
-            >
-              <Download size={16} /> Unduh PNG
-            </button>
-            <button
-              onClick={() => generateImage('share')}
-              disabled={generating}
-              className="flex-1 admin-btn-ghost bg-zinc-100 dark:bg-zinc-800 justify-center py-2.5"
-            >
-              <MessageCircle size={16} /> Share WA/IG
-            </button>
           </div>
         </div>
 
@@ -642,12 +758,13 @@ export default function SchedulePage() {
         <div className="lg:col-span-2">
           <div className="sticky top-6">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide flex items-center gap-2">
-                Live Preview (9:16)
-                {generating && <span className="text-earth-primary font-normal flex items-center gap-1 animate-pulse"><ImageIcon size={12} /> Rendering...</span>}
+              <p className="text-xs font-semibold text-zinc-500 flex items-center gap-1.5">
+                <Eye size={13} />
+                Live Preview
+                {generating && <span className="text-earth-primary font-normal flex items-center gap-1 animate-pulse ml-1"><ImageIcon size={12} /> Rendering...</span>}
               </p>
               <p className="text-[10px] text-zinc-400 flex items-center gap-1">
-                <Pencil size={10} /> Klik tanggal / jam untuk edit
+                <Pencil size={10} /> Klik untuk edit
               </p>
             </div>
 
@@ -665,149 +782,141 @@ export default function SchedulePage() {
                   }
                 }}
               >
-                {/* 1080x1920 Canvas Content */}
+                {/* 1080x1920 Canvas Content (Poster Mode) */}
                 <div
                   ref={previewRef}
-                  className="w-[1080px] h-[1920px] bg-[#FAF8F5] relative flex flex-col p-12 overflow-hidden"
-                  style={{
-                    backgroundImage: 'linear-gradient(145deg, #FAF8F5 0%, #EFEBE1 100%)'
-                  }}
+                  className="w-[1080px] h-[1920px] bg-[#1a1a1a] relative flex flex-col p-[80px] justify-between overflow-hidden font-sans"
                 >
-                  {/* Subtle decorative circles */}
-                  <div className="absolute -top-[200px] -right-[200px] w-[800px] h-[800px] rounded-full bg-[#D2B48C]/30 blur-[150px] pointer-events-none" />
-                  <div className="absolute -bottom-[300px] -left-[200px] w-[900px] h-[900px] rounded-full bg-[#E8D1A7]/40 blur-[150px] pointer-events-none" />
+                  {/* Background Image & Overlay */}
+                  <div className="absolute inset-0 z-0">
+                    <img src={bgImageUrl} alt="Background" className="w-full h-full object-cover" crossOrigin="anonymous" />
+                    {vignetteColor !== 'none' && (
+                      <div 
+                        className={`absolute inset-0 bg-gradient-to-t ${vignetteColor === 'black' ? 'from-black via-black/50' : 'from-white via-white/50'} to-transparent`}
+                        style={{ opacity: vignetteIntensity / 100 }}
+                      />
+                    )}
+                    {darkenIntensity > 0 && (
+                      <div className="absolute inset-0 bg-black" style={{ opacity: darkenIntensity / 100 }} />
+                    )}
+                  </div>
 
                   {/* Header */}
-                  <div className="relative z-10 flex flex-col items-center justify-center mt-6 mb-4 h-[180px]">
-                    <img
-                      src="/serenalogo.svg"
-                      alt="SerenaRaga"
-                      className="absolute h-[700px] w-auto object-contain max-w-none"
-                      crossOrigin="anonymous"
-                    />
+                  <div className="relative z-10 w-full flex justify-center items-center mb-6 mt-0">
+                    <CanvasLogo invert={true} scale={0.65} />
                   </div>
 
-                  <div className="relative z-10 w-full h-px bg-gradient-to-r from-transparent via-[#DCD3C6] to-transparent mb-8" />
+                  {/* Main Content (Title + Schedules) centered vertically */}
+                  <div className="relative z-10 w-full flex flex-col gap-20 flex-grow justify-center pb-20">
+                    {/* Title */}
+                    <div className="text-center">
+                      <h2 className="text-[75px] leading-[1] text-white font-sans font-bold uppercase tracking-[0.05em] shadow-sm">
+                        Available Slots
+                      </h2>
+                    </div>
 
-                  {/* Title */}
-                  <div className="relative z-10 text-center mb-8">
-                    <h2 className="text-[56px] font-bold text-[#3D2E1F] tracking-tight drop-shadow-sm">
-                      Available Slots
-                    </h2>
-                    <p className="text-[26px] text-[#8E7962] mt-2 font-medium italic">
-                      Berikut jadwal yang masih tersedia:
-                    </p>
+                    {/* Schedule Body */}
+                    {weekMode === 1 ? (
+                      // Single week layout
+                      <div className="space-y-6 px-16">
+                        {visibleSchedules.map(day => (
+                          <CanvasDayRow
+                            key={`preview_${day.id}`}
+                            day={day}
+                            editingLabelId={editingLabelId}
+                            editingLabelValue={editingLabelValue}
+                            onStartEditLabel={startEditLabel}
+                            onLabelChange={setEditingLabelValue}
+                            onCommitLabel={commitEditLabel}
+                            editingTimeId={editingTimeId}
+                            editingTimeValue={editingTimeValue}
+                            onStartEditTime={startEditTime}
+                            onTimeChange={setEditingTimeValue}
+                            onCommitTime={commitEditTime}
+                            fontSize="text-[34px]"
+                            timeFontSize="text-[30px]"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      // Two week layout: side-by-side columns
+                      <div className="flex justify-center gap-24 px-8">
+                        {/* Week 1 column */}
+                        <div className="flex flex-col">
+                          <div className="space-y-6">
+                            {schedules.slice(0, 7).filter(d => d.visible).map(day => (
+                              <CanvasDayRow
+                                key={`preview_${day.id}`}
+                                day={day}
+                                editingLabelId={editingLabelId}
+                                editingLabelValue={editingLabelValue}
+                                onStartEditLabel={startEditLabel}
+                                onLabelChange={setEditingLabelValue}
+                                onCommitLabel={commitEditLabel}
+                                editingTimeId={editingTimeId}
+                                editingTimeValue={editingTimeValue}
+                                onStartEditTime={startEditTime}
+                                onTimeChange={setEditingTimeValue}
+                                onCommitTime={commitEditTime}
+                                fontSize="text-[30px]"
+                                timeFontSize="text-[26px]"
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Week 2 column */}
+                        <div className="flex flex-col">
+                          <div className="space-y-6">
+                            {schedules.slice(7, 14).filter(d => d.visible).map(day => (
+                              <CanvasDayRow
+                                key={`preview_${day.id}`}
+                                day={day}
+                                editingLabelId={editingLabelId}
+                                editingLabelValue={editingLabelValue}
+                                onStartEditLabel={startEditLabel}
+                                onLabelChange={setEditingLabelValue}
+                                onCommitLabel={commitEditLabel}
+                                editingTimeId={editingTimeId}
+                                editingTimeValue={editingTimeValue}
+                                onStartEditTime={startEditTime}
+                                onTimeChange={setEditingTimeValue}
+                                onCommitTime={commitEditTime}
+                                fontSize="text-[30px]"
+                                timeFontSize="text-[26px]"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Schedule Body */}
-                  {weekMode === 1 ? (
-                    // Single week layout
-                    <div className="relative z-10 flex-1 space-y-5 ml-4">
-                      {visibleSchedules.map(day => (
-                        <CanvasDayRow
-                          key={`preview_${day.id}`}
-                          day={day}
-                          editingLabelId={editingLabelId}
-                          editingLabelValue={editingLabelValue}
-                          onStartEditLabel={startEditLabel}
-                          onLabelChange={setEditingLabelValue}
-                          onCommitLabel={commitEditLabel}
-                          editingTimeId={editingTimeId}
-                          editingTimeValue={editingTimeValue}
-                          onStartEditTime={startEditTime}
-                          onTimeChange={setEditingTimeValue}
-                          onCommitTime={commitEditTime}
-                          fontSize="text-3xl"
-                          timeFontSize="text-[26px]"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    // Two week layout: side-by-side columns
-                    <div className="relative z-10 flex-1 flex gap-6">
-                      {/* Week 1 column */}
-                      <div className="flex-1 flex flex-col">
-                        <div className="space-y-5">
-                          {schedules.slice(0, 7).filter(d => d.visible).map(day => (
-                            <CanvasDayRow
-                              key={`preview_${day.id}`}
-                              day={day}
-                              editingLabelId={editingLabelId}
-                              editingLabelValue={editingLabelValue}
-                              onStartEditLabel={startEditLabel}
-                              onLabelChange={setEditingLabelValue}
-                              onCommitLabel={commitEditLabel}
-                              editingTimeId={editingTimeId}
-                              editingTimeValue={editingTimeValue}
-                              onStartEditTime={startEditTime}
-                              onTimeChange={setEditingTimeValue}
-                              onCommitTime={commitEditTime}
-                              fontSize="text-3xl"
-                              timeFontSize="text-[26px]"
-                            />
-                          ))}
+                  {/* Footer Area */}
+                  <div className="relative z-10 w-full mt-auto flex flex-col gap-8 pt-10">
+                    {/* Promo Box */}
+                    {promoNote && (
+                      <div className="w-full px-8 mx-auto">
+                        <div className="text-white/90 text-[26px] leading-relaxed font-sans whitespace-pre-wrap text-center drop-shadow-md">
+                          {promoNote}
                         </div>
                       </div>
+                    )}
 
-                      {/* Divider */}
-                      <div className="w-px bg-gradient-to-b from-transparent via-[#DCD3C6] to-transparent self-stretch" />
-
-                      {/* Week 2 column */}
-                      <div className="flex-1 flex flex-col">
-                        <div className="space-y-5">
-                          {schedules.slice(7, 14).filter(d => d.visible).map(day => (
-                            <CanvasDayRow
-                              key={`preview_${day.id}`}
-                              day={day}
-                              editingLabelId={editingLabelId}
-                              editingLabelValue={editingLabelValue}
-                              onStartEditLabel={startEditLabel}
-                              onLabelChange={setEditingLabelValue}
-                              onCommitLabel={commitEditLabel}
-                              editingTimeId={editingTimeId}
-                              editingTimeValue={editingTimeValue}
-                              onStartEditTime={startEditTime}
-                              onTimeChange={setEditingTimeValue}
-                              onCommitTime={commitEditTime}
-                              fontSize="text-3xl"
-                              timeFontSize="text-[26px]"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Promo Box */}
-                  {promoNote && (
-                    <div className="relative z-10 mt-auto mb-6 w-full p-6 rounded-[24px] bg-gradient-to-br from-[#E8D1A7] to-[#C9AB75] shadow-xl overflow-hidden border border-[#F2D7A5]/50">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/30 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 mix-blend-overlay pointer-events-none" />
-                      <div className="relative z-10 text-[#543310] text-2xl leading-snug font-medium whitespace-pre-wrap">
-                        {promoNote}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="relative z-10 flex flex-col items-center pt-6 border-t border-[#DCD3C6] pb-2 space-y-3">
-                    <p className="text-2xl font-medium text-[#8E7962]">
-                      Reply untuk mengamankan slot Anda
-                    </p>
-                    <div className="flex items-center gap-3 text-xl font-medium tracking-wide text-[#A89882] opacity-80 pb-4">
+                    <div className="flex justify-center items-center w-full gap-6">
+                      <span className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 text-[14px] font-sans font-medium tracking-[0.15em] text-white/80 uppercase flex items-center gap-2">
+                        <Globe size={14} /> WWW.SERENARAGA.FIT
+                      </span>
                       {waNumber && (
-                        <div className="flex items-center gap-1.5">
-                          <MessageCircle size={18} />
-                          <span>0{waNumber.startsWith('62') ? waNumber.slice(2) : waNumber}</span>
-                        </div>
+                        <span className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 text-[14px] font-sans font-medium tracking-[0.15em] text-white/80 uppercase flex items-center gap-2">
+                          <WAIco size={14} /> 0{waNumber.startsWith('62') ? waNumber.slice(2) : waNumber}
+                        </span>
                       )}
-                      {waNumber && socialText && <span className="opacity-50 mx-1">•</span>}
                       {socialText && (
-                        <div className="flex items-center gap-1.5">
-                          <span>{socialText}</span>
-                        </div>
+                        <span className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 text-[14px] font-sans font-medium tracking-[0.15em] text-white/80 uppercase flex items-center gap-2">
+                          <InstagramIco size={14} /> {socialText.startsWith('@') ? socialText : `@${socialText}`}
+                        </span>
                       )}
-                      {(waNumber || socialText) && <span className="opacity-50 mx-1">•</span>}
-                      <span className="font-semibold text-[#8E7962] opacity-90">www.serenaraga.fit</span>
                     </div>
                   </div>
 
@@ -836,37 +945,33 @@ function DayRow({
   onToggleDay: (id: string) => void;
 }) {
   return (
-    <div className={`p-4 space-y-3 transition-opacity duration-200 border-l-[3px] ${!day.visible ? 'opacity-40 bg-zinc-50/50 dark:bg-zinc-900/30 grayscale border-zinc-200' : 'border-earth-primary/50'}`}>
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => onToggleVisibility(day.id)}
-            className="p-1.5 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 transition-colors"
-            title={day.visible ? "Sembunyikan tanggal ini" : "Tampilkan tanggal ini"}
-          >
-            {day.visible ? <Eye size={16} /> : <EyeOff size={16} />}
-          </button>
-          <p className={`font-semibold text-sm flex items-center gap-2 ${!day.visible ? 'text-zinc-500' : 'dark:text-white'}`}>
+    <div className={`px-5 py-3.5 flex items-center justify-between transition-all duration-150 ${!day.visible ? 'opacity-35 bg-zinc-50/60 dark:bg-zinc-900/20' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30'}`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <button
+          onClick={() => onToggleVisibility(day.id)}
+          className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-600 transition-colors shrink-0"
+          title={day.visible ? 'Sembunyikan' : 'Tampilkan'}
+        >
+          {day.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+        </button>
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold truncate ${!day.visible ? 'text-zinc-400' : 'text-zinc-800 dark:text-white'}`}>
             {day.label}
-            {!day.active && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold tracking-wider">FULL</span>}
           </p>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <span className={`text-[10px] font-bold tracking-wider transition-colors ${day.active ? 'text-earth-primary' : 'text-zinc-400'}`}>
-            {day.active ? 'TERSEDIA' : 'FULL'}
-          </span>
-          <button
-            onClick={() => onToggleDay(day.id)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-earth-primary/50 ${day.active ? 'bg-earth-primary' : 'bg-red-400 dark:bg-red-900/60'}`}
-            title={day.active ? 'Tandai sebagai FULL' : 'Tandai sebagai Buka'}
-          >
-            <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-300 ease-in-out ${day.active ? 'translate-x-5' : 'translate-x-0'}`}
-            />
-          </button>
+          {day.visible && (
+            <p className={`text-xs mt-0.5 font-medium tabular-nums ${day.active ? 'text-earth-primary' : 'text-red-500'}`}>
+              {day.active ? day.timeText : 'FULL'}
+            </p>
+          )}
         </div>
       </div>
-
+      <button
+        onClick={() => onToggleDay(day.id)}
+        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none ${day.active ? 'bg-earth-primary' : 'bg-zinc-300 dark:bg-zinc-600'}`}
+        title={day.active ? 'Tandai FULL' : 'Tandai Buka'}
+      >
+        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ${day.active ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+      </button>
     </div>
   );
 }
@@ -920,76 +1025,46 @@ function CanvasDayRow({
   }, [isEditingTime]);
 
   return (
-    <div className="space-y-2.5">
+    <div className="flex items-center justify-between w-full gap-4 font-sans">
       {/* Label (tanggal) */}
-      {isEditingLabel ? (
-        <div className="flex items-center gap-2">
-          <input
-            ref={labelInputRef}
-            value={editingLabelValue}
-            onChange={e => onLabelChange(e.target.value)}
-            onBlur={onCommitLabel}
-            onKeyDown={e => { if (e.key === 'Enter') onCommitLabel(); if (e.key === 'Escape') onCommitLabel(); }}
-            className={`${fontSize} font-bold text-[#4A3C2D] bg-transparent border-b-2 border-[#C9AB75] outline-none flex-1 min-w-0`}
-            style={{ fontFamily: 'inherit' }}
-          />
-          <button
-            onMouseDown={e => { e.preventDefault(); onCommitLabel(); }}
-            className="flex-shrink-0 w-8 h-8 rounded-full bg-[#C9AB75] flex items-center justify-center text-white hover:bg-[#B89A60] transition-colors"
-          >
-            <Check size={14} />
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => onStartEditLabel(day)}
-          className="group flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-          title="Klik untuk edit tanggal"
-        >
-          <h3 className={`${fontSize} font-bold text-[#4A3C2D] drop-shadow-sm text-left`}>{day.label}</h3>
-          <Pencil size={16} className="text-[#C9AB75] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-        </button>
-      )}
+      <h3 
+        className={`${fontSize} font-semibold text-white text-left outline-none hover:ring-2 hover:ring-white/30 focus:ring-2 focus:ring-white/50 rounded px-2 -mx-2 cursor-text transition-all whitespace-nowrap`}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => {
+          const val = e.currentTarget.textContent || '';
+          if (val !== day.label) {
+            onStartEditLabel(day);
+            onLabelChange(val);
+            setTimeout(onCommitLabel, 50);
+          }
+        }}
+      >
+        {day.label}
+      </h3>
 
       {/* Time / FULL badge */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex items-center whitespace-nowrap">
         {!day.active ? (
-          <div className="px-5 py-2 bg-white border border-[#E8D1A7] rounded-full flex items-center gap-2 shadow-sm">
-            <span className="text-[24px] font-bold tracking-wider text-[#C04949]">FULL</span>
-            <span className="text-[20px] text-[#D87D7D] font-medium">Booked</span>
-          </div>
-        ) : isEditingTime ? (
-          <div className="flex items-center gap-2">
-            <input
-              ref={timeInputRef}
-              value={editingTimeValue}
-              onChange={e => onTimeChange(e.target.value)}
-              onBlur={onCommitTime}
-              onKeyDown={e => { if (e.key === 'Enter') onCommitTime(); if (e.key === 'Escape') onCommitTime(); }}
-              className={`${timeFontSize} font-bold tracking-widest text-[#5C4836] bg-transparent border-b-2 border-[#C9AB75] outline-none min-w-0 w-64`}
-              placeholder="mis: 10:00 - 20:00"
-              style={{ fontFamily: 'inherit' }}
-            />
-            <button
-              onMouseDown={e => { e.preventDefault(); onCommitTime(); }}
-              className="flex-shrink-0 w-8 h-8 rounded-full bg-[#C9AB75] flex items-center justify-center text-white hover:bg-[#B89A60] transition-colors"
-            >
-              <Check size={14} />
-            </button>
+          <div className="px-5 py-2.5 bg-red-900/60 border border-red-500/30 rounded-full flex items-center gap-2 shadow-sm">
+            <span className="text-[26px] font-bold tracking-widest text-red-300">FULL BOOKED</span>
           </div>
         ) : (
-          <button
-            onClick={() => onStartEditTime(day)}
-            className="group flex items-center gap-2 cursor-pointer"
-            title="Klik untuk edit jam"
+          <span 
+            className={`${timeFontSize} font-semibold tracking-widest text-white outline-none hover:ring-2 hover:ring-white/30 focus:ring-2 focus:ring-white/50 rounded px-2 -mx-2 cursor-text transition-all`}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => {
+              const val = e.currentTarget.textContent || '';
+              if (val !== day.timeText) {
+                onStartEditTime(day);
+                onTimeChange(val);
+                setTimeout(onCommitTime, 50);
+              }
+            }}
           >
-            <div className="px-6 py-2 bg-gradient-to-br from-[#FFFFFF] to-[#FAF8F5] border border-[#E8D1A7] shadow-sm rounded-full flex items-center gap-2 group-hover:border-[#C9AB75] transition-colors">
-              <span className={`${timeFontSize} font-bold tracking-widest text-[#5C4836]`}>
-                {day.timeText}
-              </span>
-              <Pencil size={14} className="text-[#C9AB75] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-            </div>
-          </button>
+            {day.timeText}
+          </span>
         )}
       </div>
     </div>

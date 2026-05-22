@@ -161,7 +161,7 @@ export default function ReelsStudio() {
 
       setProgressMsg('Menyimpan File...');
       const data = await ffmpeg.readFile('output.mp4');
-      const url = URL.createObjectURL(new Blob([data as Uint8Array], { type: 'video/mp4' }));
+      const url = URL.createObjectURL(new Blob([data as any], { type: 'video/mp4' }));
       
       const link = document.createElement('a');
       link.href = url;

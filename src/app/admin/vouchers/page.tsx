@@ -15,6 +15,7 @@ type Voucher = {
   is_active: boolean; created_at: string;
   recipient_name: string | null; buyer_name: string | null;
   amount_paid: number | null; target_service: string | null;
+  description: string | null;
 };
 
 const genCode = (len = 4) => {

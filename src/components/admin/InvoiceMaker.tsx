@@ -4,10 +4,19 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import {
   Download, Plus, Trash2, Loader2, Share2, Users, Percent,
-  Tag, X, Check, Award, Hash, Bus
+  Tag, X, Check, Award, Hash, Bus, Globe
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
+import { SerenaLogoSvg, SerenaLogoPaths } from '../SerenaLogoSvg';
+
+const InstagramIcon = ({ size = 11, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+  </svg>
+);
 
 type Item = { id: number | string; db_id?: string; therapist_id?: string; name: string; duration: string; price: number; details?: string; parent_bundle_name?: string };
 type TransportEntry = { id: string; therapist_id: string; fee: number | ''; pct: number };
@@ -274,6 +283,7 @@ const InvoiceMaker = () => {
       setTransportEntries([{ id: Date.now().toString(), therapist_id: '', fee: '', pct: 100 }]);
       setTransportTherapistPool([]);
       setBookingTime('');
+      setInvoiceNumber(genInvoiceNo());
       return;
     }
     const bk = bookings.find(b => b.id === bookingId);
@@ -282,6 +292,13 @@ const InvoiceMaker = () => {
     setCustomerPhone(bk.phone ?? '');
     if (bk.booking_date) setDate(bk.booking_date);
     if (bk.booking_time) setBookingTime(bk.booking_time);
+
+    // Set deterministic invoice number based on date and UUID suffix
+    const dateObj = new Date(bk.booking_date + 'T00:00:00');
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const last4 = bk.id.substring(bk.id.length - 4).toUpperCase();
+    setInvoiceNumber(`SR-${y}${m}-${last4}`);
 
     // Load booking_items (multi-service)
     const { data: bkItems } = await supabase
@@ -506,7 +523,7 @@ const InvoiceMaker = () => {
     await new Promise(r => requestAnimationFrame(r));
     await document.fonts.ready;
 
-    const scale = Math.min(window.devicePixelRatio || 2, 3);
+    const scale = 3;
     const fullHeight = el.scrollHeight;
 
     let result: { dataUrl: string; blob: Blob } | null = null;
@@ -1093,9 +1110,24 @@ const InvoiceMaker = () => {
             {/* Top Accent Strip */}
             <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
             
-            {/* Watermark Logo */}
-            <div className="absolute inset-0 z-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -translate-y-24">
-              <img src="/serenalogo2.svg" alt="watermark" crossOrigin="anonymous" className="w-[120%] h-auto max-w-none grayscale -rotate-[15deg] mix-blend-multiply" />
+            {/* Watermark Logo (Tiled Banking Style - Sharp Vector) */}
+            <div className="absolute inset-0 z-0 pointer-events-none select-none">
+              <svg className="w-full h-full" style={{ opacity: 0.12 }}>
+                <defs>
+                  <pattern 
+                    id="watermark-pattern-maker" 
+                    width="130" 
+                    height="130" 
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(-20)"
+                  >
+                    <g transform="translate(20, 20) scale(0.06)">
+                      <SerenaLogoPaths monochrome={true} color="#8b5e3c" idSuffix="watermark-maker" />
+                    </g>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#watermark-pattern-maker)" />
+              </svg>
             </div>
 
             {/* Content Container */}
@@ -1105,11 +1137,9 @@ const InvoiceMaker = () => {
             <div className="flex justify-between items-start mb-12">
               <div>
                 <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
-                  <img 
-                    src="/serenalogo2.svg" 
-                    alt="SerenaRaga" 
-                    crossOrigin="anonymous"
+                  <SerenaLogoSvg
                     className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
+                    idSuffix="header-maker"
                   />
                 </div>
                 <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
@@ -1210,12 +1240,28 @@ const InvoiceMaker = () => {
             </div>
 
             {/* Footer */}
-            <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px solid #f4f4f5', paddingTop: 24, paddingBottom: 10 }}>
-              <p style={{ fontSize: 11.5, fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: 16, whiteSpace: 'nowrap' }}>"{invoiceFooter}"</p>
-              <div style={{ display: 'inline-block', background: 'rgba(139,94,60,0.06)', padding: '8px 16px', borderRadius: 100, border: '1px solid rgba(139,94,60,0.1)' }}>
-                <p style={{ fontSize: 9, fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.15em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  {invoiceSocial}
-                </p>
+            <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px solid #f4f4f5', paddingTop: 20, paddingBottom: 10 }}>
+              <p style={{ fontSize: 11.5, fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: 12 }}>"{invoiceFooter}"</p>
+              
+              {/* Minimalist social details styled like Feed Studio */}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, fontSize: 9.5, fontWeight: 700, color: '#8B5E3C', letterSpacing: '0.05em', opacity: 0.8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <InstagramIcon size={11} />
+                  <span style={{ textTransform: 'lowercase' }}>{(() => {
+                    const parts = invoiceSocial.split('/').map(p => p.trim());
+                    let instagram = parts[0]?.replace(/Instagram\s*&\s*Threads:\s*/i, '').trim() || '@serena.raga';
+                    if (!instagram.startsWith('@') && instagram.length > 0) instagram = `@${instagram}`;
+                    return instagram;
+                  })()}</span>
+                </div>
+                <div style={{ width: 1, height: 10, background: 'rgba(139,94,60,0.25)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Globe size={11} style={{ strokeWidth: 2.5 }} />
+                  <span style={{ textTransform: 'lowercase' }}>{(() => {
+                    const parts = invoiceSocial.split('/').map(p => p.trim());
+                    return parts[1] || 'www.serenaraga.fit';
+                  })()}</span>
+                </div>
               </div>
             </div>
             

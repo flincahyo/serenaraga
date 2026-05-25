@@ -5,9 +5,18 @@ import { toPng } from 'html-to-image';
 import {
   ShoppingCart, Trash2, Plus, Minus, User, Phone, Download,
   Share2, ChevronRight, X, Check, Loader2, Tag, Search,
-  Sparkles, Receipt,
+  Sparkles, Receipt, Globe
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { SerenaLogoPaths } from '@/components/SerenaLogoSvg';
+
+const InstagramIcon = ({ size = 11, ...props }: React.SVGProps<SVGSVGElement> & { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+  </svg>
+);
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Service = {
@@ -45,7 +54,9 @@ const genInvoiceNo = () => {
 // ─── Main POS Component ──────────────────────────────────────────────────────
 export default function POSPage() {
   const invoiceRef           = useRef<HTMLDivElement>(null);
-  const [invoiceNumber]      = useState(genInvoiceNo);
+  const [invoiceNumber, setInvoiceNumber] = useState(genInvoiceNo);
+  const [savedBookingId, setSavedBookingId] = useState<string | null>(null);
+
   const [services, setServices]     = useState<Service[]>([]);
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [discounts, setDiscounts]   = useState<Discount[]>([]);
@@ -65,6 +76,12 @@ export default function POSPage() {
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
   const [lookingUp, setLookingUp]   = useState(false);
+
+  // Reset saved status and invoice number on changes to cart or details
+  useEffect(() => {
+    setSavedBookingId(null);
+    setInvoiceNumber(genInvoiceNo());
+  }, [cart, customerName, customerPhone, date]);
 
   const supabase = createClient();
 
@@ -173,9 +190,15 @@ export default function POSPage() {
   });
 
   // ── Save booking ──
-  const saveBooking = async () => {
-    if (!customerName || cart.length === 0) return;
+  const saveBooking = async (): Promise<any> => {
+    if (!customerName || cart.length === 0) return null;
     setSaving(true);
+
+    if (savedBookingId) {
+      setSaving(false);
+      return { id: savedBookingId, booking_date: date };
+    }
+
     const serviceName = cart.length === 1 ? cart[0].name
       : cart.filter(c => !c.parent_bundle_name).map(c => c.name).join(' + ')
         || [...new Set(cart.map(c => c.parent_bundle_name ?? c.name))].join(' + ');
@@ -212,8 +235,17 @@ export default function POSPage() {
     if (bookingError || !booking) {
       console.error('Failed to save booking:', bookingError);
       setSaving(false);
-      return;
+      return null;
     }
+
+    // Dynamic deterministic invoice number based on date and ID suffix
+    const dateObj = new Date(booking.booking_date + 'T00:00:00');
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const last4 = booking.id.substring(booking.id.length - 4).toUpperCase();
+    const deterministicInvoiceNo = `SR-${y}${m}-${last4}`;
+    setInvoiceNumber(deterministicInvoiceNo);
+    setSavedBookingId(booking.id);
 
     // Bug #4: Calculate commission_earned per item using therapist's individual rate
     // Bug #1: Use Promise.all for atomic batch insert instead of sequential loop
@@ -242,21 +274,47 @@ export default function POSPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setSaving(false);
+    return booking;
   };
 
   // ── Generate invoice image ──
   const generateInvoice = async () => {
-    if (!invoiceRef.current) return;
+    if (!invoiceRef.current || !customerName || cart.length === 0) return;
     setGenerating(true);
     try {
-      const uri = await toPng(invoiceRef.current, { quality: 0.95, pixelRatio: 2 });
+      let bookingData = null;
+      if (!savedBookingId) {
+        bookingData = await saveBooking();
+        if (!bookingData) {
+          setGenerating(false);
+          alert("Gagal menyimpan pesanan ke database sebelum mencetak invoice.");
+          return;
+        }
+      }
+
+      // Wait 100ms for React state rendering update to apply in the DOM (for invoice number text)
+      await new Promise(r => setTimeout(r, 100));
+
+      const uri = await toPng(invoiceRef.current, { quality: 0.95, pixelRatio: 3 });
       const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      
+      const activeInvoiceNo = (() => {
+        if (bookingData) {
+          const dateObj = new Date(bookingData.booking_date + 'T00:00:00');
+          const y = dateObj.getFullYear();
+          const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const last4 = bookingData.id.substring(bookingData.id.length - 4).toUpperCase();
+          return `SR-${y}${m}-${last4}`;
+        }
+        return invoiceNumber;
+      })();
+
       if (isMobile && navigator.share) {
         const blob = await (await fetch(uri)).blob();
-        await navigator.share({ files: [new File([blob], `invoice-${invoiceNumber}.png`, { type: 'image/png' })], title: 'Invoice SerenaRaga' });
+        await navigator.share({ files: [new File([blob], `invoice-${activeInvoiceNo}.png`, { type: 'image/png' })], title: 'Invoice SerenaRaga' });
       } else {
         const link = document.createElement('a');
-        link.download = `invoice-${invoiceNumber}.png`;
+        link.download = `invoice-${activeInvoiceNo}.png`;
         link.href = uri;
         link.click();
         if (customerPhone) {
@@ -566,7 +624,26 @@ export default function POSPage() {
 
         {/* ── Hidden Invoice Preview (for image capture) ── */}
         <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
-          <div ref={invoiceRef} className="bg-[#FDFBF7] p-10 text-zinc-900 font-sans" style={{ width: 480 }}>
+          <div ref={invoiceRef} className="bg-[#FDFBF7] p-10 text-zinc-900 font-sans relative overflow-hidden" style={{ width: 480 }}>
+            {/* Watermark Logo (Tiled Banking Style - Sharp Vector) */}
+            <div className="absolute inset-0 z-0 pointer-events-none select-none">
+              <svg className="w-full h-full" style={{ opacity: 0.12 }}>
+                <defs>
+                  <pattern 
+                    id="watermark-pattern-pos" 
+                    width="130" 
+                    height="130" 
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(-20)"
+                  >
+                    <g transform="translate(20, 20) scale(0.06)">
+                      <SerenaLogoPaths monochrome={true} color="#8b5e3c" idSuffix="watermark-pos" />
+                    </g>
+                  </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#watermark-pattern-pos)" />
+              </svg>
+            </div>
             {/* Header */}
             <div className="flex justify-between items-start mb-14">
               <div>
@@ -621,9 +698,29 @@ export default function POSPage() {
               </div>
             </div>
             {/* Footer */}
-            <div style={{ borderTop:'1px solid #f4f4f5', paddingTop:24, marginTop:24, textAlign:'center' }}>
-              <p style={{ fontSize:9, color:'#71717a', lineHeight:1.8 }}>{invoiceFooter}</p>
-              <p style={{ fontSize:9, color:'#8B5E3C', marginTop:8, fontWeight:600 }}>{invoiceSocial}</p>
+            <div style={{ borderTop:'1px solid #f4f4f5', paddingTop:20, marginTop:24, textAlign:'center' }}>
+              <p style={{ fontSize:11.5, fontStyle:'italic', fontFamily:'Georgia, serif', color:'#8B5E3C', opacity:0.8, marginBottom:12 }}>"{invoiceFooter}"</p>
+              
+              {/* Minimalist social details styled like Feed Studio */}
+              <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:14, fontSize:9.5, fontWeight:700, color:'#8B5E3C', letterSpacing:'0.05em', opacity:0.8 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  <InstagramIcon size={11} />
+                  <span style={{ textTransform:'lowercase' }}>{(() => {
+                    const parts = invoiceSocial.split('/').map(p => p.trim());
+                    let instagram = parts[0]?.replace(/Instagram\s*&\s*Threads:\s*/i, '').trim() || '@serena.raga';
+                    if (!instagram.startsWith('@') && instagram.length > 0) instagram = `@${instagram}`;
+                    return instagram;
+                  })()}</span>
+                </div>
+                <div style={{ width:1, height:10, background:'rgba(139,94,60,0.25)' }} />
+                <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  <Globe size={11} style={{ strokeWidth:2.5 }} />
+                  <span style={{ textTransform:'lowercase' }}>{(() => {
+                    const parts = invoiceSocial.split('/').map(p => p.trim());
+                    return parts[1] || 'www.serenaraga.fit';
+                  })()}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

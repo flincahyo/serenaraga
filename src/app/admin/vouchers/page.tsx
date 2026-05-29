@@ -84,6 +84,7 @@ export default function VouchersPage() {
   const [bulkForm, setBulkForm] = useState({
     quantity: 100,
     prefix: 'SRAGA',
+    batchName: '',
     name: '',
     customValue: 0,
     valueType: 'flat' as 'flat' | 'percentage',
@@ -161,7 +162,7 @@ export default function VouchersPage() {
   };
 
   const handleCreateBulk = async () => {
-    if (!bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0) return;
+    if (!bulkForm.batchName || !bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0) return;
     setSaving(true);
     
     const prefix = bulkForm.prefix.trim().toUpperCase();
@@ -172,6 +173,9 @@ export default function VouchersPage() {
     }
     
     const codesArray = Array.from(generatedCodes);
+    const uniqueId = genCode(3);
+    const dateStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const batchIdentifier = `Batch: ${bulkForm.batchName.trim()} (${dateStr} - ${uniqueId})`;
     
     const payload = codesArray.map((codeStr) => ({
       code: codeStr,
@@ -184,7 +188,7 @@ export default function VouchersPage() {
       is_active: true,
       is_owner_borne: true,
       is_voucher: true,
-      buyer_name: `Batch: ${bulkForm.name}`, // Identifier for bulk batches
+      buyer_name: batchIdentifier, // Identifier for bulk batches
       valid_to: bulkForm.useExpiry && bulkForm.expiryDate ? bulkForm.expiryDate : null,
       description: JSON.stringify({
         tagline: bulkForm.tagline,
@@ -198,7 +202,7 @@ export default function VouchersPage() {
     if (!error) {
       setTab('list');
       fetchData();
-      setBulkForm(f => ({ ...f, quantity: 100, prefix: 'SRAGA', name: '', customValue: 0, valueType: 'flat', maxUses: 1, useExpiry: false, expiryDate: '', tagline: '' }));
+      setBulkForm(f => ({ ...f, quantity: 100, prefix: 'SRAGA', batchName: '', name: '', customValue: 0, valueType: 'flat', maxUses: 1, useExpiry: false, expiryDate: '', tagline: '' }));
     } else {
       alert("Gagal membuat bulk voucher.");
     }
@@ -667,10 +671,14 @@ export default function VouchersPage() {
               
               <div className="space-y-6">
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nama Batch / Promo *</label>
-                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" placeholder="Misal: Bazar JCC Hari 1" value={bulkForm.name} onChange={e => setBulkForm(f => ({ ...f, name: e.target.value }))} />
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nama Batch (Sistem) *</label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" placeholder="Cth: Bazar JCC Hari 1" value={bulkForm.batchName} onChange={e => setBulkForm(f => ({ ...f, batchName: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nama Voucher (Fisik) *</label>
+                    <input className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-earth-primary/30 outline-none transition-all" placeholder="Cth: Voucher Relaksasi" value={bulkForm.name} onChange={e => setBulkForm(f => ({ ...f, name: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">Prefix Kode Voucher</label>
@@ -745,7 +753,7 @@ export default function VouchersPage() {
                 </div>
 
                 <div className="pt-6 border-t border-zinc-200 dark:border-zinc-800 flex justify-end">
-                  <button onClick={handleCreateBulk} disabled={saving || !bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0} className="w-full md:w-auto bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-10 py-4 rounded-xl font-bold tracking-wide hover:shadow-xl transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-3">
+                  <button onClick={handleCreateBulk} disabled={saving || !bulkForm.batchName || !bulkForm.name || !bulkForm.prefix || bulkForm.quantity < 1 || bulkForm.customValue <= 0} className="w-full md:w-auto bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-10 py-4 rounded-xl font-bold tracking-wide hover:shadow-xl transition-all disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-3">
                     {saving ? <Loader2 size={18} className="animate-spin" /> : <Layers size={18} />}
                     Generate {bulkForm.quantity} Voucher
                   </button>

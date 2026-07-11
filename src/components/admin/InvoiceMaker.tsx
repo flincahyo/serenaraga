@@ -30,10 +30,13 @@ type Discount = {
   min_orders: number | null; max_uses: number | null; uses_count: number;
   is_active: boolean; valid_from: string | null; valid_to: string | null;
   is_owner_borne?: boolean;
+  borne_by?: 'owner' | 'shared' | 'therapist';
+  is_voucher?: boolean;
 };
 type AppliedDiscount = {
   discountId: string; label: string; value_type: string;
   value: number; amount: number; is_owner_borne: boolean; // Rp computed
+  borne_by: 'owner' | 'shared' | 'therapist';
 };
 type Customer = {
   id: string; wa_number: string; name: string | null; visit_count_base: number;
@@ -209,6 +212,29 @@ const InvoiceMaker = () => {
 
   // Reset save guard whenever a new booking is selected
   useEffect(() => { hasSavedRef.current = false; }, [selectedBookingId]);
+
+  // BHP
+  const calcBhp = async (serviceName: string): Promise<number> => {
+    const svc = services.find(s => s.name === serviceName);
+    if (!svc) return 0;
+    const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
+      supabase.from('service_materials').select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)').eq('service_id', svc.id),
+      supabase.from('materials').select('id, pack_price, customers_per_pack').eq('is_global', true),
+    ]);
+    const getMat = (r: any) => Array.isArray(r) ? r[0] ?? null : r ?? null;
+    const rows = (svcMats ?? []) as any[];
+    const assignedGlobal = new Set(rows.map(sm => getMat(sm.material)).filter((m: any) => m?.is_global).map((m: any) => m.id));
+    let total = 0;
+    for (const sm of rows) {
+      const m = getMat(sm.material);
+      if (m && m.customers_per_pack > 0) total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
+    }
+    for (const gm of (globalMats ?? []) as any[]) {
+      if (!assignedGlobal.has(gm.id) && gm.customers_per_pack > 0) total += gm.pack_price / gm.customers_per_pack;
+    }
+    return Math.round(total);
+  };
+
 
   // ── Customer lookup by WA ──
   const lookupCustomer = useCallback(async (phone: string) => {
@@ -401,7 +427,8 @@ const InvoiceMaker = () => {
       setAppliedDiscounts(prev => [...prev, {
         discountId: d.id, label: d.name, value_type: d.value_type,
         value: d.value, amount: computeAmount(d, grossTotal),
-        is_owner_borne: d.is_owner_borne ?? true,
+        is_owner_borne: d.borne_by ? (d.borne_by === 'owner') : (d.is_owner_borne ?? true),
+        borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'),
       }]);
     }
   };
@@ -413,7 +440,8 @@ const InvoiceMaker = () => {
     setAppliedDiscounts(prev => [...prev, {
       discountId: d.id, label: d.name, value_type: d.value_type,
       value: d.value, amount: computeAmount(d, grossTotal),
-      is_owner_borne: d.is_owner_borne ?? true,
+      is_owner_borne: d.borne_by ? (d.borne_by === 'owner') : (d.is_owner_borne ?? true),
+      borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'),
     }]);
     setAddDiscountId('');
   };
@@ -427,6 +455,7 @@ const InvoiceMaker = () => {
       value: Number(customDiscountAmount),
       amount: Number(customDiscountAmount),
       is_owner_borne: true,
+      borne_by: 'owner',
     }]);
     setCustomDiscountName('');
     setCustomDiscountAmount('');
@@ -453,31 +482,50 @@ const InvoiceMaker = () => {
     if (!voucherApplied) return;
     const amount = voucherApplied.value_type === 'percentage' ? Math.round(grossTotal * voucherApplied.value / 100) : voucherApplied.value;
     if (appliedDiscounts.find(a => a.discountId === `voucher_${voucherApplied.id}`)) return;
-    setAppliedDiscounts(prev => [...prev, { discountId: `voucher_${voucherApplied.id}`, label: voucherApplied.label, value_type: voucherApplied.value_type, value: voucherApplied.value, amount, is_owner_borne: true }]);
+    setAppliedDiscounts(prev => [...prev, {
+      discountId: `voucher_${voucherApplied.id}`,
+      label: voucherApplied.label,
+      value_type: voucherApplied.value_type,
+      value: voucherApplied.value,
+      amount,
+      is_owner_borne: true,
+      borne_by: 'owner',
+    }]);
     setVoucherApplied(null);
     setVoucherCode('');
   };
 
   const totalDiscount = appliedDiscounts.reduce((s, a) => s + a.amount, 0);
-  const sharedDiscountAmount = appliedDiscounts.filter(a => !a.is_owner_borne).reduce((s, a) => s + a.amount, 0);
+  const sharedDiscountAmount = appliedDiscounts
+    .filter(a => (a.borne_by ?? (a.is_owner_borne ? 'owner' : 'shared')) === 'shared')
+    .reduce((s, a) => s + a.amount, 0);
+  const therapistDiscountAmount = appliedDiscounts
+    .filter(a => (a.borne_by ?? (a.is_owner_borne ? 'owner' : 'shared')) === 'therapist')
+    .reduce((s, a) => s + a.amount, 0);
 
   // Transport: sum all entries
   const totalTransportFee = transportEntries.reduce((s, e) => s + Number(e.fee || 0), 0);
   
   const finalTotal    = Math.max(0, grossTotal - totalDiscount) + totalTransportFee;
-  const terapisBase   = Math.max(0, grossTotal - sharedDiscountAmount);
   
   // Per-item commission: use each item's assigned therapist pct, fallback to global commissionPct
   const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
+  const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
   const commissionServices = items.reduce((sum, item) => {
     const itemSharedDisc = item.price * sharedDiscountPerGross;
-    const itemBase = Math.max(0, item.price - itemSharedDisc);
+    const itemTherapistDisc = item.price * therapistDiscountPerGross;
     let pct = commissionPct; // global fallback
     if (item.therapist_id) {
       const t = therapists.find(x => x.id === item.therapist_id);
       if (t) pct = t.commission_pct;
     }
-    return sum + Math.round(itemBase * pct / 100);
+    const maxBasisReduction = Math.round(item.price * 5 / 100);
+    const basisReduction = Math.min(itemTherapistDisc, maxBasisReduction);
+    const itemBasis = item.price - basisReduction;
+    const grossCommission = Math.round(itemBasis * pct / 100);
+    const therapistBearsShared = Math.round(itemSharedDisc * 50 / 100);
+    const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
+    return sum + itemCommission;
   }, 0);
   // Transport commission: only if entry has a therapist assigned; no therapist → full goes to owner
   const commissionTransport = transportEntries.reduce((s, e) => {
@@ -589,6 +637,15 @@ const InvoiceMaker = () => {
       }
     }
 
+    // Fetch BHP for each item
+    const itemsWithBhp = await Promise.all(
+      items.map(async (item) => {
+        const bhp = await calcBhp(item.name);
+        return { ...item, bhp };
+      })
+    );
+    const totalBhp = itemsWithBhp.reduce((s, i) => s + i.bhp, 0);
+
     // 2. Update booking
     const displayName = items.map(i => i.name).join(' + ');
     await supabase.from('bookings').update({
@@ -598,24 +655,38 @@ const InvoiceMaker = () => {
       discount_total: totalDiscount,
       final_price: finalTotal,
       price: grossTotal + totalTransportFee,
+      bhp_cost: totalBhp,
+      shared_discount_total: sharedDiscountAmount,
+      therapist_discount_total: therapistDiscountAmount,
     }).eq('id', selectedBookingId);
 
     // 3. Update/insert booking_items per item
     const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
-    for (const item of items) {
+    const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
+    for (const item of itemsWithBhp) {
       const itemSharedDiscount = item.price * sharedDiscountPerGross;
-      const itemTerapisBase = Math.max(0, item.price - itemSharedDiscount);
+      const itemTherapistDiscount = item.price * therapistDiscountPerGross;
       let pct = commissionPct;
       if (item.therapist_id) {
         const t = therapists.find(x => x.id === item.therapist_id);
         if (t) pct = t.commission_pct;
       }
-      const itemCommission = Math.round(itemTerapisBase * pct / 100);
+      const maxBasisReduction = Math.round(item.price * 5 / 100);
+      const basisReduction = Math.min(itemTherapistDiscount, maxBasisReduction);
+      const itemBasis = item.price - basisReduction;
+      const grossCommission = Math.round(itemBasis * pct / 100);
+      const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
+      const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
+      
+      const svc = services.find(s => s.name === item.name);
+      const serviceId = svc?.id || null;
       if (item.db_id) {
         // UPDATE existing item
         await supabase.from('booking_items').update({
           therapist_id: item.therapist_id || null,
-          commission_earned: itemCommission
+          commission_earned: itemCommission,
+          bhp_cost: item.bhp,
+          service_id: serviceId,
         }).eq('id', item.db_id);
       } else {
         // Audit #2 Bug #6: INSERT items that have no db_id yet
@@ -625,6 +696,8 @@ const InvoiceMaker = () => {
           price: item.price,
           therapist_id: item.therapist_id || null,
           commission_earned: itemCommission,
+          bhp_cost: item.bhp,
+          service_id: serviceId,
         });
       }
     }
@@ -708,7 +781,7 @@ const InvoiceMaker = () => {
   const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 
   const unappliedDiscounts = allDiscounts.filter(d =>
-    isDiscountValid(d) && !appliedDiscounts.find(a => a.discountId === d.id)
+    isDiscountValid(d) && !d.is_voucher && !appliedDiscounts.find(a => a.discountId === d.id)
   );
 
   return (

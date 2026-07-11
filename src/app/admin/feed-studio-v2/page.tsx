@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type } from 'lucide-react';
+import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type, Settings2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -48,6 +48,19 @@ export interface VoucherData {
   terms3?: string;
   contact?: string;
   tagline?: string;
+  // New event fields
+  voucher_type?: string;
+  event_item?: string;
+  eventItem?: string;
+  qr_url?: string;
+  qrUrl?: string;
+  instagram?: string;
+  tiktok?: string;
+  whatsapp?: string;
+  website?: string;
+  threads?: string;
+  bg_color?: string;
+  bgColor?: string;
 }
 
 interface PostDraft {
@@ -124,7 +137,7 @@ export default function FeedStudioV2() {
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   
   // Layout States
-  const [activeTool, setActiveTool] = useState<'intelligence' | 'drafts' | 'copywriting' | null>('intelligence');
+  const [activeTool, setActiveTool] = useState<'intelligence' | 'drafts' | 'copywriting' | 'voucher' | null>('intelligence');
   
   // Bulk PDF State
   const [batchName, setBatchName] = useState<string | null>(null);
@@ -143,6 +156,7 @@ export default function FeedStudioV2() {
   const [showBgPrompt, setShowBgPrompt] = useState(false);
   const [bgPromptText, setBgPromptText] = useState('');
   const [showThemePrompt, setShowThemePrompt] = useState(false);
+  const [showBgColorPrompt, setShowBgColorPrompt] = useState(false);
   const [isCanvasSelected, setIsCanvasSelected] = useState(false);
   const [draftToDelete, setDraftToDelete] = useState<string | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -192,6 +206,16 @@ export default function FeedStudioV2() {
                 terms1: parsedDesc.terms1 || '',
                 terms2: parsedDesc.terms2 || '',
                 terms3: parsedDesc.terms3 || '',
+                // Event fields
+                voucher_type: parsedDesc.voucher_type || 'discount',
+                event_item: parsedDesc.event_item || '',
+                qr_url: parsedDesc.qr_url || '',
+                instagram: parsedDesc.instagram || '',
+                tiktok: parsedDesc.tiktok || '',
+                whatsapp: parsedDesc.whatsapp || '',
+                website: parsedDesc.website || '',
+                threads: parsedDesc.threads || '',
+                bg_color: parsedDesc.bg_color || parsedDesc.bgColor || '#FAF6EF',
               };
             });
             setBatchVouchers(parsedVouchers);
@@ -239,6 +263,16 @@ export default function FeedStudioV2() {
           terms1: parsedDesc.terms1 || '',
           terms2: parsedDesc.terms2 || '',
           terms3: parsedDesc.terms3 || '',
+          // Event fields
+          voucher_type: parsedDesc.voucher_type || params.get('voucher_type') || 'discount',
+          event_item: parsedDesc.event_item || params.get('event_item') || '',
+          qr_url: parsedDesc.qr_url || params.get('qr_url') || '',
+          instagram: parsedDesc.instagram || params.get('instagram') || '',
+          tiktok: parsedDesc.tiktok || params.get('tiktok') || '',
+          whatsapp: parsedDesc.whatsapp || params.get('whatsapp') || '',
+          website: parsedDesc.website || params.get('website') || '',
+          threads: parsedDesc.threads || params.get('threads') || '',
+          bg_color: parsedDesc.bg_color || parsedDesc.bgColor || params.get('bg_color') || params.get('bgColor') || '#FAF6EF',
         };
         const vDraft: PostDraft = {
           id: `voucher-${Date.now()}`,
@@ -480,11 +514,11 @@ export default function FeedStudioV2() {
       const pdf = new jsPDF('p', 'mm', 'a3');
       const pdfWidth = 297;
       const pdfHeight = 420;
-      const gapX = 3; // 3mm gap for cutting tolerance
-      const gapY = 3; 
-      const marginX = 7; // (297 - 140*2 - 3) / 2 = 7
-      const marginY = 10;
+      const gapX = 0.3; // Diperkecil menjadi 0.3mm agar tidak banyak kertas terbuang saat dipotong
+      const gapY = 0.3; // Diperkecil menjadi 0.3mm agar tidak banyak kertas terbuang saat dipotong
       const usableWidth = 140; // 14cm width for a proper, premium voucher size
+      const marginX = (pdfWidth - (usableWidth * 2) - gapX) / 2; // Sisa margin dibagi dua rata kiri-kanan (~8.35mm)
+      const marginY = 10;
       const voucherRatio = 1200 / 520;
       const printHeight = usableWidth / voucherRatio; // ~60.6mm
       
@@ -818,6 +852,7 @@ export default function FeedStudioV2() {
     }
     setBgPromptText(currentSubject);
     setShowBgPrompt(true);
+    setShowBgColorPrompt(false);
   };
 
   const submitRegenerateBackground = async (e?: React.FormEvent) => {
@@ -825,6 +860,7 @@ export default function FeedStudioV2() {
     if (!activeDraft || !bgPromptText) return;
 
     setShowBgPrompt(false);
+    setShowBgColorPrompt(false);
     setStep('visualizing');
     
     try {
@@ -949,6 +985,15 @@ export default function FeedStudioV2() {
           >
             <Layers size={20} />
           </button>
+          {activeDraft?.format === 'voucher' && (
+            <button 
+              onClick={() => setActiveTool(activeTool === 'voucher' ? null : 'voucher')}
+              className={`p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-1.5 ${activeTool === 'voucher' ? 'bg-earth-primary/10 text-earth-primary shadow-sm' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'}`}
+              title="Voucher Settings"
+            >
+              <Settings2 size={20} />
+            </button>
+          )}
           <button 
             onClick={() => setActiveTool(activeTool === 'copywriting' ? null : 'copywriting')}
             className={`p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-1.5 ${activeTool === 'copywriting' ? 'bg-earth-primary/10 text-earth-primary shadow-sm' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'}`}
@@ -1088,13 +1133,173 @@ export default function FeedStudioV2() {
               </motion.div>
             )}
 
+            {/* FLYOUT: VOUCHER SETTINGS */}
+            {activeTool === 'voucher' && activeDraft && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 h-full text-stone-700">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-stone-400 flex items-center gap-2">
+                    <Settings2 size={14} /> Voucher Settings
+                  </h2>
+                  <button onClick={() => setActiveTool(null)} className="text-stone-400 hover:text-stone-600 p-1"><ChevronLeft size={16}/></button>
+                </div>
+
+                <div className="flex-grow overflow-y-auto minimal-scrollbar pr-1 space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Warna Background (Earth Tone)</label>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {[
+                        { name: 'Bone Cream', hex: '#FAF6EF' },
+                        { name: 'Warm Sand', hex: '#E6D7C3' },
+                        { name: 'Muted Sage', hex: '#C2C5BA' },
+                        { name: 'Tuscan Soil', hex: '#D2A888' },
+                        { name: 'Deep Espresso', hex: '#321B0F' },
+                        { name: 'Charcoal Stone', hex: '#2B2927' },
+                      ].map((tone) => {
+                        const currentBg = activeDraft.voucherData?.bg_color || activeDraft.voucherData?.bgColor || '#FAF6EF';
+                        const isSelected = currentBg.toUpperCase() === tone.hex.toUpperCase();
+                        
+                        return (
+                          <button
+                            key={tone.hex}
+                            onClick={() => handleTextEdit('voucherData.bg_color', tone.hex)}
+                            className={`w-9 h-9 rounded-full border-2 transition-all relative flex items-center justify-center ${isSelected ? 'border-earth-primary scale-110 shadow-md ring-2 ring-earth-primary/20' : 'border-stone-200 hover:scale-105'}`}
+                            style={{ backgroundColor: tone.hex }}
+                            title={tone.name}
+                          >
+                            {isSelected && (
+                              <span className={`text-[10px] font-bold ${['#FAF6EF', '#E6D7C3', '#C2C5BA', '#D2A888'].includes(tone.hex) ? 'text-stone-800' : 'text-white'}`}>
+                                ✓
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Tipe Nilai</label>
+                      <select 
+                        value={activeDraft.voucherData?.valueType || 'flat'}
+                        onChange={(e) => handleTextEdit('voucherData.valueType', e.target.value)}
+                        className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2.5 text-xs outline-none"
+                      >
+                        <option value="flat">Rupiah (Rp)</option>
+                        <option value="percentage">Persen (%)</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Nilai Diskon</label>
+                      <input 
+                        type="number" 
+                        value={activeDraft.voucherData?.value || ''}
+                        onChange={(e) => handleTextEdit('voucherData.value', e.target.value)}
+                        className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2.5 text-xs outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Penerima (To)</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.to || ''}
+                      onChange={(e) => handleTextEdit('voucherData.to', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-4 py-2.5 text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Pengirim (From)</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.from || ''}
+                      onChange={(e) => handleTextEdit('voucherData.from', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-4 py-2.5 text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Kode Voucher</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.code || ''}
+                      onChange={(e) => handleTextEdit('voucherData.code', e.target.value.toUpperCase())}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-4 py-2.5 text-xs font-mono uppercase outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">WhatsApp Kontak</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.whatsapp || activeDraft.voucherData?.contact || ''}
+                      onChange={(e) => {
+                        handleTextEdit('voucherData.whatsapp', e.target.value);
+                        handleTextEdit('voucherData.contact', e.target.value);
+                      }}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-4 py-2.5 text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Valid Hingga (Exp)</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.exp || ''}
+                      onChange={(e) => handleTextEdit('voucherData.exp', e.target.value)}
+                      placeholder="Cth: 2026-12-31 atau Lifetime"
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-4 py-2.5 text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Tagline / Pesan</label>
+                    <textarea 
+                      value={activeDraft.voucherData?.tagline || ''}
+                      onChange={(e) => handleTextEdit('voucherData.tagline', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl p-3 text-xs outline-none resize-none h-20"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Syarat & Ketentuan</label>
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.terms1 || ''}
+                      onChange={(e) => handleTextEdit('voucherData.terms1', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2 text-[11px] outline-none"
+                    />
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.terms2 || ''}
+                      onChange={(e) => handleTextEdit('voucherData.terms2', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2 text-[11px] outline-none"
+                    />
+                    <input 
+                      type="text" 
+                      value={activeDraft.voucherData?.terms3 || ''}
+                      onChange={(e) => handleTextEdit('voucherData.terms3', e.target.value)}
+                      className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2 text-[11px] outline-none"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
           </div>
         </div>
 
         {/* CENTER PANEL: The Stage (Canvas - Flex-1) */}
         <div 
           className="flex-1 flex flex-col items-center gap-6 relative overflow-y-auto minimal-scrollbar p-4 ml-4 z-10"
-          onClick={() => setIsCanvasSelected(false)}
+          onClick={() => {
+            setIsCanvasSelected(false);
+            setShowThemePrompt(false);
+            setShowBgPrompt(false);
+            setShowBgColorPrompt(false);
+          }}
         >
            
           {/* Zoom Slider (Footer / Bottom Right) */}
@@ -1367,7 +1572,65 @@ export default function FeedStudioV2() {
                     </div>
                     <div className="w-[1px] h-5 bg-stone-200" />
                     
-
+                    {/* Background Color Picker for Vouchers */}
+                    {viewDraft?.format === 'voucher' && (
+                      <div className="relative">
+                        {showBgColorPrompt && (
+                          <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 w-[240px] bg-white rounded-2xl shadow-2xl shadow-stone-200/60 border border-stone-200 p-4 z-50">
+                            <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.2em] mb-3 text-center">Pilih Warna Latar</h4>
+                            <div className="grid grid-cols-3 gap-3 justify-items-center">
+                              {[
+                                { name: 'Bone Cream', hex: '#FAF6EF' },
+                                { name: 'Warm Sand', hex: '#E6D7C3' },
+                                { name: 'Muted Sage', hex: '#C2C5BA' },
+                                { name: 'Tuscan Soil', hex: '#D2A888' },
+                                { name: 'Deep Espresso', hex: '#321B0F' },
+                                { name: 'Charcoal Stone', hex: '#2B2927' },
+                              ].map((tone) => {
+                                const currentBg = activeDraft?.voucherData?.bg_color || activeDraft?.voucherData?.bgColor || '#FAF6EF';
+                                const isSelected = currentBg.toUpperCase() === tone.hex.toUpperCase();
+                                
+                                return (
+                                  <button
+                                    key={tone.hex}
+                                    onClick={() => {
+                                      handleTextEdit('voucherData.bg_color', tone.hex);
+                                      setShowBgColorPrompt(false);
+                                    }}
+                                    className={`w-11 h-11 rounded-full border-2 transition-all relative flex items-center justify-center ${isSelected ? 'border-earth-primary scale-110 shadow-md ring-2 ring-earth-primary/20' : 'border-stone-200 hover:scale-105'}`}
+                                    style={{ backgroundColor: tone.hex }}
+                                    title={tone.name}
+                                  >
+                                    {isSelected && (
+                                      <span className={`text-[10px] font-bold ${['#FAF6EF', '#E6D7C3', '#C2C5BA', '#D2A888'].includes(tone.hex) ? 'text-stone-800' : 'text-white'}`}>
+                                        ✓
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {/* Triangle pointer */}
+                            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-t border-l border-stone-200 transform rotate-45" />
+                          </div>
+                        )}
+                        <button 
+                          onClick={() => { 
+                            setShowBgColorPrompt(!showBgColorPrompt); 
+                            setShowThemePrompt(false); 
+                            setShowBgPrompt(false); 
+                          }}
+                          title="Ganti Warna Latar"
+                          className={`p-2 transition-colors relative z-10 hover:scale-105 active:scale-95 flex items-center justify-center ${showBgColorPrompt ? 'text-earth-primary' : 'text-stone-500 hover:text-earth-primary'}`}
+                        >
+                          <div 
+                            className="w-5 h-5 rounded-full border border-stone-300 shadow-sm" 
+                            style={{ backgroundColor: activeDraft?.voucherData?.bg_color || activeDraft?.voucherData?.bgColor || '#FAF6EF' }}
+                          />
+                        </button>
+                      </div>
+                    )}
+                    
                     <div className="w-[1px] h-5 bg-stone-200" />
                     {/* Darken Controls */}
                     <div className="flex items-center gap-2 px-2">

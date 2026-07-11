@@ -96,16 +96,29 @@ export default function BookingsPage() {
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
     if (status === 'Completed') {
       const { data: items } = await supabase.from('booking_items').select('*, therapist_id').eq('booking_id', id);
-      const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total').eq('id', id).single();
+      const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total, therapist_discount_total').eq('id', id).single();
       if (items && bk) {
-        const totalPrice = Number(bk.price) || 0;
+        const serviceItems = items.filter((i: any) => i.service_name !== 'Biaya Transport');
+        const totalPrice = serviceItems.reduce((s: number, i: any) => s + (Number(i.price) || 0), 0);
         const sharedDisc = Number(bk.shared_discount_total) || 0;
+        const therapistDisc = Number(bk.therapist_discount_total) || 0;
         await Promise.all(items.map(async (item: any) => {
           if (!item.therapist_id) return;
           const t = therapists.find(x => x.id === item.therapist_id);
           const pct = t?.commission_pct ?? 30;
           const sharedDiscPct = totalPrice > 0 ? sharedDisc / totalPrice : 0;
-          const earned = Math.round(Math.max(0, Number(item.price) * (1 - sharedDiscPct)) * pct / 100);
+          const therapistDiscPct = totalPrice > 0 ? therapistDisc / totalPrice : 0;
+          
+          const itemSharedDiscount = Number(item.price) * sharedDiscPct;
+          const itemTherapistDiscount = Number(item.price) * therapistDiscPct;
+          
+          const maxBasisReduction = Math.round(Number(item.price) * 5 / 100);
+          const basisReduction = Math.min(itemTherapistDiscount, maxBasisReduction);
+          const itemBasis = Number(item.price) - basisReduction;
+          const grossCommission = Math.round(itemBasis * pct / 100);
+          const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
+          
+          const earned = Math.max(0, grossCommission - therapistBearsShared);
           await supabase.from('booking_items').update({ commission_earned: earned }).eq('id', item.id);
         }));
       }

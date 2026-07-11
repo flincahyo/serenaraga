@@ -20,6 +20,10 @@ type PayoutItem = {
   service_price: number;
   transport_commission: number;
   has_transport: boolean;
+  shared_discount_total?: number;
+  therapist_discount_total?: number;
+  booking_price?: number;
+  transport_fee?: number;
   discounts?: any[];
 };
 
@@ -230,6 +234,9 @@ export default function TherapistsPage() {
           booking_date, 
           customer_name, 
           status,
+          price,
+          shared_discount_total,
+          therapist_discount_total,
           booking_discounts(discount_label, discount_value, discount_value_type, is_owner_borne)
         )
       `)
@@ -252,10 +259,20 @@ export default function TherapistsPage() {
           commission_earned: 0,
           service_price: 0,
           transport_commission: 0,
+          transport_fee: isTransport ? (Number(row.price) || 0) : 0,
+          booking_price: Number(row.bookings.price) || 0,
+          shared_discount_total: Number(row.bookings.shared_discount_total) || 0,
+          therapist_discount_total: Number(row.bookings.therapist_discount_total) || 0,
           discounts: row.bookings.booking_discounts || [],
         };
-        else if (isTransport) acc[key].has_transport = true;
-        else acc[key].service_name = acc[key].service_name ? `${acc[key].service_name} + ${row.service_name}` : row.service_name;
+        else {
+          if (isTransport) {
+            acc[key].has_transport = true;
+            acc[key].transport_fee = Number(row.price) || 0;
+          } else {
+            acc[key].service_name = acc[key].service_name ? `${acc[key].service_name} + ${row.service_name}` : row.service_name;
+          }
+        }
 
         if (isTransport) {
           acc[key].transport_commission += Number(row.commission_earned) || 0;
@@ -277,6 +294,10 @@ export default function TherapistsPage() {
         service_price: g.service_price,
         transport_commission: g.transport_commission,
         has_transport: g.has_transport,
+        shared_discount_total: g.shared_discount_total,
+        therapist_discount_total: g.therapist_discount_total,
+        booking_price: g.booking_price,
+        transport_fee: g.transport_fee,
         discounts: g.discounts,
       }));
       setPayoutItems(items);
@@ -606,26 +627,28 @@ export default function TherapistsPage() {
                                   {(() => {
                                     if (item.service_price <= 0) return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Hanya Transport`;
                                     
-                                    const serviceCommission = item.commission_earned - item.transport_commission;
                                     const standardPct = payoutTherapist.commission_pct;
-                                    const expectedWithoutDiscount = Math.round(item.service_price * (standardPct / 100));
+                                    const bookingGross = (item.booking_price ?? 0) - (item.transport_fee ?? 0);
                                     
-                                    // Hitung mundur nilai harga setelah dipotong diskon
-                                    const netPrice = Math.round(serviceCommission / (standardPct / 100));
-                                    const discountAmount = item.service_price - netPrice;
-
-                                    // Jika nilai komisi lebih kecil dari yang seharusnya, berarti ada diskon
-                                    if (discountAmount > 0 && serviceCommission < expectedWithoutDiscount) {
-                                      const sharedDiscounts = item.discounts?.filter(d => !d.is_owner_borne) || [];
-                                      const discPctStr = sharedDiscounts.length > 0 
-                                        ? sharedDiscounts.map(d => d.discount_value_type === 'percentage' ? d.discount_value + '%' : Math.round((d.discount_value / item.service_price) * 100) + '%').join(' + ')
-                                        : Math.round((discountAmount / item.service_price) * 100) + '%';
-                                        
-                                      return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: (${formatRp(item.service_price)} - ${discPctStr}) × ${standardPct}%`;
+                                    const itemSharedDisc = bookingGross > 0 ? Math.round(item.service_price * ((item.shared_discount_total || 0) / bookingGross)) : 0;
+                                    const itemTherapistDisc = bookingGross > 0 ? Math.round(item.service_price * ((item.therapist_discount_total || 0) / bookingGross)) : 0;
+                                    
+                                    const maxBasisReduction = Math.round(item.service_price * 5 / 100);
+                                    const basisReduction = Math.min(itemTherapistDisc, maxBasisReduction);
+                                    const itemBasis = item.service_price - basisReduction;
+                                    const therapistBearsShared = Math.round(itemSharedDisc * 50 / 100);
+                                    
+                                    let text = `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: `;
+                                    if (basisReduction > 0) {
+                                      const basisPct = Math.round((basisReduction / item.service_price) * 100);
+                                      text += `(${formatRp(item.service_price)} - ${basisPct}%) × ${standardPct}%`;
+                                    } else {
+                                      text += `${formatRp(item.service_price)} × ${standardPct}%`;
                                     }
-                                    
-                                    // Fallback jika komisi normal atau tidak ada diskon
-                                    return `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: ${formatRp(item.service_price)} × ${standardPct}%`;
+                                    if (therapistBearsShared > 0) {
+                                      text += ` - ${formatRp(therapistBearsShared)} (Shared)`;
+                                    }
+                                    return text;
                                   })()}
                                 </p>
                               </div>

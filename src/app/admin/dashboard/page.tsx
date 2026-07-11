@@ -100,8 +100,10 @@ export default function DashboardPage() {
     if (b.booking_items && b.booking_items.length > 0) {
       return b.booking_items.reduce((ss: number, i: any) => ss + (Number(i.commission_earned) || 0), 0);
     }
-    const terapisBase = Math.max(0, (b.price ?? 0) - (b.shared_discount_total ?? 0));
-    return Math.round(terapisBase * fallbackPct / 100);
+    const reducedBasis = Math.max(0, (b.price ?? 0) - (b.therapist_discount_total ?? 0));
+    const grossComm = Math.round(reducedBasis * fallbackPct / 100);
+    const sharedDiscBears = Math.round((b.shared_discount_total ?? 0) * 50 / 100);
+    return Math.max(0, grossComm - sharedDiscBears);
   };
 
   // Retain for cashier fallback view

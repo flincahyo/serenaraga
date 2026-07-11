@@ -30,7 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   packages: 'Paket', services: 'Layanan', reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split',
 };
 const EMPTY_ITEM = (): BookingItemRow => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '', therapist_id: '' });
-const EMPTY_FORM = (date = '') => ({ customer_name: '', phone: '62', booking_date: date, booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0 });
+const EMPTY_FORM = (date = '') => ({ customer_name: '', phone: '62', booking_date: date, booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, therapist_discount_total: 0 });
 const fmt = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 const toMins = (t: string) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
@@ -54,7 +54,7 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
           supabase.from('bookings').select('*').eq('id', editBookingId).single(),
           supabase.from('booking_items').select('*').eq('booking_id', editBookingId).order('sort_order'),
         ]);
-        if (b) setForm({ customer_name: b.customer_name ?? '', phone: b.phone ?? '62', booking_date: b.booking_date ?? '', booking_time: b.booking_time ?? '', status: b.status ?? 'Pending', notes: b.notes ?? '', discount_total: b.discount_total ?? 0, shared_discount_total: b.shared_discount_total ?? 0 });
+        if (b) setForm({ customer_name: b.customer_name ?? '', phone: b.phone ?? '62', booking_date: b.booking_date ?? '', booking_time: b.booking_time ?? '', status: b.status ?? 'Pending', notes: b.notes ?? '', discount_total: b.discount_total ?? 0, shared_discount_total: b.shared_discount_total ?? 0, therapist_discount_total: b.therapist_discount_total ?? 0 });
         if (bi && bi.length > 0) setItems(bi.map((it: any, i: number) => ({ tempId: i, service_id: it.service_id ?? '', service_name: it.service_name, price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '', parent_bundle_name: it.parent_bundle_name ?? '' })));
         else setItems([EMPTY_ITEM()]);
       })();
@@ -168,7 +168,7 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
       else customerId = cu.id;
     }
 
-    const payload = { customer_name: form.customer_name, phone: phone || form.phone, booking_date: form.booking_date, booking_time: form.booking_time, status: form.status, notes: form.notes, service_name: withBhp.map(i => i.service_name).join(' + '), price: totalPrice, bhp_cost: totalBhp, final_price: Math.max(0, totalPrice - (form.discount_total || 0)), discount_total: form.discount_total, shared_discount_total: form.shared_discount_total, customer_id: customerId };
+    const payload = { customer_name: form.customer_name, phone: phone || form.phone, booking_date: form.booking_date, booking_time: form.booking_time, status: form.status, notes: form.notes, service_name: withBhp.map(i => i.service_name).join(' + '), price: totalPrice, bhp_cost: totalBhp, final_price: Math.max(0, totalPrice - (form.discount_total || 0)), discount_total: form.discount_total, shared_discount_total: form.shared_discount_total, therapist_discount_total: form.therapist_discount_total, customer_id: customerId };
 
     let bookingId: string;
     if (editBookingId) { await supabase.from('bookings').update(payload).eq('id', editBookingId); bookingId = editBookingId; }
@@ -181,7 +181,18 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
         const t = therapists.find(x => x.id === item.therapist_id);
         const pct = t?.commission_pct ?? 30;
         const sharedDiscPct = totalPrice > 0 ? (form.shared_discount_total || 0) / totalPrice : 0;
-        earned = Math.round(Math.max(0, Number(item.price) * (1 - sharedDiscPct)) * pct / 100);
+        const therapistDiscPct = totalPrice > 0 ? (form.therapist_discount_total || 0) / totalPrice : 0;
+        
+        const itemSharedDiscount = Number(item.price) * sharedDiscPct;
+        const itemTherapistDiscount = Number(item.price) * therapistDiscPct;
+        
+        const maxBasisReduction = Math.round(Number(item.price) * 5 / 100);
+        const basisReduction = Math.min(itemTherapistDiscount, maxBasisReduction);
+        const itemBasis = Number(item.price) - basisReduction;
+        const grossCommission = Math.round(itemBasis * pct / 100);
+        const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
+        
+        earned = Math.max(0, grossCommission - therapistBearsShared);
       }
       return { booking_id: bookingId, service_id: item.service_id || null, service_name: item.service_name, price: Number(item.price), bhp_cost: item.bhp, duration: item.duration || null, therapist_id: item.therapist_id || null, commission_earned: earned, sort_order: idx, parent_bundle_name: item.parent_bundle_name || null };
     }));

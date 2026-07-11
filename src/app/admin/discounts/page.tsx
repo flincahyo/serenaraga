@@ -18,6 +18,7 @@ type Discount = {
   min_orders: number | null; valid_from: string | null; valid_to: string | null;
   max_uses: number | null; uses_count: number; is_active: boolean; created_at: string;
   is_owner_borne: boolean;
+  borne_by?: 'owner' | 'shared' | 'therapist';
   is_voucher?: boolean;
   buyer_name?: string | null;
   code?: string | null;
@@ -29,6 +30,7 @@ const EMPTY_FORM: DiscountForm = {
   name: '', description: null, type: 'loyal', value_type: 'percentage',
   value: 10, min_orders: 5, valid_from: null, valid_to: null,
   max_uses: null, is_active: true, is_owner_borne: true,
+  borne_by: 'owner',
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -184,12 +186,13 @@ function DiscountFormPanel({
           <label className="text-xs font-medium text-zinc-500 mb-1 block flex items-center gap-1">
             Tanggungan Diskon
           </label>
-          <select className="admin-input" value={data.is_owner_borne ? 'true' : 'false'}
-            onChange={e => onChange({ ...data, is_owner_borne: e.target.value === 'true' })}>
-            <option value="true">Owner (Potong bersih)</option>
-            <option value="false">Shared (Potong gabungan)</option>
+          <select className="admin-input" value={data.borne_by ?? (data.is_owner_borne ? 'owner' : 'shared')}
+            onChange={e => onChange({ ...data, borne_by: e.target.value as 'owner' | 'shared' | 'therapist' })}>
+            <option value="owner">Owner (Potong bersih)</option>
+            <option value="shared">Shared 50-50</option>
+            <option value="therapist">Terapis (Maks. 5% cap)</option>
           </select>
-          <p className="text-[10px] text-zinc-400 mt-1">Shared = Komisi terapis ikut berkurang.</p>
+          <p className="text-[10px] text-zinc-400 mt-1">Shared = Beban dibagi 50-50. Terapis = Maksimal menanggung 5%.</p>
         </div>
       </div>
 
@@ -229,7 +232,11 @@ export default function DiscountsPage() {
   const saveEdit = async () => {
     if (!editId) return;
     setSaving(true);
-    await supabase.from('discounts').update(editData).eq('id', editId);
+    const payload = {
+      ...editData,
+      is_owner_borne: editData.borne_by === 'owner'
+    };
+    await supabase.from('discounts').update(payload).eq('id', editId);
     await fetchData();
     setEditId(null);
     setSaving(false);
@@ -237,7 +244,12 @@ export default function DiscountsPage() {
 
   const addDiscount = async () => {
     setSaving(true);
-    await supabase.from('discounts').insert({ ...newDisc, uses_count: 0 });
+    const payload = {
+      ...newDisc,
+      is_owner_borne: newDisc.borne_by === 'owner',
+      uses_count: 0
+    };
+    await supabase.from('discounts').insert(payload);
     await fetchData();
     setShowAdd(false);
     setNewDisc(EMPTY_FORM);
@@ -434,7 +446,7 @@ export default function DiscountsPage() {
                                     {d.max_uses && ` / max ${d.max_uses}`}
                                   </span>
                                   <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
-                                    <BadgeDollarSign size={12} className="text-zinc-400" /> {d.is_owner_borne ? 'Ditanggung Owner' : 'Shared (Owner+Terapis)'}
+                                    <BadgeDollarSign size={12} className="text-zinc-400" /> {d.borne_by === 'owner' ? 'Ditanggung Owner' : d.borne_by === 'shared' ? 'Shared 50-50' : 'Terapis (Maks 5%)'}
                                   </span>
                                   {(d.valid_from || d.valid_to) && (
                                     <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
@@ -449,7 +461,7 @@ export default function DiscountsPage() {
                                   className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 transition-colors" title={d.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
                                   {d.is_active ? <ToggleRight size={16} className="text-emerald-500" /> : <ToggleLeft size={16} />}
                                 </button>
-                                <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true }); setShowAdd(false); }}
+                                <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared') }); setShowAdd(false); }}
                                   className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400 transition-colors">
                                   <Pencil size={14} />
                                 </button>
@@ -505,7 +517,7 @@ export default function DiscountsPage() {
                         {d.max_uses && ` / max ${d.max_uses}`}
                       </span>
                       <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
-                        <BadgeDollarSign size={12} className="text-zinc-400" /> {d.is_owner_borne ? 'Ditanggung Owner' : 'Shared (Owner+Terapis)'}
+                        <BadgeDollarSign size={12} className="text-zinc-400" /> {d.borne_by === 'owner' ? 'Ditanggung Owner' : d.borne_by === 'shared' ? 'Shared 50-50' : 'Terapis (Maks 5%)'}
                       </span>
                       {(d.valid_from || d.valid_to) && (
                         <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
@@ -520,7 +532,7 @@ export default function DiscountsPage() {
                       className="p-2.5 rounded-xl hover:bg-white dark:hover:bg-zinc-700 text-zinc-400 shadow-sm transition-all active:scale-[0.98]" title={d.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
                       {d.is_active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} />}
                     </button>
-                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true }); setShowAdd(false); }}
+                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared') }); setShowAdd(false); }}
                       className="p-2.5 rounded-xl hover:bg-white dark:hover:bg-zinc-700 text-blue-500 shadow-sm transition-all active:scale-[0.98]">
                       <Pencil size={14} />
                     </button>

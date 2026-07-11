@@ -17,7 +17,7 @@ const faqs = [
   },
   {
     question: "Sampai jam berapa maksimal pemesanan (last order)?",
-    answer: "Layanan kami beroperasi dari jam 08.00 hingga 21.00 WIB. Disarankan melakukan pemesanan (booking) maksimal pukul 20.00 WIB untuk memastikan ketersediaan terapis."
+    answer: "Layanan kami beroperasi dari jam 08.00 hingga 22.00 WIB. Disarankan melakukan pemesanan (booking) maksimal pukul 20.00 WIB untuk memastikan ketersediaan terapis."
   },
   {
     question: "Bagaimana sistem pembayaran di SerenaRaga?",
@@ -76,9 +76,8 @@ const FAQ = () => {
                   {faq.question}
                 </span>
                 <ChevronDown
-                  className={`w-5 h-5 text-earth-primary flex-shrink-0 transition-transform duration-300 ${
-                    openIndex === index ? 'rotate-180' : ''
-                  }`}
+                  className={`w-5 h-5 text-earth-primary flex-shrink-0 transition-transform duration-300 ${openIndex === index ? 'rotate-180' : ''
+                    }`}
                 />
               </button>
               <AnimatePresence>

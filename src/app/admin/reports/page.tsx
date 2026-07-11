@@ -22,7 +22,7 @@ type BookingItemLinked = {
   duration?: string;
   therapist_id: string; 
   parent_bundle_name?: string | null;
-  therapists?: { name: string } | null;
+  therapists?: { name: string; commission_pct?: number } | null;
 };
 
 type Booking = {
@@ -36,6 +36,7 @@ type Booking = {
   final_price?: number; 
   discount_total?: number;
   shared_discount_total?: number;
+  therapist_discount_total?: number;
   status: string; 
   bhp_cost?: number;
   notes?: string;
@@ -66,8 +67,8 @@ export default function ReportsPage() {
       supabase.from('bookings')
         .select(`
           id, customer_name, phone, service_name, booking_date, booking_time, price, final_price,
-          discount_total, shared_discount_total, status, bhp_cost, notes, created_at, customer_id,
-          booking_items(id, commission_earned, service_name, price, bhp_cost, duration, therapist_id, parent_bundle_name, therapists(name))
+          discount_total, shared_discount_total, therapist_discount_total, status, bhp_cost, notes, created_at, customer_id,
+          booking_items(id, commission_earned, service_name, price, bhp_cost, duration, therapist_id, parent_bundle_name, therapists(name, commission_pct))
         `)
         .eq('status', 'Completed')
         .order('booking_date'),
@@ -107,8 +108,11 @@ export default function ReportsPage() {
     if (b.booking_items && b.booking_items.length > 0) {
       return b.booking_items.reduce((ss: number, i) => ss + (Number(i.commission_earned) || 0), 0);
     }
-    const terapisBase = Math.max(0, (b.price ?? 0) - (b.shared_discount_total ?? 0));
-    return Math.round(terapisBase * commissionPct / 100);
+    const grossPrice = b.price ?? 0;
+    const grossComm = Math.round(grossPrice * commissionPct / 100);
+    const sharedDiscBears = Math.round((b.shared_discount_total ?? 0) * 50 / 100);
+    const therapistDiscBears = Number(b.therapist_discount_total) || 0;
+    return Math.max(0, grossComm - sharedDiscBears - therapistDiscBears);
   }, [commissionPct]);
 
   // ── Filter bookings by selected month/year period ──
@@ -756,28 +760,77 @@ export default function ReportsPage() {
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-700 dark:text-zinc-300">
                       {selectedBooking.booking_items && selectedBooking.booking_items.length > 0 ? (
-                        selectedBooking.booking_items.map((item, idx) => (
-                          <tr key={item.id || idx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-800/10">
-                            <td className="px-4 py-2.5 font-semibold">
-                              {item.service_name}
-                              {item.parent_bundle_name && (
-                                <span className="block text-[9px] text-earth-primary font-medium mt-0.5">
-                                  Bundle: {item.parent_bundle_name}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-mono">{formatRp(item.price)}</td>
-                            <td className="px-4 py-2.5">
-                              {item.therapists?.name || <span className="text-zinc-405">—</span>}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-amber-600 font-mono font-semibold">
-                              {formatRp(item.commission_earned)}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-blue-500 font-mono">
-                              {item.bhp_cost ? formatRp(item.bhp_cost) : '—'}
-                            </td>
-                          </tr>
-                        ))
+                        selectedBooking.booking_items.map((item, idx) => {
+                          const isTransport = item.service_name === 'Biaya Transport';
+                          const serviceItems = selectedBooking.booking_items ? selectedBooking.booking_items.filter(i => i.service_name !== 'Biaya Transport') : [];
+                          const grossTotal = serviceItems.reduce((s, i) => s + (i.price || 0), 0);
+                          
+                          const sharedDisc = selectedBooking.shared_discount_total || 0;
+                          const therapistDisc = selectedBooking.therapist_discount_total || 0;
+                          
+                          const itemSharedDisc = !isTransport && grossTotal > 0 ? Math.round((item.price / grossTotal) * sharedDisc) : 0;
+                          const itemTherapistDisc = !isTransport && grossTotal > 0 ? Math.round((item.price / grossTotal) * therapistDisc) : 0;
+                          
+                          const therapistRate = item.therapists?.commission_pct ?? 30;
+                          
+                          const therapistBearsShared = !isTransport ? Math.round(itemSharedDisc * 50 / 100) : 0;
+                          const maxBasisReduction = !isTransport ? Math.round(item.price * 5 / 100) : 0;
+                          const basisReduction = !isTransport ? Math.min(itemTherapistDisc, maxBasisReduction) : 0;
+                          const itemBasis = !isTransport ? item.price - basisReduction : 0;
+                          const transportPct = isTransport && item.price > 0 ? Math.round((item.commission_earned / item.price) * 100) : 0;
+
+                          return (
+                            <tr key={item.id || idx} className="hover:bg-zinc-50/30 dark:hover:bg-zinc-800/10">
+                              <td className="px-4 py-2.5">
+                                <span className="font-semibold block">{item.service_name}</span>
+                                {item.parent_bundle_name && (
+                                  <span className="block text-[9px] text-earth-primary font-medium mt-0.5">
+                                    Bundle: {item.parent_bundle_name}
+                                  </span>
+                                )}
+                                {!isTransport && (itemSharedDisc > 0 || itemTherapistDisc > 0) && (
+                                  <div className="space-y-0.5 mt-0.5">
+                                    {itemSharedDisc > 0 && (
+                                      <span className="block text-[9px] text-zinc-400 font-medium">
+                                        Shared 50-50: 50% dari {formatRp(itemSharedDisc)} = -{formatRp(therapistBearsShared)}
+                                      </span>
+                                    )}
+                                    {itemTherapistDisc > 0 && (
+                                      <span className="block text-[9px] text-zinc-400 font-medium">
+                                        Beban Terapis (Cap 5%): Potong Basis -{formatRp(basisReduction)} (max {formatRp(maxBasisReduction)})
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono">{formatRp(item.price)}</td>
+                              <td className="px-4 py-2.5">
+                                <div>{item.therapists?.name || <span className="text-zinc-405">—</span>}</div>
+                                {item.therapists?.commission_pct !== undefined && (
+                                  <span className="text-[9px] text-zinc-400 block mt-0.5">
+                                    Setting Rate: {item.therapists.commission_pct}%
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-amber-600 font-mono">
+                                <span className="font-semibold block">{formatRp(item.commission_earned)}</span>
+                                {item.therapist_id && (
+                                  <span className="text-[9px] text-zinc-400 block mt-0.5">
+                                    {isTransport ? (
+                                      `(${transportPct}% dari Transport)`
+                                    ) : (
+                                      `(${therapistRate}% dari ${formatRp(itemBasis)})` +
+                                      (therapistBearsShared > 0 ? ` - ${formatRp(therapistBearsShared)} (Shared)` : '')
+                                    )}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right text-blue-500 font-mono">
+                                {item.bhp_cost ? formatRp(item.bhp_cost) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
                           <td colSpan={5} className="px-4 py-6 text-center text-zinc-450">
@@ -807,16 +860,42 @@ export default function ReportsPage() {
                         <span>Total Diskon Pelanggan</span>
                         <span className="font-mono">-{formatRp(selectedBooking.discount_total)}</span>
                       </div>
-                      <div className="pl-4 space-y-1 text-[11px] text-zinc-500">
-                        <div className="flex justify-between">
-                          <span>Ditanggung Owner Bersih (Non-Shared)</span>
-                          <span className="font-mono">{formatRp(selectedBooking.discount_total - (selectedBooking.shared_discount_total || 0))}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Potongan DPP Basis Terapis (Shared)</span>
-                          <span className="font-mono">{formatRp(selectedBooking.shared_discount_total || 0)}</span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const totalDisc = selectedBooking.discount_total || 0;
+                        const sharedDisc = selectedBooking.shared_discount_total || 0;
+                        const rawTherapistDisc = selectedBooking.therapist_discount_total || 0;
+                        
+                        const serviceItems = selectedBooking.booking_items ? selectedBooking.booking_items.filter(i => i.service_name !== 'Biaya Transport') : [];
+                        const grossTotal = serviceItems.reduce((s, i) => s + (i.price || 0), 0);
+                        
+                        const maxTherapistBears = Math.round(grossTotal * 5 / 100);
+                        const actualTherapistBears = Math.min(rawTherapistDisc, maxTherapistBears);
+                        const excessOwnerBears = rawTherapistDisc - actualTherapistBears;
+                        
+                        const pureOwnerBears = totalDisc - sharedDisc - rawTherapistDisc;
+                        const totalOwnerBears = pureOwnerBears + excessOwnerBears;
+                        
+                        return (
+                          <div className="space-y-1 text-[11px] text-zinc-500">
+                            <div className="flex justify-between">
+                              <span>Ditanggung Owner Bersih (Non-Shared)</span>
+                              <span className="font-mono">{formatRp(totalOwnerBears)}</span>
+                            </div>
+                            {sharedDisc > 0 ? (
+                              <div className="flex justify-between">
+                                <span>Potongan DPP Basis Terapis (Shared 50-50)</span>
+                                <span className="font-mono">{formatRp(sharedDisc)}</span>
+                              </div>
+                            ) : null}
+                            {rawTherapistDisc > 0 ? (
+                              <div className="flex justify-between">
+                                <span>Potongan DPP Basis Terapis (Terapis Cap 5%)</span>
+                                <span className="font-mono">{formatRp(actualTherapistBears)}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : null}
 

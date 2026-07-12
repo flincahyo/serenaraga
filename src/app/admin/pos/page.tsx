@@ -30,19 +30,49 @@ type CartItem = {
 type Therapist = { id: string; name: string; commission_pct: number };
 type Discount = {
   id: string; name: string; type: string; value_type: string; value: number;
-  min_orders: number | null; is_active: boolean; valid_from: string | null; valid_to: string | null;
+  min_orders: number | null; max_uses: number | null; uses_count: number;
+  is_active: boolean; valid_from: string | null; valid_to: string | null;
   is_owner_borne?: boolean;
+  target_type?: 'global' | 'service' | 'category';
+  target_service_id?: string | null;
+  target_category_id?: string | null;
 };
+
+function computeAmount(d: Discount, gross: number, cart: any[] = [], servicesList: any[] = []): number {
+  if (d.target_type === 'service' && d.target_service_id) {
+    const matchingItems = cart.filter(item => item.service_id === d.target_service_id);
+    const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
+    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
+    return matchingGross > 0 ? d.value : 0;
+  }
+  
+  if (d.target_type === 'category' && d.target_category_id) {
+    const matchingItems = cart.filter(item => {
+      const svc = servicesList.find(s => s.id === item.service_id);
+      return svc && svc.category === d.target_category_id;
+    });
+    const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
+    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
+    return matchingGross > 0 ? d.value : 0;
+  }
+
+  if (d.value_type === 'percentage') return Math.round(gross * d.value / 100);
+  return d.value;
+}
 type Customer = { id: string; wa_number: string; name: string | null; visit_count_base: number };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  packages: 'Paket', services: 'Layanan', reflexology: 'Refleksi', addons: 'Add-On',
-};
-const CATEGORY_COLORS: Record<string, string> = {
-  packages: 'bg-earth-primary/10 text-earth-primary border-earth-primary/20',
-  services: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800',
-  reflexology: 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800',
-  addons: 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
+const getCategoryColor = (catId: string, idx: number): string => {
+  const colors = [
+    'bg-earth-primary/10 text-earth-primary border-earth-primary/20',
+    'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800',
+    'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800',
+    'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800',
+    'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800',
+    'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800',
+  ];
+  if (catId === 'packages') return colors[0];
+  if (idx === -1) return 'bg-zinc-100 text-zinc-500 border-zinc-200';
+  return colors[(idx + 1) % colors.length];
 };
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 const pad = (n: number) => String(n).padStart(3, '0');
@@ -67,6 +97,7 @@ export default function POSPage() {
   const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.');
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [dbCategories, setDbCategories]     = useState<any[]>([]);
   const [search, setSearch]         = useState('');
   const [customer, setCustomer]     = useState<Customer | null>(null);
   const [visitCount, setVisitCount] = useState<number>(0);
@@ -76,6 +107,13 @@ export default function POSPage() {
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
   const [lookingUp, setLookingUp]   = useState(false);
+
+  // ── Totals ──
+  const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
+  const discountAmount = autoDiscount
+    ? computeAmount(autoDiscount, subtotal, cart, services)
+    : 0;
+  const total = Math.max(0, subtotal - discountAmount);
 
   // Reset saved status and invoice number on changes to cart or details
   useEffect(() => {
@@ -87,17 +125,28 @@ export default function POSPage() {
 
   // ── Fetch data ──
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: therapistData }, { data: discData }, { data: settingsData }] = await Promise.all([
+    const [{ data: svcData }, { data: therapistData }, { data: discData }, { data: settingsData }, { data: catData }] = await Promise.all([
       supabase.from('services')
         .select('id,name,price,details,category,is_bundle,bundle_child_ids')
         .neq('category', 'split_items').order('category').order('sort_order'),
       supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
       supabase.from('discounts').select('*').eq('is_active', true),
       supabase.from('settings').select('key, value').in('key', ['invoice_footer_text','invoice_social_text']),
+      supabase.from('service_categories').select('*').neq('id', 'split_items').order('sort_order'),
     ]);
     if (svcData)      setServices(svcData);
     if (therapistData) setTherapists(therapistData);
     if (discData)     setDiscounts(discData);
+    if (catData && catData.length > 0) {
+      setDbCategories(catData);
+    } else {
+      setDbCategories([
+        { id: 'packages', label: 'Paket' },
+        { id: 'services', label: 'Layanan' },
+        { id: 'reflexology', label: 'Refleksi' },
+        { id: 'addons', label: 'Add-On' },
+      ]);
+    }
     if (settingsData) settingsData.forEach(({ key, value }) => {
       if (key === 'invoice_footer_text') setInvoiceFooter(value);
       if (key === 'invoice_social_text') setInvoiceSocial(value);
@@ -110,7 +159,7 @@ export default function POSPage() {
     let phone = customerPhone.replace(/\D/g, '');
     // Bug #5: Normalize 08xxx -> 628xxx before lookup
     if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    if (phone.length < 6) { setCustomer(null); setVisitCount(0); setAutoDiscount(null); return; }
+    if (phone.length < 6) { setCustomer(null); setVisitCount(0); return; }
     const t = setTimeout(async () => {
       setLookingUp(true);
       const { data: cust } = await supabase.from('customers').select('*').eq('wa_number', phone).single();
@@ -120,22 +169,60 @@ export default function POSPage() {
           .select('*', { count: 'exact', head: true }).eq('status', 'Completed').eq('phone', phone);
         const totalVisits = (cust.visit_count_base ?? 0) + (count ?? 0);
         setVisitCount(totalVisits);
-
-        // Bug #2: Fix type string — 'loyal' not 'loyalty'
-        const today = new Date().toISOString().split('T')[0];
-        const eligible = discounts.filter(d =>
-          d.is_active && d.type === 'loyal' &&
-          (!d.valid_from || today >= d.valid_from) && (!d.valid_to || today <= d.valid_to) &&
-          (d.min_orders === null || totalVisits >= d.min_orders)
-        ).sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0));
-        setAutoDiscount(eligible[0] ?? null);
       } else {
-        setCustomer(null); setVisitCount(0); setAutoDiscount(null);
+        setCustomer(null); setVisitCount(0);
       }
       setLookingUp(false);
     }, 600);
     return () => clearTimeout(t);
-  }, [customerPhone, discounts]);
+  }, [customerPhone]);
+
+  // Reactively calculate eligible discounts and select the best one (highest savings)
+  useEffect(() => {
+    if (cart.length === 0) {
+      setAutoDiscount(null);
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const eligible = discounts.filter(d => {
+      if (!d.is_active) return false;
+      if (d.valid_from && today < d.valid_from) return false;
+      if (d.valid_to && today > d.valid_to) return false;
+      if (d.max_uses !== null && d.uses_count >= d.max_uses) return false;
+
+      // Customer specific
+      if (d.type === 'first_customer') return customer && visitCount === 0;
+      if (d.type === 'loyal') return customer && d.min_orders !== null && visitCount >= d.min_orders;
+
+      // Targeted service
+      if (d.target_type === 'service' && d.target_service_id) {
+        return cart.some(c => c.service_id === d.target_service_id);
+      }
+
+      // Targeted category
+      if (d.target_type === 'category' && d.target_category_id) {
+        return cart.some(c => {
+          const svc = services.find(s => s.id === c.service_id);
+          return svc && svc.category === d.target_category_id;
+        });
+      }
+
+      return false;
+    });
+
+    let bestDiscount: Discount | null = null;
+    let maxAmount = 0;
+
+    eligible.forEach(d => {
+      const amt = computeAmount(d, subtotal, cart, services);
+      if (amt > maxAmount) {
+        maxAmount = amt;
+        bestDiscount = d;
+      }
+    });
+
+    setAutoDiscount(bestDiscount);
+  }, [cart, customer, visitCount, discounts, subtotal, services]);
 
   // ── Cart helpers ──
   const addToCart = (svc: Service) => {
@@ -172,17 +259,10 @@ export default function POSPage() {
   const updateTherapist = (key: string, therapist_id: string) =>
     setCart(prev => prev.map(c => c.key === key ? { ...c, therapist_id } : c));
 
-  // ── Totals ──
-  const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
-  const discountAmount = autoDiscount
-    ? autoDiscount.value_type === 'percentage'
-      ? Math.round(subtotal * autoDiscount.value / 100)
-      : autoDiscount.value
-    : 0;
-  const total = Math.max(0, subtotal - discountAmount);
+  // ── Totals ── (moved to top of component)
 
   // ── Filtered services ──
-  const categories = ['all', ...Array.from(new Set(services.map(s => s.category)))];
+  const categories = ['all', ...dbCategories.map(c => c.id)];
   const filtered = services.filter(s => {
     const matchCat = activeCategory === 'all' || s.category === activeCategory;
     const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase());
@@ -376,19 +456,23 @@ export default function POSPage() {
 
           {/* Category pills */}
           <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 scrollbar-hide">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                  activeCategory === cat
-                    ? 'bg-earth-primary text-white border-earth-primary'
-                    : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/40'
-                }`}
-              >
-                {cat === 'all' ? '✦ Semua' : (CATEGORY_LABELS[cat] ?? cat)}
-              </button>
-            ))}
+            {categories.map(catId => {
+              const catObj = dbCategories.find(c => c.id === catId);
+              const label = catId === 'all' ? '✦ Semua' : (catObj?.label ?? catId);
+              return (
+                <button
+                  key={catId}
+                  onClick={() => setActiveCategory(catId)}
+                  className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                    activeCategory === catId
+                      ? 'bg-earth-primary text-white border-earth-primary'
+                      : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/40'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -402,8 +486,8 @@ export default function POSPage() {
                 className="group text-left bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-4 hover:border-earth-primary/50 hover:shadow-md transition-all duration-200 active:scale-[0.97]"
               >
                 {/* Category badge */}
-                <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border mb-3 ${CATEGORY_COLORS[svc.category] ?? 'bg-zinc-100 text-zinc-500 border-zinc-200'}`}>
-                  {CATEGORY_LABELS[svc.category] ?? svc.category}
+                <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border mb-3 ${getCategoryColor(svc.category, dbCategories.findIndex(c => c.id === svc.category))}`}>
+                  {dbCategories.find(c => c.id === svc.category)?.label ?? svc.category}
                   {svc.is_bundle && <Sparkles size={8} className="ml-1" />}
                 </div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-white leading-snug mb-1 group-hover:text-earth-primary transition-colors">{svc.name}</p>

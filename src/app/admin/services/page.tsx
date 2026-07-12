@@ -54,12 +54,18 @@ const svcMatCost = (sm: SvcMat) => {
   return sm.qty_multiplier * (m.pack_price / m.customers_per_pack);
 };
 
-const CATEGORIES = [
-  { id: 'packages',    label: 'Massage Packages' },
-  { id: 'services',   label: 'Massage Services' },
-  { id: 'reflexology',label: 'Refleksi Service' },
-  { id: 'addons',     label: 'Add-On Service' },
-  { id: 'split_items',label: 'Internal Split Item' },
+type ServiceCategory = {
+  id: string;
+  label: string;
+  sort_order: number;
+};
+
+const DEFAULT_CATEGORIES: ServiceCategory[] = [
+  { id: 'packages',    label: 'Massage Packages', sort_order: 1 },
+  { id: 'services',   label: 'Massage Services', sort_order: 2 },
+  { id: 'reflexology',label: 'Refleksi Service', sort_order: 3 },
+  { id: 'addons',     label: 'Add-On Service', sort_order: 4 },
+  { id: 'split_items',label: 'Internal Split Item', sort_order: 5 },
 ];
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -109,6 +115,7 @@ function CommissionCalc({ price, split, onSplitChange }: {
 
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>(DEFAULT_CATEGORIES);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('packages');
   const [editId, setEditId] = useState<string | null>(null);
@@ -122,6 +129,12 @@ export default function ServicesPage() {
     is_bundle: false, bundle_child_ids: [], estimated_duration: 90,
   });
   const [newSplit, setNewSplit] = useState(30);
+
+  // Category management state
+  const [showManageCats, setShowManageCats] = useState(false);
+  const [newCatId, setNewCatId]             = useState('');
+  const [newCatLabel, setNewCatLabel]       = useState('');
+  const [catSaving, setCatSaving]           = useState(false);
 
   // BHP state
   const [allMaterials, setAllMaterials]     = useState<Material[]>([]);
@@ -137,14 +150,90 @@ export default function ServicesPage() {
 
   const fetchServices = useCallback(async () => {
     setLoading(true);
-    const [{ data: svcData }, { data: matData }] = await Promise.all([
+    const [{ data: svcData }, { data: matData }, { data: catData }] = await Promise.all([
       supabase.from('services').select('*').order('category').order('sort_order'),
       supabase.from('materials').select('id,name,pack_label,pack_price,customers_per_pack,is_global').order('name'),
+      supabase.from('service_categories').select('*').order('sort_order'),
     ]);
     if (svcData) setServices(svcData);
     if (matData) setAllMaterials(matData);
+    if (catData && catData.length > 0) {
+      setCategories(catData);
+      if (!catData.find(c => c.id === activeTab)) {
+        setActiveTab(catData[0].id);
+      }
+    }
     setLoading(false);
-  }, []);
+  }, [activeTab]);
+
+  const handleAddCategory = async () => {
+    if (!newCatId.trim() || !newCatLabel.trim()) return;
+    setCatSaving(true);
+    const cleanId = newCatId.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const maxOrder = Math.max(0, ...categories.map(c => c.sort_order));
+    const { error } = await supabase.from('service_categories').insert({
+      id: cleanId,
+      label: newCatLabel.trim(),
+      sort_order: maxOrder + 1,
+    });
+    if (error) {
+      alert('Gagal menambah kategori: ' + error.message);
+    } else {
+      setNewCatId('');
+      setNewCatLabel('');
+      await fetchServices();
+    }
+    setCatSaving(false);
+  };
+
+  const handleDeleteCategory = async (catId: string) => {
+    const count = services.filter(s => s.category === catId).length;
+    if (count > 0) {
+      alert(`Kategori ini tidak dapat dihapus karena masih digunakan oleh ${count} layanan. Silakan ubah atau hapus layanan tersebut terlebih dahulu.`);
+      return;
+    }
+    if (!confirm('Hapus kategori ini?')) return;
+    setCatSaving(true);
+    const { error } = await supabase.from('service_categories').delete().eq('id', catId);
+    if (error) {
+      alert('Gagal menghapus kategori: ' + error.message);
+    } else {
+      if (activeTab === catId) {
+        const remaining = categories.filter(c => c.id !== catId);
+        if (remaining.length > 0) setActiveTab(remaining[0].id);
+      }
+      await fetchServices();
+    }
+    setCatSaving(false);
+  };
+
+  const handleMoveCategory = async (catId: string, direction: 'up' | 'down') => {
+    const idx = categories.findIndex(c => c.id === catId);
+    if (idx === -1) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === categories.length - 1) return;
+
+    setCatSaving(true);
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const currentCat = categories[idx];
+    const targetCat = categories[targetIdx];
+
+    const temp = currentCat.sort_order;
+    currentCat.sort_order = targetCat.sort_order;
+    targetCat.sort_order = temp;
+
+    const { error } = await supabase.from('service_categories').upsert([
+      { id: currentCat.id, label: currentCat.label, sort_order: currentCat.sort_order },
+      { id: targetCat.id, label: targetCat.label, sort_order: targetCat.sort_order },
+    ]);
+
+    if (error) {
+      alert('Gagal mengubah urutan: ' + error.message);
+    } else {
+      await fetchServices();
+    }
+    setCatSaving(false);
+  };
 
   useEffect(() => { fetchServices(); }, [fetchServices]);
 
@@ -160,7 +249,7 @@ export default function ServicesPage() {
   }, []);
 
   const filtered = services.filter(s => s.category === activeTab);
-  const cat = CATEGORIES.find(c => c.id === activeTab);
+  const cat = categories.find(c => c.id === activeTab);
 
   const startEdit = (s: Service) => {
     setEditId(s.id);
@@ -256,9 +345,14 @@ export default function ServicesPage() {
             {services.length} layanan · {services.filter(s => s.is_bestseller).length} best seller · {featuredCount} featured
           </p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="admin-btn-primary">
-          <Plus size={16} /> Tambah
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowManageCats(true)} className="admin-btn-ghost py-2">
+            Kelola Kategori
+          </button>
+          <button onClick={() => setShowAdd(true)} className="admin-btn-primary">
+            <Plus size={16} /> Tambah
+          </button>
+        </div>
       </div>
 
       {/* Legend */}
@@ -269,7 +363,7 @@ export default function ServicesPage() {
 
       {/* Category Tabs */}
       <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg overflow-x-auto">
-        {CATEGORIES.map(c => (
+        {categories.map(c => (
           <button
             key={c.id}
             onClick={() => setActiveTab(c.id)}
@@ -618,6 +712,79 @@ export default function ServicesPage() {
               <button onClick={() => setShowAdd(false)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
               <button onClick={addService} disabled={saving || !newSvc.name} className="admin-btn-primary flex-1 justify-center disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Tambah
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Manage Categories Modal ── */}
+      {showManageCats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 w-full max-w-lg shadow-xl border border-zinc-200 dark:border-zinc-850 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h3 className="font-semibold text-zinc-900 dark:text-white text-sm">Kelola Kategori Layanan</h3>
+              <button onClick={() => setShowManageCats(false)} className="text-zinc-400 hover:text-zinc-600"><X size={18} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-2 py-2 minimal-scrollbar">
+              {categories.map((c, idx) => (
+                <div key={c.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-150 dark:border-zinc-800 rounded-xl">
+                  <div>
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-250">{c.label}</p>
+                    <p className="text-[10px] font-mono text-zinc-400 mt-0.5">ID: {c.id}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleMoveCategory(c.id, 'up')}
+                      disabled={idx === 0 || catSaving}
+                      className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 disabled:opacity-30 text-xs"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => handleMoveCategory(c.id, 'down')}
+                      disabled={idx === categories.length - 1 || catSaving}
+                      className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 disabled:opacity-30 text-xs"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategory(c.id)}
+                      disabled={catSaving}
+                      className="p-1.5 text-zinc-450 hover:text-red-500 transition-colors ml-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3 shrink-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-450 dark:text-zinc-500">Tambah Kategori Baru</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="ID (Cth: couple_massage)"
+                  value={newCatId}
+                  onChange={e => setNewCatId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}
+                  className="admin-input text-xs font-mono"
+                />
+                <input
+                  type="text"
+                  placeholder="Nama Label (Cth: Couple Massage)"
+                  value={newCatLabel}
+                  onChange={e => setNewCatLabel(e.target.value)}
+                  className="admin-input text-xs"
+                />
+              </div>
+              <button
+                onClick={handleAddCategory}
+                disabled={!newCatId.trim() || !newCatLabel.trim() || catSaving}
+                className="admin-btn-primary w-full justify-center text-xs py-2 disabled:opacity-50"
+              >
+                {catSaving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Tambah Kategori
               </button>
             </div>
           </div>

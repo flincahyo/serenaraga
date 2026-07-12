@@ -32,6 +32,9 @@ type Discount = {
   is_owner_borne?: boolean;
   borne_by?: 'owner' | 'shared' | 'therapist';
   is_voucher?: boolean;
+  target_type?: 'global' | 'service' | 'category';
+  target_service_id?: string | null;
+  target_category_id?: string | null;
 };
 type AppliedDiscount = {
   discountId: string; label: string; value_type: string;
@@ -48,15 +51,32 @@ const genInvoiceNo = () => {
   return `SR-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}-${pad(Math.floor(Math.random() * 900) + 100)}`;
 };
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
-const CATEGORY_LABELS: Record<string, string> = {
-  packages: 'Paket Massage', services: 'Massage Services',
-  reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split Item'
-};
+// CATEGORY_LABELS removed in favor of dynamic service_categories database table
 
 // ──────────────────────────────────────────
 // Discount helpers
 // ──────────────────────────────────────────
-function computeAmount(d: Discount, gross: number): number {
+function computeAmount(d: Discount, gross: number, items: Item[] = [], servicesList: Service[] = []): number {
+  if (d.target_type === 'service' && d.target_service_id) {
+    const matchingItems = items.filter(item => {
+      const svc = servicesList.find(s => s.name === item.name);
+      return svc && svc.id === d.target_service_id;
+    });
+    const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price), 0);
+    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
+    return matchingGross > 0 ? d.value : 0;
+  }
+  
+  if (d.target_type === 'category' && d.target_category_id) {
+    const matchingItems = items.filter(item => {
+      const svc = servicesList.find(s => s.name === item.name);
+      return svc && svc.category === d.target_category_id;
+    });
+    const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price), 0);
+    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
+    return matchingGross > 0 ? d.value : 0;
+  }
+
   if (d.value_type === 'percentage') return Math.round(gross * d.value / 100);
   return d.value;
 }
@@ -116,22 +136,36 @@ const InvoiceMaker = () => {
   const [voucherError, setVoucherError]           = useState('');
   const [voucherApplied, setVoucherApplied]       = useState<{id:string;code:string;label:string;value:number;value_type:string} | null>(null);
   const [returningPromos, setReturningPromos]     = useState<Discount[]>([]); // suggested returning customer promos
+  const [categories, setCategories]               = useState<any[]>([]);
 
   const supabase = createClient();
+  const grossTotal = items.reduce((s, i) => s + Number(i.price), 0);
 
   const fetchAll = useCallback(async () => {
-    const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }, { data: therapistData }] = await Promise.all([
+    const [{ data: svcData }, { data: bkgData }, { data: settingsData }, { data: discData }, { data: therapistData }, { data: catData }] = await Promise.all([
       supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids,estimated_duration').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,booking_time,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
-    supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days']),
+      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days']),
       supabase.from('discounts').select('*').eq('is_active', true),
       supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
+      supabase.from('service_categories').select('*').order('sort_order'),
     ]);
     if (svcData) setServices(svcData);
     if (bkgData) setBookings(bkgData);
     if (discData) setAllDiscounts(discData);
     if (therapistData) setTherapists(therapistData);
+    if (catData && catData.length > 0) {
+      setCategories(catData);
+    } else {
+      setCategories([
+        { id: 'packages', label: 'Paket Massage' },
+        { id: 'services', label: 'Massage Services' },
+        { id: 'reflexology', label: 'Refleksi' },
+        { id: 'addons', label: 'Add-On' },
+        { id: 'split_items', label: 'Internal Split Item' },
+      ]);
+    }
     if (settingsData) {
       settingsData.forEach(({ key, value }) => {
         if (key === 'invoice_footer_text') setInvoiceFooter(value);
@@ -284,14 +318,6 @@ const InvoiceMaker = () => {
       }
     }
 
-    // For loyal: keep only the highest tier eligible
-    const loyalEligible = eligible
-      .filter(d => d.type === 'loyal')
-      .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))
-      .slice(0, 1);
-    const firstEligible = eligible.filter(d => d.type === 'first_customer');
-
-    setEligibleDiscounts([...firstEligible, ...loyalEligible]);
     setLookingUpCustomer(false);
   }, [allDiscounts]);
 
@@ -300,6 +326,103 @@ const InvoiceMaker = () => {
     const t = setTimeout(() => { if (customerPhone) lookupCustomer(customerPhone); }, 600);
     return () => clearTimeout(t);
   }, [customerPhone, lookupCustomer]);
+
+  const lastAutoAppliedRef = useRef('');
+
+  // Reactively update applied discounts' amounts when items or subtotal changes (fixes stale amount bug)
+  useEffect(() => {
+    setAppliedDiscounts(prev => {
+      let changed = false;
+      const next = prev.map(a => {
+        const d = allDiscounts.find(x => x.id === a.discountId) ||
+                  (a.discountId.startsWith('voucher_') ? { id: a.discountId, target_type: 'global', value_type: a.value_type, value: a.value } : null);
+        const newAmt = d
+          ? computeAmount(d as any, grossTotal, items, services)
+          : a.value_type === 'percentage' ? Math.round(grossTotal * a.value / 100) : a.value;
+        if (newAmt !== a.amount) {
+          changed = true;
+          return { ...a, amount: newAmt };
+        }
+        return a;
+      });
+      return changed ? next : prev;
+    });
+  }, [items, grossTotal, services, allDiscounts]);
+
+  // Reactive calculation of eligibleDiscounts when cart or customer changes
+  useEffect(() => {
+    if (effectiveCount === null) {
+      setEligibleDiscounts([]);
+      return;
+    }
+    const eligible = allDiscounts.filter(d => {
+      if (!isDiscountValid(d)) return false;
+      if (d.type === 'first_customer') return effectiveCount === 0;
+      if (d.type === 'loyal') return d.min_orders !== null && effectiveCount >= d.min_orders;
+      
+      // Targeted discounts are auto-suggested if cart contains matching service or category
+      if (d.target_type === 'service' && d.target_service_id) {
+        return items.some(item => {
+          const svc = services.find(s => s.name === item.name);
+          return svc && svc.id === d.target_service_id;
+        });
+      }
+      if (d.target_type === 'category' && d.target_category_id) {
+        return items.some(item => {
+          const svc = services.find(s => s.name === item.name);
+          return svc && svc.category === d.target_category_id;
+        });
+      }
+      return false;
+    });
+
+    const loyalEligible = eligible
+      .filter(d => d.type === 'loyal')
+      .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))
+      .slice(0, 1);
+    const nonLoyalEligible = eligible.filter(d => d.type !== 'loyal');
+
+    setEligibleDiscounts([...nonLoyalEligible, ...loyalEligible]);
+  }, [allDiscounts, effectiveCount, items, services]);
+
+  // Auto-apply best eligible discount (highest savings)
+  useEffect(() => {
+    if (eligibleDiscounts.length === 0) {
+      setAppliedDiscounts(prev => prev.filter(a => !allDiscounts.some(d => d.id === a.discountId && (d.type === 'first_customer' || d.type === 'loyal' || d.target_type !== 'global'))));
+      return;
+    }
+
+    const cartStateStr = `${customerPhone}-${items.map(i => `${i.name}-${i.price}`).join(',')}`;
+    if (lastAutoAppliedRef.current === cartStateStr) return;
+    lastAutoAppliedRef.current = cartStateStr;
+
+    let bestDiscount: any = null;
+    let maxAmount = 0;
+
+    eligibleDiscounts.forEach(d => {
+      const amt = computeAmount(d, grossTotal, items, services);
+      if (amt > maxAmount) {
+        maxAmount = amt;
+        bestDiscount = d;
+      }
+    });
+
+    setAppliedDiscounts(prev => {
+      const clean = prev.filter(a => !eligibleDiscounts.some(e => e.id === a.discountId));
+      if (bestDiscount) {
+        return [...clean, {
+          discountId: bestDiscount.id,
+          label: bestDiscount.name,
+          value_type: bestDiscount.value_type,
+          value: bestDiscount.value,
+          amount: maxAmount,
+          is_owner_borne: bestDiscount.borne_by ? (bestDiscount.borne_by === 'owner') : (bestDiscount.is_owner_borne ?? true),
+          borne_by: bestDiscount.borne_by ?? (bestDiscount.is_owner_borne ? 'owner' : 'shared'),
+        }];
+      }
+      return clean;
+    });
+  }, [eligibleDiscounts, grossTotal, items, services, customerPhone, allDiscounts]);
 
   // ── Booking select ──
   const onBookingSelect = async (bookingId: string) => {
@@ -417,19 +540,21 @@ const InvoiceMaker = () => {
   };
 
   // ── Discount ops ──
-  const grossTotal = items.reduce((s, i) => s + Number(i.price), 0);
 
   const toggleEligibleDiscount = (d: Discount) => {
     const already = appliedDiscounts.find(a => a.discountId === d.id);
     if (already) {
       setAppliedDiscounts(prev => prev.filter(a => a.discountId !== d.id));
     } else {
-      setAppliedDiscounts(prev => [...prev, {
-        discountId: d.id, label: d.name, value_type: d.value_type,
-        value: d.value, amount: computeAmount(d, grossTotal),
-        is_owner_borne: d.borne_by ? (d.borne_by === 'owner') : (d.is_owner_borne ?? true),
-        borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'),
-      }]);
+      setAppliedDiscounts(prev => {
+        const clean = prev.filter(a => !eligibleDiscounts.some(e => e.id === a.discountId));
+        return [...clean, {
+          discountId: d.id, label: d.name, value_type: d.value_type,
+          value: d.value, amount: computeAmount(d, grossTotal, items, services),
+          is_owner_borne: d.borne_by ? (d.borne_by === 'owner') : (d.is_owner_borne ?? true),
+          borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'),
+        }];
+      });
     }
   };
 
@@ -439,7 +564,7 @@ const InvoiceMaker = () => {
     if (!d || appliedDiscounts.find(a => a.discountId === d.id)) return;
     setAppliedDiscounts(prev => [...prev, {
       discountId: d.id, label: d.name, value_type: d.value_type,
-      value: d.value, amount: computeAmount(d, grossTotal),
+      value: d.value, amount: computeAmount(d, grossTotal, items, services),
       is_owner_borne: d.borne_by ? (d.borne_by === 'owner') : (d.is_owner_borne ?? true),
       borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'),
     }]);
@@ -855,7 +980,7 @@ const InvoiceMaker = () => {
                 <p className="text-[11px] font-medium text-zinc-500">Diskon tersedia:</p>
                 {eligibleDiscounts.map(d => {
                   const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
-                  const amt = computeAmount(d, grossTotal);
+                  const amt = computeAmount(d, grossTotal, items, services);
                   return (
                     <label key={d.id} className="flex items-center gap-2.5 cursor-pointer group">
                       <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
@@ -888,7 +1013,7 @@ const InvoiceMaker = () => {
                         {d.name} — {d.value_type === 'percentage' ? `${d.value}%` : formatRp(d.value)}
                       </span>
                       <span className={`text-xs font-mono font-semibold ${applied ? 'text-orange-500' : 'text-orange-300'}`}>
-                        -{formatRp(computeAmount(d, grossTotal))}
+                        -{formatRp(computeAmount(d, grossTotal, items, services))}
                       </span>
                     </label>
                   );
@@ -995,9 +1120,9 @@ const InvoiceMaker = () => {
               <div key={item.id} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-2 border border-zinc-200 dark:border-zinc-700">
                 <select value={item.name} onChange={e => onServiceSelect(item.id, e.target.value)} className="admin-input text-xs">
                   <option value="">-- Pilih dari pricelist (opsional) --</option>
-                  {['packages', 'services', 'reflexology', 'addons', 'split_items'].map(cat => (
-                    <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
-                      {services.filter(s => s.category === cat).map(s => (
+                  {categories.map(cat => (
+                    <optgroup key={cat.id} label={cat.label}>
+                      {services.filter(s => s.category === cat.id).map(s => (
                         <option key={s.id} value={s.name}>{s.name} — Rp {s.price.toLocaleString('id-ID')}</option>
                       ))}
                     </optgroup>

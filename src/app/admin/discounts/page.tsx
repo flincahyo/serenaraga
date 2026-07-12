@@ -22,6 +22,9 @@ type Discount = {
   is_voucher?: boolean;
   buyer_name?: string | null;
   code?: string | null;
+  target_type?: 'global' | 'service' | 'category';
+  target_service_id?: string | null;
+  target_category_id?: string | null;
 };
 
 type DiscountForm = Omit<Discount, 'id' | 'uses_count' | 'created_at'>;
@@ -31,6 +34,9 @@ const EMPTY_FORM: DiscountForm = {
   value: 10, min_orders: 5, valid_from: null, valid_to: null,
   max_uses: null, is_active: true, is_owner_borne: true,
   borne_by: 'owner',
+  target_type: 'global',
+  target_service_id: null,
+  target_category_id: null,
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -50,10 +56,10 @@ const TYPE_COLORS: Record<DiscountType, string> = {
 
 // DiscountForm component outside parent to prevent cursor loss
 function DiscountFormPanel({
-  data, saving, isNew,
+  data, saving, isNew, services = [], categories = [],
   onChange, onSave, onCancel,
 }: {
-  data: DiscountForm; saving: boolean; isNew: boolean;
+  data: DiscountForm; saving: boolean; isNew: boolean; services?: any[]; categories?: any[];
   onChange: (d: DiscountForm) => void; onSave: () => void; onCancel: () => void;
 }) {
   const previewCost = data.value_type === 'percentage'
@@ -170,6 +176,42 @@ function DiscountFormPanel({
         </div>
       </div>
 
+      {/* Target Diskon */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+        <div>
+          <label className="text-xs font-medium text-zinc-500 mb-1 block">Target Diskon</label>
+          <select className="admin-input" value={data.target_type ?? 'global'}
+            onChange={e => {
+              const val = e.target.value as 'global' | 'service' | 'category';
+              onChange({ ...data, target_type: val, target_service_id: null, target_category_id: null });
+            }}>
+            <option value="global">Semua Layanan (Global)</option>
+            <option value="service">Layanan Spesifik</option>
+            <option value="category">Kategori Layanan</option>
+          </select>
+        </div>
+        {(data.target_type === 'service') && (
+          <div className="sm:col-span-2">
+            <label className="text-xs font-medium text-zinc-500 mb-1 block">Pilih Layanan</label>
+            <select className="admin-input" value={data.target_service_id ?? ''}
+              onChange={e => onChange({ ...data, target_service_id: e.target.value || null })}>
+              <option value="">-- Pilih Layanan --</option>
+              {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
+        {(data.target_type === 'category') && (
+          <div className="sm:col-span-2">
+            <label className="text-xs font-medium text-zinc-500 mb-1 block">Pilih Kategori</label>
+            <select className="admin-input" value={data.target_category_id ?? ''}
+              onChange={e => onChange({ ...data, target_category_id: e.target.value || null })}>
+              <option value="">-- Pilih Kategori --</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         {/* Max uses */}
         <div>
@@ -208,6 +250,8 @@ function DiscountFormPanel({
 
 export default function DiscountsPage() {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [services, setServices]   = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading]     = useState(true);
   const [editId, setEditId]       = useState<string | null>(null);
   const [editData, setEditData]   = useState<DiscountForm>(EMPTY_FORM);
@@ -222,8 +266,14 @@ export default function DiscountsPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('discounts').select('*').order('type').order('min_orders', { ascending: true, nullsFirst: true });
+    const [{ data }, { data: svcData }, { data: catData }] = await Promise.all([
+      supabase.from('discounts').select('*').order('type').order('min_orders', { ascending: true, nullsFirst: true }),
+      supabase.from('services').select('id, name').order('name'),
+      supabase.from('service_categories').select('id, label').order('sort_order'),
+    ]);
     if (data) setDiscounts(data);
+    if (svcData) setServices(svcData);
+    if (catData) setCategories(catData);
     setLoading(false);
   }, []);
 
@@ -232,27 +282,43 @@ export default function DiscountsPage() {
   const saveEdit = async () => {
     if (!editId) return;
     setSaving(true);
+    
+    // Clean database payload to avoid sending virtual fields like 'borne_by'
+    const { borne_by, ...dbPayload } = editData;
     const payload = {
-      ...editData,
-      is_owner_borne: editData.borne_by === 'owner'
+      ...dbPayload,
+      is_owner_borne: borne_by === 'owner'
     };
-    await supabase.from('discounts').update(payload).eq('id', editId);
-    await fetchData();
-    setEditId(null);
+
+    const { error } = await supabase.from('discounts').update(payload).eq('id', editId);
+    if (error) {
+      alert("Gagal menyimpan diskon: " + error.message);
+    } else {
+      await fetchData();
+      setEditId(null);
+    }
     setSaving(false);
   };
 
   const addDiscount = async () => {
     setSaving(true);
+    
+    // Clean database payload to avoid sending virtual fields like 'borne_by'
+    const { borne_by, ...dbPayload } = newDisc;
     const payload = {
-      ...newDisc,
-      is_owner_borne: newDisc.borne_by === 'owner',
+      ...dbPayload,
+      is_owner_borne: borne_by === 'owner',
       uses_count: 0
     };
-    await supabase.from('discounts').insert(payload);
-    await fetchData();
-    setShowAdd(false);
-    setNewDisc(EMPTY_FORM);
+
+    const { error } = await supabase.from('discounts').insert(payload);
+    if (error) {
+      alert("Gagal menambah diskon: " + error.message);
+    } else {
+      await fetchData();
+      setShowAdd(false);
+      setNewDisc(EMPTY_FORM);
+    }
     setSaving(false);
   };
 
@@ -354,7 +420,7 @@ export default function DiscountsPage() {
 
       {/* Add form */}
       {showAdd && (
-        <DiscountFormPanel data={newDisc} saving={saving} isNew
+        <DiscountFormPanel data={newDisc} saving={saving} isNew services={services} categories={categories}
           onChange={setNewDisc} onSave={addDiscount} onCancel={() => setShowAdd(false)} />
       )}
 
@@ -418,7 +484,7 @@ export default function DiscountsPage() {
                       {items.map(d => (
                         <div key={d.id}>
                           {editId === d.id ? (
-                            <DiscountFormPanel data={editData} saving={saving} isNew={false}
+                            <DiscountFormPanel data={editData} saving={saving} isNew={false} services={services} categories={categories}
                               onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
                           ) : (
                             <div className={`bg-zinc-50 dark:bg-zinc-800/50 border rounded-2xl p-4 flex items-start gap-4 transition-all hover:bg-white dark:hover:bg-zinc-800 ${!d.is_active ? 'opacity-60 grayscale-[30%]' : ''} ${d.is_active ? 'border-zinc-200 dark:border-zinc-700/50' : 'border-zinc-100 dark:border-zinc-800/30'}`}>
@@ -433,6 +499,16 @@ export default function DiscountsPage() {
                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tracking-wider uppercase ${TYPE_COLORS[d.type]}`}>
                                     {TYPE_LABELS[d.type]}
                                   </span>
+                                  {d.target_type === 'service' && d.target_service_id && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-750 dark:bg-blue-950/30 dark:text-blue-400 tracking-wider">
+                                      🎯 {services.find(s => s.id === d.target_service_id)?.name ?? 'Layanan'}
+                                    </span>
+                                  )}
+                                  {d.target_type === 'category' && d.target_category_id && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-750 dark:bg-purple-950/30 dark:text-purple-400 tracking-wider">
+                                      🎯 {categories.find(c => c.id === d.target_category_id)?.label ?? 'Kategori'}
+                                    </span>
+                                  )}
                                   {!d.is_active && <span className="text-[10px] font-bold tracking-wider uppercase text-zinc-400">(Nonaktif)</span>}
                                 </div>
                                 {d.description && <p className="text-xs text-zinc-500 mt-1 font-medium">{d.description}</p>}
@@ -461,7 +537,7 @@ export default function DiscountsPage() {
                                   className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 transition-colors" title={d.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
                                   {d.is_active ? <ToggleRight size={16} className="text-emerald-500" /> : <ToggleLeft size={16} />}
                                 </button>
-                                <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared') }); setShowAdd(false); }}
+                                <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'), target_type: d.target_type ?? 'global', target_service_id: d.target_service_id ?? null, target_category_id: d.target_category_id ?? null }); setShowAdd(false); }}
                                   className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400 transition-colors">
                                   <Pencil size={14} />
                                 </button>
@@ -484,7 +560,7 @@ export default function DiscountsPage() {
           {regularDiscounts.map(d => (
             <div key={d.id}>
               {editId === d.id ? (
-                <DiscountFormPanel data={editData} saving={saving} isNew={false}
+                <DiscountFormPanel data={editData} saving={saving} isNew={false} services={services} categories={categories}
                   onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
               ) : (
                 <div className={`bg-white dark:bg-zinc-900/40 border rounded-3xl p-5 flex items-start gap-4 transition-all hover:shadow-md hover:-translate-y-0.5 duration-300 group ${!d.is_active ? 'opacity-60 grayscale-[30%]' : ''} ${d.is_active ? 'border-zinc-200/60 dark:border-zinc-800' : 'border-zinc-100 dark:border-zinc-800/30'}`}>
@@ -499,6 +575,16 @@ export default function DiscountsPage() {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${TYPE_COLORS[d.type]}`}>
                         {TYPE_LABELS[d.type]}
                       </span>
+                      {d.target_type === 'service' && d.target_service_id && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-755 dark:bg-blue-950/30 dark:text-blue-400 tracking-wider">
+                          🎯 {services.find(s => s.id === d.target_service_id)?.name ?? 'Layanan'}
+                        </span>
+                      )}
+                      {d.target_type === 'category' && d.target_category_id && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-755 dark:bg-purple-950/30 dark:text-purple-400 tracking-wider">
+                          🎯 {categories.find(c => c.id === d.target_category_id)?.label ?? 'Kategori'}
+                        </span>
+                      )}
                       {!d.is_active && <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">(Nonaktif)</span>}
                     </div>
                     {d.description && <p className="text-xs text-zinc-500 mt-1.5 font-medium">{d.description}</p>}
@@ -532,7 +618,7 @@ export default function DiscountsPage() {
                       className="p-2.5 rounded-xl hover:bg-white dark:hover:bg-zinc-700 text-zinc-400 shadow-sm transition-all active:scale-[0.98]" title={d.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
                       {d.is_active ? <ToggleRight size={18} className="text-emerald-500" /> : <ToggleLeft size={18} />}
                     </button>
-                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared') }); setShowAdd(false); }}
+                    <button onClick={() => { setEditId(d.id); setEditData({ name: d.name, description: d.description, type: d.type, value_type: d.value_type, value: d.value, min_orders: d.min_orders, valid_from: d.valid_from, valid_to: d.valid_to, max_uses: d.max_uses, is_active: d.is_active, is_owner_borne: d.is_owner_borne ?? true, borne_by: d.borne_by ?? (d.is_owner_borne ? 'owner' : 'shared'), target_type: d.target_type ?? 'global', target_service_id: d.target_service_id ?? null, target_category_id: d.target_category_id ?? null }); setShowAdd(false); }}
                       className="p-2.5 rounded-xl hover:bg-white dark:hover:bg-zinc-700 text-blue-500 shadow-sm transition-all active:scale-[0.98]">
                       <Pencil size={14} />
                     </button>

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   CalendarCheck, Clock, ShoppingBag, TrendingUp, Wallet,
-  ArrowUpRight, Loader2, CalendarDays, ChevronLeft, ChevronRight, X, Star, Info,
+  ArrowUpRight, Loader2, CalendarDays, ChevronLeft, ChevronRight, X, Star, Info, Users,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
@@ -145,6 +145,8 @@ export default function DashboardPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{today}</p>
         </div>
 
+
+
         {/* Quick stats untuk kasir */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
@@ -269,6 +271,8 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+
 
       {loading ? (
         <AdminSkeleton rows={6} />

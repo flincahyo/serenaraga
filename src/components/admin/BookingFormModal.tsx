@@ -26,9 +26,7 @@ type Props = {
 };
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
-const CATEGORY_LABELS: Record<string, string> = {
-  packages: 'Paket', services: 'Layanan', reflexology: 'Refleksi', addons: 'Add-On', split_items: 'Internal Split',
-};
+// CATEGORY_LABELS removed in favor of dynamic service_categories database table
 const EMPTY_ITEM = (): BookingItemRow => ({ tempId: Date.now() + Math.random(), service_id: '', service_name: '', price: 0, duration: '', therapist_id: '' });
 const EMPTY_FORM = (date = '') => ({ customer_name: '', phone: '62', booking_date: date, booking_time: '', status: 'Pending', notes: '', discount_total: 0, shared_discount_total: 0, therapist_discount_total: 0 });
 const fmt = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -45,9 +43,28 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
   const [showNameSug, setShowNameSug] = useState(false);
   const [showPhoneSug, setShowPhoneSug] = useState(false);
 
+  const [categories, setCategories] = useState<any[]>([]);
+
   // Reset / load on open
   useEffect(() => {
     if (!open) return;
+
+    // Fetch categories dynamically
+    supabase.from('service_categories').select('*').order('sort_order')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setCategories(data);
+        } else {
+          setCategories([
+            { id: 'packages', label: 'Paket' },
+            { id: 'services', label: 'Layanan' },
+            { id: 'reflexology', label: 'Refleksi' },
+            { id: 'addons', label: 'Add-On' },
+            { id: 'split_items', label: 'Internal Split' },
+          ]);
+        }
+      });
+
     if (editBookingId) {
       (async () => {
         const [{ data: b }, { data: bi }] = await Promise.all([
@@ -285,9 +302,9 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
                     <span className="text-[10px] font-bold text-zinc-400 w-4">{idx + 1}</span>
                     <select className="admin-input text-xs flex-1" value={item.service_name} onChange={e => onServiceSelect(item.tempId, e.target.value)}>
                       <option value="">-- Pilih Layanan --</option>
-                      {['packages','services','reflexology','addons','split_items'].map(cat => (
-                        <optgroup key={cat} label={CATEGORY_LABELS[cat]}>
-                          {services.filter(s => s.category === cat).map(s => <option key={s.id} value={s.name}>{s.name} — {fmt(s.price)}</option>)}
+                      {categories.map(cat => (
+                        <optgroup key={cat.id} label={cat.label}>
+                          {services.filter(s => s.category === cat.id).map(s => <option key={s.id} value={s.name}>{s.name} — {fmt(s.price)}</option>)}
                         </optgroup>
                       ))}
                     </select>

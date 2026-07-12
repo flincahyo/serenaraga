@@ -1,15 +1,103 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/admin/Sidebar';
-import { Menu } from 'lucide-react';
+import { Menu, Users, X } from 'lucide-react';
 import { UserProvider } from '@/lib/user-context';
+import { createClient } from '@/lib/supabase';
+import Link from 'next/link';
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+
+  const [followUpCount, setFollowUpCount] = useState(0);
+  const [dismissBanner, setDismissBanner] = useState(true); // Default to true (hidden) to prevent SSR hydration mismatch
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dismissed = sessionStorage.getItem('dismiss_crm_banner') === 'true';
+      if (!dismissed) {
+        setDismissBanner(false);
+      }
+    }
+  }, []);
+
+  const handleDismissBanner = () => {
+    setDismissBanner(true);
+    sessionStorage.setItem('dismiss_crm_banner', 'true');
+  };
+
+  const supabase = createClient();
+
+  const fetchCRMData = useCallback(async () => {
+    if (pathname === '/admin') return;
+
+    try {
+      const [{ data: allBookings }, { data: settingsRows }, { data: custs }, { data: discs }] = await Promise.all([
+        supabase.from('bookings').select('customer_id, status, booking_date'),
+        supabase.from('settings').select('key, value').in('key', ['re_engagement_days']),
+        supabase.from('customers').select('id, visit_count_base'),
+        supabase.from('discounts').select('type, min_orders, is_active').eq('is_active', true),
+      ]);
+
+      if (custs && allBookings) {
+        const countMap: Record<string, number> = {};
+        const lastMap: Record<string, string> = {};
+        
+        allBookings.forEach(r => {
+          if (!r.customer_id) return;
+          countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + (r.status === 'Completed' ? 1 : 0);
+          if (r.status === 'Completed') {
+            if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
+              lastMap[r.customer_id] = r.booking_date;
+            }
+          }
+        });
+
+        const reDays = settingsRows?.find(s => s.key === 're_engagement_days')?.value 
+          ? Number(settingsRows.find(s => s.key === 're_engagement_days')?.value) 
+          : 60;
+        
+        let fCount = 0;
+        custs.forEach(c => {
+          const effCount = (c.visit_count_base ?? 0) + (countMap[c.id] ?? 0);
+          const lastVisit = lastMap[c.id] ?? null;
+          
+          let dormant = false;
+          let days = 0;
+          if (lastVisit) {
+            days = Math.floor((Date.now() - new Date(lastVisit + 'T00:00:00').getTime()) / 86400000);
+            dormant = days >= reDays;
+          }
+
+          let eligiblePromo = false;
+          const nextCount = effCount + 1;
+          const loyalPromo = discs?.some(d => d.type === 'loyal' && d.min_orders && nextCount >= d.min_orders);
+          
+          if (loyalPromo) {
+            eligiblePromo = true;
+          } else if (lastVisit && days >= reDays) {
+            const rcPromo = discs?.some(d => d.type === 'returning_customer');
+            if (rcPromo) eligiblePromo = true;
+          }
+
+          if (dormant || eligiblePromo) {
+            fCount++;
+          }
+        });
+        setFollowUpCount(fCount);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    fetchCRMData();
+  }, [fetchCRMData]);
 
   // Login page — no sidebar
   if (pathname === '/admin') {
@@ -44,6 +132,30 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
         {/* Page Content */}
         <main className="flex-1 p-4 md:p-8 print:p-0">
+          {/* CRM Alert Banner */}
+          {!dismissBanner && followUpCount > 0 && (
+            <div className="mb-5 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border border-orange-200/60 dark:border-orange-900/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm transition-all animate-fadeIn print:hidden">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                  <Users size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white">CRM Follow-up Reminder</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Ada <strong className="text-orange-600 dark:text-orange-400">{followUpCount} pelanggan</strong> yang sudah lama tidak berkunjung atau berhak mendapatkan promo loyalty khusus.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <Link href="/admin/customers?filter=followup" className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-[0.98]">
+                  Lihat Pelanggan
+                </Link>
+                <button onClick={handleDismissBanner} className="p-2 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-600 rounded-lg transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
           {children}
         </main>
       </div>

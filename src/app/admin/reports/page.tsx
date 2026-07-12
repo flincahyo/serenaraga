@@ -25,6 +25,15 @@ type BookingItemLinked = {
   therapists?: { name: string; commission_pct?: number } | null;
 };
 
+type BookingDiscount = {
+  id?: string;
+  discount_label: string;
+  discount_value: number;
+  discount_value_type: string;
+  discount_amount: number;
+  is_owner_borne: boolean;
+};
+
 type Booking = {
   id: string; 
   customer_name?: string; 
@@ -43,6 +52,7 @@ type Booking = {
   created_at?: string;
   customer_id?: string;
   booking_items?: BookingItemLinked[];
+  booking_discounts?: BookingDiscount[];
 };
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
@@ -68,7 +78,8 @@ export default function ReportsPage() {
         .select(`
           id, customer_name, phone, service_name, booking_date, booking_time, price, final_price,
           discount_total, shared_discount_total, therapist_discount_total, status, bhp_cost, notes, created_at, customer_id,
-          booking_items(id, commission_earned, service_name, price, bhp_cost, duration, therapist_id, parent_bundle_name, therapists(name, commission_pct))
+          booking_items(id, commission_earned, service_name, price, bhp_cost, duration, therapist_id, parent_bundle_name, therapists(name, commission_pct)),
+          booking_discounts(id, discount_label, discount_value, discount_value_type, discount_amount, is_owner_borne)
         `)
         .eq('status', 'Completed')
         .order('booking_date'),
@@ -219,6 +230,7 @@ export default function ReportsPage() {
       'Status',
       'Harga Awal (Gross)',
       'Total Diskon',
+      'Diskon yang Diterapkan',
       'Pendapatan Setelah Diskon (DPP / Net Sales)',
       'Komisi Terapis & Transport',
       'Biaya Bahan Habis Pakai (BHP)',
@@ -228,6 +240,9 @@ export default function ReportsPage() {
     const rows = dataToExport.map(b => {
       const gross = b.price ?? 0;
       const discount = b.discount_total ?? 0;
+      const appliedDiscs = b.booking_discounts && b.booking_discounts.length > 0
+        ? b.booking_discounts.map(d => `${d.discount_label} (${d.discount_value_type === 'percentage' ? d.discount_value + '%' : formatRp(d.discount_amount)})`).join(', ')
+        : '—';
       const netSales = b.final_price ?? gross;
       const terapis = calcTerapisCut(b);
       const bhp = b.bhp_cost ?? 0;
@@ -241,6 +256,7 @@ export default function ReportsPage() {
         `"${b.status}"`,
         gross,
         discount,
+        `"${appliedDiscs}"`,
         netSales,
         terapis,
         bhp,
@@ -252,6 +268,7 @@ export default function ReportsPage() {
       '"TOTAL"', '', '', '', '',
       dataToExport.reduce((s, b) => s + (b.price ?? 0), 0),
       dataToExport.reduce((s, b) => s + (b.discount_total ?? 0), 0),
+      '',
       dataToExport.reduce((s, b) => s + (b.final_price ?? b.price ?? 0), 0),
       dataToExport.reduce((s, b) => s + calcTerapisCut(b), 0),
       dataToExport.reduce((s, b) => s + (b.bhp_cost ?? 0), 0),
@@ -860,6 +877,26 @@ export default function ReportsPage() {
                         <span>Total Diskon Pelanggan</span>
                         <span className="font-mono">-{formatRp(selectedBooking.discount_total)}</span>
                       </div>
+
+                      {/* Applied discounts list */}
+                      {selectedBooking.booking_discounts && selectedBooking.booking_discounts.length > 0 && (
+                        <div className="space-y-1 pl-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {selectedBooking.booking_discounts.map((disc, idx) => {
+                            const showAmount = selectedBooking.booking_discounts!.length > 1;
+                            return (
+                              <div key={idx} className="flex justify-between items-center">
+                                <span className="text-zinc-500 dark:text-zinc-400">
+                                  ↳ {disc.discount_label} {disc.discount_value_type === 'percentage' ? `(${disc.discount_value}%)` : ''}
+                                </span>
+                                {showAmount && (
+                                  <span className="font-mono text-zinc-400 dark:text-zinc-500">-{formatRp(disc.discount_amount)}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       {(() => {
                         const totalDisc = selectedBooking.discount_total || 0;
                         const sharedDisc = selectedBooking.shared_discount_total || 0;

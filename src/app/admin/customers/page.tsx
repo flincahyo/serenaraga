@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Users, Search, Plus, Pencil, Check, X, Loader2, ChevronDown, ChevronUp,
   Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star, MessageCircle, AlertCircle,
@@ -9,6 +10,8 @@ import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 
+
+type RFMSegment = 'Champions' | 'Loyalists' | 'New' | 'About to Sleep' | 'Dormant/Lost';
 
 type Customer = {
   id: string;
@@ -20,10 +23,76 @@ type Customer = {
   effective_count?: number;   // computed
   total_spending?: number;    // computed LTV
   last_visit?: string;        // computed
+  segment?: RFMSegment;       // computed segment
+  services_history?: string[]; // computed service history names
 };
 
 type Discount = { id: string; type: string; value: number; value_type: string; min_orders: number | null; name: string; is_active: boolean; };
-type BookingRow = { customer_id: string; status: string; final_price: number | null; price: number | null; booking_date: string; };
+type BookingRow = { customer_id: string; status: string; final_price: number | null; price: number | null; booking_date: string; service_name: string | null; };
+
+function getRFMSegment(lastVisit: string | null, visitCount: number, totalSpending: number, createdAt: string): RFMSegment {
+  const today = new Date();
+  
+  if (!lastVisit) {
+    const createdDays = Math.floor((today.getTime() - new Date(createdAt).getTime()) / 86400000);
+    return createdDays > 90 ? 'Dormant/Lost' : 'New';
+  }
+
+  const recencyDays = Math.floor((today.getTime() - new Date(lastVisit + 'T00:00:00').getTime()) / 86400000);
+  
+  if (recencyDays <= 30 && visitCount >= 4 && totalSpending >= 1000000) {
+    return 'Champions';
+  }
+  
+  if (recencyDays <= 60 && visitCount >= 2) {
+    return 'Loyalists';
+  }
+  
+  if (recencyDays <= 30 && visitCount === 1) {
+    return 'New';
+  }
+  
+  if (recencyDays > 60 && recencyDays <= 90) {
+    return 'About to Sleep';
+  }
+  
+  return 'Dormant/Lost';
+}
+
+function getTreatmentRecommendation(servicesHistory: string[] = []): string {
+  if (servicesHistory.length === 0) {
+    return 'Full Body Massage';
+  }
+
+  const flatHistory = servicesHistory.flatMap(s => s.split(' + ').map(x => x.trim()));
+  const counts: Record<string, number> = {};
+  flatHistory.forEach(s => {
+    counts[s] = (counts[s] ?? 0) + 1;
+  });
+
+  let mostOrdered = '';
+  let maxCount = 0;
+  Object.entries(counts).forEach(([s, c]) => {
+    if (c > maxCount) {
+      maxCount = c;
+      mostOrdered = s;
+    }
+  });
+
+  const lowercase = mostOrdered.toLowerCase();
+  
+  if (lowercase.includes('couple') || lowercase.includes('paket') || lowercase.includes('package')) {
+    return 'Body Scrub (Add-on)';
+  }
+  if (lowercase.includes('body massage') || lowercase.includes('pijat badan') || lowercase.includes('totok wajah')) {
+    return 'Refleksi Kaki (Add-on)';
+  }
+  if (lowercase.includes('refleksi') || lowercase.includes('reflexology')) {
+    return 'Full Body Massage';
+  }
+  
+  return 'Totok Wajah (Add-on)';
+}
 
 const formatRp = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 const formatDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -96,15 +165,19 @@ function CustomerForm({
   );
 }
 
-export default function CustomersPage() {
+function CustomersPageInner() {
   const { user } = useUser();
   const isOwner = user?.role !== 'cashier';
+
+  const searchParams = useSearchParams();
+  const initialFilter = searchParams.get('filter') === 'followup' ? 'followup' : 'all';
 
   const [customers, setCustomers]   = useState<Customer[]>([]);
   const [discounts, setDiscounts]   = useState<Discount[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
-  const [filterMode, setFilterMode] = useState<'all' | 'followup'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'followup'>(initialFilter);
+  const [activeSegment, setActiveSegment] = useState<'all' | RFMSegment>('all');
   const [editId, setEditId]         = useState<string | null>(null);
   const [editData, setEditData]     = useState<Partial<Customer>>({});
   const [showAdd, setShowAdd]       = useState(false);
@@ -124,7 +197,7 @@ export default function CustomersPage() {
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('discounts').select('id, type, value, value_type, min_orders, name, is_active').eq('is_active', true),
       supabase.from('bookings')
-        .select('customer_id, status, final_price, price, booking_date')
+        .select('customer_id, status, final_price, price, booking_date, service_name')
         .not('customer_id', 'is', null),
       supabase.from('settings').select('key, value').in('key', ['re_engagement_days', 're_engagement_template', 're_engagement_promo_template']),
     ]);
@@ -140,6 +213,7 @@ export default function CustomersPage() {
       const countMap: Record<string, number> = {};
       const spendMap: Record<string, number> = {};
       const lastMap:  Record<string, string>  = {};
+      const servicesMap: Record<string, string[]> = {};
       (allBkg as BookingRow[]).forEach(r => {
         if (!r.customer_id) return;
         countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + (r.status === 'Completed' ? 1 : 0);
@@ -149,14 +223,26 @@ export default function CustomersPage() {
           if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
             lastMap[r.customer_id] = r.booking_date;
           }
+          if (r.service_name) {
+            if (!servicesMap[r.customer_id]) servicesMap[r.customer_id] = [];
+            servicesMap[r.customer_id].push(r.service_name);
+          }
         }
       });
-      setCustomers(custs.map(c => ({
-        ...c,
-        effective_count: (c.visit_count_base ?? 0) + (countMap[c.id] ?? 0),
-        total_spending:  spendMap[c.id] ?? 0,
-        last_visit:      lastMap[c.id] ?? null,
-      })));
+      setCustomers(custs.map(c => {
+        const effCount = (c.visit_count_base ?? 0) + (countMap[c.id] ?? 0);
+        const spend = spendMap[c.id] ?? 0;
+        const lastV = lastMap[c.id] ?? null;
+        const seg = getRFMSegment(lastV, effCount, spend, c.created_at);
+        return {
+          ...c,
+          effective_count: effCount,
+          total_spending:  spend,
+          last_visit:      lastV,
+          segment:         seg,
+          services_history: servicesMap[c.id] ?? [],
+        };
+      }));
     }
     setLoading(false);
   }, []);
@@ -265,16 +351,20 @@ export default function CustomersPage() {
       ? (promo.value_type === 'percentage' ? `${promo.value}%` : formatRp(promo.value))
       : '';
 
+    const recService = getTreatmentRecommendation(c.services_history);
+
     const msg = template
       .replace('{nama}', c.name ?? 'Kak')
       .replace('{hari}', String(days))
-      .replace('{diskon}', promo ? `${promo.name} (${discountValue})` : '');
+      .replace('{diskon}', promo ? `${promo.name} (${discountValue})` : '')
+      .replace('{rekomendasi}', recService);
       
     window.open(`https://wa.me/${c.wa_number.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const filtered = customers
     .filter(c => filterMode === 'followup' ? (isDormant(c) || isEligibleForPromo(c)) : true)
+    .filter(c => activeSegment === 'all' || c.segment === activeSegment)
     .filter(c =>
       !search ||
       c.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -340,7 +430,7 @@ export default function CustomersPage() {
       )}
 
       {/* Filter Tabs + Search */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col md:flex-row gap-2">
         {/* All / Follow-up tabs */}
         <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 shrink-0">
           <button onClick={() => setFilterMode('all')}
@@ -364,6 +454,20 @@ export default function CustomersPage() {
               )}
             </button>
         </div>
+
+        {/* Segment Filter Dropdown */}
+        <div className="shrink-0">
+          <select value={activeSegment} onChange={e => setActiveSegment(e.target.value as any)}
+            className="admin-input text-xs font-semibold h-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300">
+            <option value="all">Semua Segmen RFM</option>
+            <option value="Champions">🏆 Champions</option>
+            <option value="Loyalists">⭐ Loyalists</option>
+            <option value="New">🌱 Baru (New)</option>
+            <option value="About to Sleep">😴 Hampir Tertidur</option>
+            <option value="Dormant/Lost">💤 Dormant/Lost</option>
+          </select>
+        </div>
+
         <div className="relative flex-1">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
           <input className="admin-input pl-10" placeholder="Cari nama atau nomor WA..."
@@ -394,18 +498,25 @@ export default function CustomersPage() {
                     const promo = getEligiblePromo(c);
                     let days = 0;
                     if (c.last_visit) days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
+                    const recSvc = getTreatmentRecommendation(c.services_history);
                     return (
-                      <div className="flex items-center gap-2 mb-2 px-2 py-1 bg-orange-100 dark:bg-orange-950/30 rounded-lg">
-                        <AlertCircle size={11} className="text-orange-500 shrink-0" />
-                        <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
-                          {promo 
-                            ? `✨ Eligible untuk diskon ${promo.name} pada kunjungan berikutnya!` 
-                            : `⚠ Sudah ${days} hari tidak order`}
-                        </span>
-                        <button onClick={() => sendReEngageWA(c, promo)}
-                          className="flex items-center shrink-0 gap-1 px-2 py-0.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
-                          <MessageCircle size={10} /> Kirim WA {promo && 'Promo'}
-                        </button>
+                      <div className="flex flex-col gap-1.5 mb-2 p-2 bg-orange-50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-900/20 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle size={11} className="text-orange-500 shrink-0" />
+                          <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
+                            {promo 
+                              ? `✨ Eligible untuk diskon ${promo.name} pada kunjungan berikutnya!` 
+                              : `⚠ Sudah ${days} hari tidak order`}
+                          </span>
+                          <button onClick={() => sendReEngageWA(c, promo)}
+                            className="flex items-center shrink-0 gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
+                            <MessageCircle size={10} /> Kirim WA {promo && 'Promo'}
+                          </button>
+                        </div>
+                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 pl-4 mt-[-2px]">
+                          <span>💡 Rekomendasi Cross-Sell:</span>
+                          <strong className="text-earth-primary font-bold">{recSvc}</strong>
+                        </div>
                       </div>
                     );
                   })()}
@@ -422,6 +533,17 @@ export default function CustomersPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm text-zinc-900 dark:text-white">{c.name || '(tanpa nama)'}</p>
                         <TierBadge count={c.effective_count ?? 0} discounts={discounts} />
+                        {c.segment && (
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full select-none ${
+                            c.segment === 'Champions' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' :
+                            c.segment === 'Loyalists' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400' :
+                            c.segment === 'New' ? 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300' :
+                            c.segment === 'About to Sleep' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400' :
+                            'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400'
+                          }`}>
+                            {c.segment}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <span className="flex items-center gap-1 text-xs text-zinc-400">
@@ -498,5 +620,18 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center p-12 text-sm text-zinc-400">
+        <Loader2 className="animate-spin text-earth-primary mr-2" size={16} />
+        Loading...
+      </div>
+    }>
+      <CustomersPageInner />
+    </Suspense>
   );
 }

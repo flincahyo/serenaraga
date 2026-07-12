@@ -32,6 +32,7 @@ const formatPrice = (price: number) =>
 
 const Pricelist = () => {
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<{ id: string; label: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('packages');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -39,22 +40,33 @@ const Pricelist = () => {
   useEffect(() => {
     const fetchServices = async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .neq('category', 'split_items')
-        .order('category')
-        .order('sort_order');
-      if (!error && data) setServices(data);
+      const [{ data: svcData }, { data: catData }] = await Promise.all([
+        supabase
+          .from('services')
+          .select('*')
+          .neq('category', 'split_items')
+          .order('sort_order'),
+        supabase
+          .from('service_categories')
+          .select('id, label')
+          .neq('id', 'split_items')
+          .order('sort_order')
+      ]);
+      if (svcData) setServices(svcData);
+      if (catData && catData.length > 0) {
+        setCategories(catData);
+        setActiveTab(catData[0].id);
+      } else if (svcData) {
+        const fallbackCats = Array.from(
+          new Map(svcData.map(s => [s.category, { id: s.category, label: s.category_label }])).values()
+        );
+        setCategories(fallbackCats);
+        if (fallbackCats.length > 0) setActiveTab(fallbackCats[0].id);
+      }
       setLoading(false);
     };
     fetchServices();
   }, []);
-
-  // Group by category
-  const categories = Array.from(
-    new Map(services.map(s => [s.category, { id: s.category, label: s.category_label }])).values()
-  );
 
   const activeItems = services.filter(s => s.category === activeTab);
   const featuredServices = services.filter(s => s.is_featured);

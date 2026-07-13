@@ -63,8 +63,9 @@ function computeAmount(d: Discount, gross: number, items: Item[] = [], servicesL
       return svc && svc.id === d.target_service_id;
     });
     const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price), 0);
-    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
-    return matchingGross > 0 ? d.value : 0;
+    const basis = matchingGross > 0 ? matchingGross : gross;
+    if (d.value_type === 'percentage') return Math.round(basis * d.value / 100);
+    return d.value;
   }
   
   if (d.target_type === 'category' && d.target_category_id) {
@@ -73,8 +74,9 @@ function computeAmount(d: Discount, gross: number, items: Item[] = [], servicesL
       return svc && svc.category === d.target_category_id;
     });
     const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price), 0);
-    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
-    return matchingGross > 0 ? d.value : 0;
+    const basis = matchingGross > 0 ? matchingGross : gross;
+    if (d.value_type === 'percentage') return Math.round(basis * d.value / 100);
+    return d.value;
   }
 
   if (d.value_type === 'percentage') return Math.round(gross * d.value / 100);

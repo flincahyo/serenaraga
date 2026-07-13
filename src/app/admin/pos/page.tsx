@@ -42,8 +42,9 @@ function computeAmount(d: Discount, gross: number, cart: any[] = [], servicesLis
   if (d.target_type === 'service' && d.target_service_id) {
     const matchingItems = cart.filter(item => item.service_id === d.target_service_id);
     const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
-    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
-    return matchingGross > 0 ? d.value : 0;
+    const basis = matchingGross > 0 ? matchingGross : gross;
+    if (d.value_type === 'percentage') return Math.round(basis * d.value / 100);
+    return d.value;
   }
   
   if (d.target_type === 'category' && d.target_category_id) {
@@ -52,8 +53,9 @@ function computeAmount(d: Discount, gross: number, cart: any[] = [], servicesLis
       return svc && svc.category === d.target_category_id;
     });
     const matchingGross = matchingItems.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
-    if (d.value_type === 'percentage') return Math.round(matchingGross * d.value / 100);
-    return matchingGross > 0 ? d.value : 0;
+    const basis = matchingGross > 0 ? matchingGross : gross;
+    if (d.value_type === 'percentage') return Math.round(basis * d.value / 100);
+    return d.value;
   }
 
   if (d.value_type === 'percentage') return Math.round(gross * d.value / 100);

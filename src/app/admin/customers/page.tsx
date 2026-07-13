@@ -3,13 +3,13 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-  Users, Search, Plus, Pencil, Check, X, Loader2, ChevronDown, ChevronUp,
+  Users, Search, Plus, Pencil, Check, X, Loader2,
   Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star, MessageCircle, AlertCircle,
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
-
 
 type RFMSegment = 'Champions' | 'Loyalists' | 'New' | 'About to Sleep' | 'Dormant/Lost';
 
@@ -101,70 +101,454 @@ function TierBadge({ count, discounts }: { count: number; discounts: Discount[] 
   const loyal = discounts
     .filter(d => d.type === 'loyal' && d.is_active && count >= (d.min_orders ?? Infinity))
     .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))[0];
-  if (count === 0) return <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">New</span>;
+  if (count === 0) return <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-bold border border-zinc-200 dark:border-zinc-700">New</span>;
   if (!loyal) return null;
   const colors: Record<string, string> = {
-    'Loyal Bronze': 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-    'Loyal Silver': 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300',
-    'Loyal Gold':   'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400',
+    'Loyal Bronze': 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30',
+    'Loyal Silver': 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700',
+    'Loyal Gold':   'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-900/30',
   };
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${colors[loyal.name] ?? 'bg-earth-primary/10 text-earth-primary'}`}>
+    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${colors[loyal.name] ?? 'bg-earth-primary/10 text-earth-primary border border-earth-primary/20'}`}>
       <Award size={9} /> {loyal.name}
     </span>
   );
 }
 
-// CustomerForm lives outside parent to prevent remount on state change
-function CustomerForm({
-  data, saving, isNew,
-  onChange, onSave, onCancel,
+// ──────────────────────────────────────────
+// CustomerModalForm component
+// ──────────────────────────────────────────
+function CustomerModalForm({
+  isOpen,
+  data,
+  saving,
+  isNew,
+  onChange,
+  onSave,
+  onCancel,
 }: {
-  data: Partial<Customer>; saving: boolean; isNew: boolean;
+  isOpen: boolean;
+  data: Partial<Customer>;
+  saving: boolean;
+  isNew: boolean;
   onChange: (d: Partial<Customer>) => void;
-  onSave: () => void; onCancel: () => void;
+  onSave: () => void;
+  onCancel: () => void;
 }) {
+  if (!isOpen) return null;
+
   return (
-    <div className="space-y-3 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-medium text-zinc-500 mb-1 block">Nama</label>
-          <input className="admin-input" placeholder="Ibu Rina" value={data.name ?? ''}
-            onChange={e => onChange({ ...data, name: e.target.value })} />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-zinc-500 mb-1 block">No. WhatsApp</label>
-          <input className="admin-input font-mono" placeholder="628xxx" value={data.wa_number ?? ''}
-            onChange={e => onChange({ ...data, wa_number: e.target.value })}
-            readOnly={!isNew} />
-        </div>
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.4 }}
+          exit={{ opacity: 0 }}
+          onClick={onCancel}
+          className="fixed inset-0 bg-black/40"
+        />
+
+        {/* Modal Panel */}
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl w-full max-w-md p-6 relative z-10 space-y-4"
+        >
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <h3 className="font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+              <Users size={16} className="text-earth-primary" />
+              {isNew ? 'Tambah Customer Baru' : 'Edit Data Customer'}
+            </h3>
+            <button onClick={onCancel} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg">
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-3.5">
+            <div>
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1 block">Nama Pelanggan</label>
+              <input
+                className="admin-input"
+                placeholder="Ibu Rina"
+                value={data.name ?? ''}
+                onChange={e => onChange({ ...data, name: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1 block">No. WhatsApp</label>
+              <input
+                className="admin-input font-mono"
+                placeholder="628xxxxxxxx"
+                value={data.wa_number ?? ''}
+                onChange={e => onChange({ ...data, wa_number: e.target.value })}
+                readOnly={!isNew}
+              />
+              {isNew && <p className="text-[10px] text-zinc-400 mt-1">Gunakan kode negara (62...) tanpa tanda '+' atau spasi.</p>}
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1 block flex items-center justify-between">
+                <span>Kunjungan Awal Offline</span>
+                <span className="text-[10px] text-zinc-400 font-normal">Sebelum sistem digunakan</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                className="admin-input w-32 font-mono"
+                value={data.visit_count_base ?? 0}
+                onChange={e => onChange({ ...data, visit_count_base: Math.max(0, Number(e.target.value)) })}
+              />
+              <p className="text-[10px] text-zinc-400 mt-1">
+                Kunjungan sistem otomatis bertambah saat status booking diubah menjadi Completed.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1 block">Catatan & Preferensi</label>
+              <textarea
+                className="admin-input text-xs h-20 resize-none font-sans"
+                placeholder="Info tambahan (misal: preferensi kekuatan pijat, alergi minyak spa, dll.)"
+                value={data.notes ?? ''}
+                onChange={e => onChange({ ...data, notes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <button onClick={onCancel} className="admin-btn-ghost text-xs">
+              Batal
+            </button>
+            <button
+              onClick={onSave}
+              disabled={saving || !data.wa_number || data.wa_number === '62'}
+              className="admin-btn-primary text-xs disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              {isNew ? 'Tambah' : 'Simpan Perubahan'}
+            </button>
+          </div>
+        </motion.div>
       </div>
-      <div>
-        <label className="text-xs font-medium text-zinc-500 mb-1 block">
-          Kunjungan Awal (sebelum pakai sistem)
-        </label>
-        <input type="number" min={0} className="admin-input w-32 font-mono"
-          value={data.visit_count_base ?? 0}
-          onChange={e => onChange({ ...data, visit_count_base: Math.max(0, Number(e.target.value)) })} />
-        <p className="text-[11px] text-zinc-400 mt-1">
-          Total kunjungan = angka ini + jumlah booking Completed di sistem
-        </p>
-      </div>
-      <div>
-        <label className="text-xs font-medium text-zinc-500 mb-1 block">Catatan</label>
-        <input className="admin-input text-xs" placeholder="Info tambahan..."
-          value={data.notes ?? ''} onChange={e => onChange({ ...data, notes: e.target.value })} />
-      </div>
-      <div className="flex gap-2 pt-1">
-        <button onClick={onSave} disabled={saving || !data.wa_number} className="admin-btn-primary disabled:opacity-50">
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} {isNew ? 'Tambah' : 'Simpan'}
-        </button>
-        <button onClick={onCancel} className="admin-btn-ghost"><X size={14} /> Batal</button>
-      </div>
-    </div>
+    </AnimatePresence>
   );
 }
 
+// ──────────────────────────────────────────
+// CustomerDrawer component
+// ──────────────────────────────────────────
+function CustomerDrawer({
+  customer,
+  discounts,
+  bookingHistory,
+  loadingHistory,
+  isOpen,
+  onClose,
+  onSendWA,
+  onEdit,
+  reEngageDays,
+  reEngageTemplate,
+  reEngagePromoTemplate,
+}: {
+  customer: Customer | null;
+  discounts: Discount[];
+  bookingHistory: any[];
+  loadingHistory: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  onSendWA: (draftMessage: string) => void;
+  onEdit: () => void;
+  reEngageDays: number;
+  reEngageTemplate: string;
+  reEngagePromoTemplate: string;
+}) {
+  const [draftMessage, setDraftMessage] = useState('');
+
+  const getEligiblePromo = (c: Customer): Discount | null => {
+    const nextCount = (c.effective_count ?? 0) + 1;
+    const loyal = discounts
+      .filter(d => d.type === 'loyal' && d.min_orders && nextCount >= d.min_orders)
+      .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))[0];
+    if (loyal) return loyal;
+
+    if (c.last_visit) {
+      const days = Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000);
+      if (days >= reEngageDays) {
+        const rc = discounts.find(d => d.type === 'returning_customer');
+        if (rc) return rc;
+      }
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (customer) {
+      const promo = getEligiblePromo(customer);
+      const days = customer.last_visit
+        ? Math.floor((Date.now() - new Date(customer.last_visit + 'T00:00:00').getTime()) / 86400000)
+        : reEngageDays;
+      
+      let template = reEngageTemplate ||
+        'Halo {nama}! 😊 Sudah {hari} hari nih kita belum ketemu... Kangen? Yuk book sesi relaksasi di SerenaRaga! Ada promo spesial untuk kamu. 🌿';
+        
+      if (promo) {
+        template = reEngagePromoTemplate || 'Halo {nama}, kami punya diskon {diskon} spesial untuk kamu! Yuk book sesi relaksasi di SerenaRaga.';
+      }
+
+      const discountValue = promo 
+        ? (promo.value_type === 'percentage' ? `${promo.value}%` : formatRp(promo.value))
+        : '';
+
+      const recService = getTreatmentRecommendation(customer.services_history);
+
+      const msg = template
+        .replace('{nama}', customer.name ?? 'Kak')
+        .replace('{hari}', String(days))
+        .replace('{diskon}', promo ? `${promo.name} (${discountValue})` : '')
+        .replace('{rekomendasi}', recService);
+        
+      setDraftMessage(msg);
+    } else {
+      setDraftMessage('');
+    }
+  }, [customer, reEngageTemplate, reEngagePromoTemplate, reEngageDays, discounts]);
+
+  if (!customer) return null;
+
+  const totalSpending = customer.total_spending ?? 0;
+  const visitCount = customer.effective_count ?? 0;
+  const avgSpend = visitCount > 0 ? Math.round(totalSpending / visitCount) : 0;
+  
+  let recencyText = 'Belum pernah';
+  if (customer.last_visit) {
+    const days = Math.floor((Date.now() - new Date(customer.last_visit + 'T00:00:00').getTime()) / 86400000);
+    recencyText = days === 0 ? 'Hari ini' : `${days} hari yang lalu`;
+  }
+
+  const recService = getTreatmentRecommendation(customer.services_history);
+
+  const serviceCounts: Record<string, number> = {};
+  if (customer.services_history) {
+    customer.services_history.flatMap(s => s.split(' + ').map(x => x.trim())).forEach(s => {
+      serviceCounts[s] = (serviceCounts[s] ?? 0) + 1;
+    });
+  }
+  const favoriteServices = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.3 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/30 z-40"
+          />
+
+          {/* Drawer Panel */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-white dark:bg-zinc-950 shadow-2xl z-50 border-l border-zinc-200 dark:border-zinc-800 flex flex-col"
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-earth-primary to-amber-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                  {(customer.name ?? customer.wa_number).slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-900 dark:text-white leading-tight">
+                    {customer.name || '(Tanpa Nama)'}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-mono mt-0.5">{customer.wa_number}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={onEdit}
+                  className="p-2 text-zinc-500 hover:text-earth-primary hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Edit Customer"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin">
+              {/* Badges / Status */}
+              <div className="flex flex-wrap gap-2">
+                {customer.segment && (
+                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-sm border ${
+                    customer.segment === 'Champions' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
+                    customer.segment === 'Loyalists' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' :
+                    customer.segment === 'New' ? 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20' :
+                    customer.segment === 'About to Sleep' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                    'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                  }`}>
+                    RFM: {customer.segment}
+                  </span>
+                )}
+                <TierBadge count={visitCount} discounts={discounts} />
+              </div>
+
+              {/* CRM Key Metrics Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  <span className="text-[10px] text-zinc-400 font-semibold block">Total Spending (LTV)</span>
+                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 font-mono block mt-1">
+                    {formatRp(totalSpending)}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  <span className="text-[10px] text-zinc-400 font-semibold block">Rerata Kunjungan</span>
+                  <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 font-mono block mt-1">
+                    {formatRp(avgSpend)}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  <span className="text-[10px] text-zinc-400 font-semibold block">Total Kunjungan</span>
+                  <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200 font-mono block mt-1 flex items-baseline gap-1">
+                    {visitCount}x <span className="text-[10px] text-zinc-400 font-normal">({customer.visit_count_base} offline)</span>
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                  <span className="text-[10px] text-zinc-400 font-semibold block">Kunjungan Terakhir</span>
+                  <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 block mt-1.5">
+                    {recencyText}
+                  </span>
+                </div>
+              </div>
+
+              {/* Cross-Sell & Treatment Recommendations */}
+              <div className="p-4 bg-gradient-to-br from-earth-primary/5 to-amber-500/5 dark:from-earth-primary/10 dark:to-amber-500/5 border border-earth-primary/20 dark:border-earth-primary/10 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-earth-primary/10 flex items-center justify-center text-earth-primary">
+                    <Star size={12} className="fill-current" />
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 font-bold">Rekomendasi CRM & Penawaran</h4>
+                </div>
+                
+                <div className="space-y-1">
+                  <span className="text-[10px] text-zinc-400 font-semibold">Treatment Komplementer</span>
+                  <p className="text-xs font-bold text-earth-primary">{recService}</p>
+                </div>
+
+                <div className="space-y-1.5 border-t border-earth-primary/10 pt-3">
+                  <label className="text-[10px] text-zinc-400 font-semibold block">Draf Pesan WhatsApp</label>
+                  <textarea
+                    value={draftMessage}
+                    onChange={e => setDraftMessage(e.target.value)}
+                    className="w-full text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 h-24 focus:outline-none focus:ring-1 focus:ring-earth-primary resize-none font-sans"
+                  />
+                </div>
+                
+                <button
+                  onClick={() => onSendWA(draftMessage)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors mt-2"
+                >
+                  <MessageCircle size={13} /> Kirim WhatsApp
+                </button>
+              </div>
+
+              {/* Favorite Services */}
+              {favoriteServices.length > 0 && (
+                <div className="space-y-2.5">
+                  <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Layanan Terfavorit</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {favoriteServices.map(([svc, count]) => (
+                      <span
+                        key={svc}
+                        className="text-[10px] px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg border border-zinc-200/50 dark:border-zinc-700/50 font-medium"
+                      >
+                        {svc} ({count}x)
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Timeline Riwayat Booking */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Linimasa Kunjungan</h4>
+                
+                {loadingHistory ? (
+                  <div className="flex items-center justify-center py-6 text-xs text-zinc-400">
+                    <Loader2 className="animate-spin text-earth-primary mr-1.5" size={13} />
+                    Memuat riwayat...
+                  </div>
+                ) : bookingHistory.length === 0 ? (
+                  <p className="text-xs text-zinc-400 text-center py-4">Belum ada booking di sistem.</p>
+                ) : (
+                  <div className="relative pl-4 border-l border-zinc-200 dark:border-zinc-800 space-y-4 ml-1 pt-1">
+                    {bookingHistory.map((b) => (
+                      <div key={b.id} className="relative">
+                        <div className={`absolute w-2.5 h-2.5 rounded-full -left-[21.5px] top-1 border-2 border-white dark:border-zinc-950 ${
+                          b.status === 'Completed' ? 'bg-emerald-500' :
+                          b.status === 'Canceled' ? 'bg-zinc-400' :
+                          'bg-amber-500'
+                        }`} />
+                        
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 leading-tight">
+                              {b.service_name}
+                            </p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">
+                              {b.booking_date ? formatDate(b.booking_date) : '-'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono leading-none">
+                              {formatRp(b.final_price ?? b.price)}
+                            </p>
+                            <span className={`text-[9px] font-semibold mt-0.5 inline-block ${
+                              b.status === 'Completed' ? 'text-emerald-500' :
+                              b.status === 'Canceled' ? 'text-zinc-400' :
+                              'text-amber-500'
+                            }`}>
+                              {b.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Notes */}
+              {customer.notes && (
+                <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-2xl">
+                  <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Catatan Pelanggan</h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 italic leading-relaxed">{customer.notes}</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ──────────────────────────────────────────
+// Main Page Inner Component
+// ──────────────────────────────────────────
 function CustomersPageInner() {
   const { user } = useUser();
   const isOwner = user?.role !== 'cashier';
@@ -178,13 +562,22 @@ function CustomersPageInner() {
   const [search, setSearch]         = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'followup'>(initialFilter);
   const [activeSegment, setActiveSegment] = useState<'all' | RFMSegment>('all');
+  
+  // Modal controls
   const [editId, setEditId]         = useState<string | null>(null);
   const [editData, setEditData]     = useState<Partial<Customer>>({});
   const [showAdd, setShowAdd]       = useState(false);
   const [newCust, setNewCust]       = useState<Partial<Customer>>({ wa_number: '62', visit_count_base: 0 });
   const [saving, setSaving]         = useState(false);
-  const [expandId, setExpandId]     = useState<string | null>(null);
-  const [bookingHistory, setBookingHistory] = useState<Record<string, unknown[]>>({});
+  
+  // Drawer controls
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [bookingHistory, setBookingHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // CRM Re-engage defaults
   const [reEngageDays, setReEngageDays]   = useState(60);
   const [reEngageTemplate, setReEngageTemplate] = useState('');
   const [reEngagePromoTemplate, setReEngagePromoTemplate] = useState('');
@@ -219,7 +612,6 @@ function CustomersPageInner() {
         countMap[r.customer_id] = (countMap[r.customer_id] ?? 0) + (r.status === 'Completed' ? 1 : 0);
         if (r.status === 'Completed') {
           spendMap[r.customer_id] = (spendMap[r.customer_id] ?? 0) + (r.final_price ?? r.price ?? 0);
-          // Audit #3 Bug #3: only track last_visit from Completed bookings
           if (!lastMap[r.customer_id] || r.booking_date > lastMap[r.customer_id]) {
             lastMap[r.customer_id] = r.booking_date;
           }
@@ -229,7 +621,7 @@ function CustomersPageInner() {
           }
         }
       });
-      setCustomers(custs.map(c => {
+      const processed = custs.map(c => {
         const effCount = (c.visit_count_base ?? 0) + (countMap[c.id] ?? 0);
         const spend = spendMap[c.id] ?? 0;
         const lastV = lastMap[c.id] ?? null;
@@ -242,29 +634,36 @@ function CustomersPageInner() {
           segment:         seg,
           services_history: servicesMap[c.id] ?? [],
         };
-      }));
+      });
+      setCustomers(processed);
+      
+      // Update selected drawer customer if open
+      if (selectedCustomer) {
+        const fresh = processed.find(c => c.id === selectedCustomer.id);
+        if (fresh) setSelectedCustomer(fresh);
+      }
     }
     setLoading(false);
-  }, []);
+  }, [selectedCustomer]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, []);
 
   const loadHistory = async (customerId: string) => {
-    if (bookingHistory[customerId]) { setExpandId(expandId === customerId ? null : customerId); return; }
+    setLoadingHistory(true);
     const { data } = await supabase
       .from('bookings')
       .select('id, service_name, booking_date, price, final_price, status, discount_total')
       .eq('customer_id', customerId)
       .order('booking_date', { ascending: false })
       .limit(10);
-    setBookingHistory(prev => ({ ...prev, [customerId]: data ?? [] }));
-    setExpandId(customerId);
+    setBookingHistory(data ?? []);
+    setLoadingHistory(false);
   };
 
   const startEdit = (c: Customer) => {
     setEditId(c.id);
     setEditData({ ...c });
-    setShowAdd(false);
+    setFormOpen(true);
   };
 
   const saveEdit = async () => {
@@ -276,14 +675,19 @@ function CustomersPageInner() {
       notes: editData.notes,
       updated_at: new Date().toISOString(),
     }).eq('id', editId);
+    
     await fetchData();
     setEditId(null);
+    setFormOpen(false);
     setSaving(false);
   };
 
   const deleteCustomer = async (id: string, name: string | null) => {
     if (!confirm(`Hapus customer ${name || '(tanpa nama)'}? Data booking terkait tidak akan terhapus tapi referensi pelanggannya akan hilang.`)) return;
     await supabase.from('customers').delete().eq('id', id);
+    if (selectedCustomer?.id === id) {
+      setDrawerOpen(false);
+    }
     await fetchData();
   };
 
@@ -303,20 +707,20 @@ function CustomersPageInner() {
       await fetchData();
       setShowAdd(false);
       setNewCust({ wa_number: '62', visit_count_base: 0 });
+    } else {
+      alert("Gagal menambahkan customer: " + error.message);
     }
     setSaving(false);
   };
 
   const getEligiblePromo = (c: Customer): Discount | null => {
     const nextCount = (c.effective_count ?? 0) + 1;
-    // Audit #3 Bug #4: use >= (minimum visit threshold) not modulo to avoid recurring triggers
     const loyal = discounts
       .filter(d => d.type === 'loyal' && d.min_orders && nextCount >= d.min_orders)
       .sort((a, b) => (b.min_orders ?? 0) - (a.min_orders ?? 0))[0];
     if (loyal) return loyal;
 
     if (c.last_visit) {
-      // Audit #3 Bug #5: use T00:00:00 for consistent local timezone parsing
       const days = Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000);
       if (days >= reEngageDays) {
         const rc = discounts.find(d => d.type === 'returning_customer');
@@ -328,7 +732,6 @@ function CustomersPageInner() {
 
   const isDormant = (c: Customer) => {
     if (!c.last_visit) return false;
-    // Audit #3 Bug #5: use T00:00:00 to avoid UTC midnight timezone shift
     const days = Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000);
     return days >= reEngageDays;
   };
@@ -337,7 +740,7 @@ function CustomersPageInner() {
 
   const sendReEngageWA = (c: Customer, promo?: Discount | null) => {
     const days = c.last_visit
-      ? Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000)
+      ? Math.floor((Date.now() - new Date(c.last_visit + 'T00:00:00').getTime()) / 86400000)
       : reEngageDays;
     
     let template = reEngageTemplate ||
@@ -374,17 +777,22 @@ function CustomersPageInner() {
   const followUpCount = customers.filter(c => isDormant(c) || isEligibleForPromo(c)).length;
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
-            <Users size={20} className="text-earth-primary" /> Customers
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <Users size={20} className="text-earth-primary" /> Pelanggan
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{customers.length} pelanggan terdaftar</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">{customers.length} pelanggan terdaftar</p>
         </div>
-        <button onClick={() => { setShowAdd(true); setEditId(null); setNewCust({ wa_number: '62', visit_count_base: 0 }); }}
-          className="admin-btn-primary">
+        <button
+          onClick={() => {
+            setNewCust({ wa_number: '62', visit_count_base: 0 });
+            setShowAdd(true);
+          }}
+          className="admin-btn-primary text-xs"
+        >
           <Plus size={16} /> Tambah Customer
         </button>
       </div>
@@ -393,72 +801,65 @@ function CustomersPageInner() {
       {isOwner && (() => {
         const totalLTV    = customers.reduce((s, c) => s + (c.total_spending ?? 0), 0);
         const avgLTV      = customers.length ? Math.round(totalLTV / customers.length) : 0;
-        const topCust     = [...customers].sort((a,b) => (b.total_spending??0)-(a.total_spending??0))[0];
         const returning   = customers.filter(c => (c.effective_count ?? 0) >= 2).length;
         return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { icon: Users,     label: 'Total Pelanggan', value: customers.length.toString(),                       color: 'text-zinc-500' },
-              { icon: TrendingUp,label: 'Total LTV',       value: totalLTV >= 1000000 ? `Rp ${(totalLTV/1000000).toFixed(1)}JT` : formatRp(totalLTV), color: 'text-emerald-500' },
-              { icon: Wallet,    label: 'Rata-rata LTV',   value: formatRp(avgLTV),                                  color: 'text-blue-500' },
-              { icon: Star,      label: 'Pelanggan Setia', value: `${returning}x`,                                   color: 'text-amber-500' },
+              { icon: Users,     label: 'Total Pelanggan', value: customers.length.toString(),                       color: 'text-zinc-500 bg-zinc-500/10' },
+              { icon: TrendingUp,label: 'Total LTV',       value: totalLTV >= 1000000 ? `Rp ${(totalLTV/1000000).toFixed(1)}JT` : formatRp(totalLTV), color: 'text-emerald-600 bg-emerald-500/10 dark:text-emerald-400' },
+              { icon: Wallet,    label: 'Rata-rata LTV',   value: formatRp(avgLTV),                                  color: 'text-blue-600 bg-blue-500/10 dark:text-blue-400' },
+              { icon: Star,      label: 'Pelanggan Setia', value: `${returning} orang`,                              color: 'text-amber-600 bg-amber-500/10 dark:text-amber-400' },
             ].map(({ icon: Icon, label, value, color }) => (
-              <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-                <Icon size={14} className={`mb-2 ${color}`} />
-                <p className="text-lg font-bold text-zinc-900 dark:text-white">{value}</p>
-                <p className="text-[10px] text-zinc-400 mt-0.5">{label}</p>
+              <div key={label} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm">
+                <div className={`w-7 h-7 rounded-xl flex items-center justify-center mb-2.5 ${color.split(' ')[1]}`}>
+                  <Icon size={14} className={color.split(' ')[0]} />
+                </div>
+                <p className="text-base font-bold text-zinc-900 dark:text-white leading-tight">{value}</p>
+                <p className="text-[10px] text-zinc-400 font-semibold mt-1 uppercase tracking-wider">{label}</p>
               </div>
             ))}
           </div>
         );
       })()}
 
-      {/* Info */}
-      <div className="rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 text-xs text-blue-700 dark:text-blue-300">
-        <p className="font-semibold mb-1">Cara Kerja Total Kunjungan</p>
-        <p>Total kunjungan = <strong>Kunjungan Awal</strong> (sebelum sistem) + jumlah booking berstatus <strong>Completed</strong> di database. Atur Kunjungan Awal untuk customer lama agar tier loyalty-nya akurat.</p>
+      {/* Info Banner */}
+      <div className="rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-100 dark:border-blue-900/30 p-4 text-xs text-blue-700 dark:text-blue-300 leading-relaxed shadow-sm">
+        <p className="font-bold mb-0.5 flex items-center gap-1">
+          <AlertCircle size={13} /> Cara Kerja Total Kunjungan
+        </p>
+        <p>Total kunjungan = <strong>Kunjungan Awal Offline</strong> + jumlah booking berstatus <strong>Completed</strong> di database. Atur Kunjungan Awal Offline agar segmentasi dan tier loyalty pelanggan lama Anda terdeteksi secara akurat.</p>
       </div>
 
-      {/* Add Form */}
-      {showAdd && (
-        <CustomerForm
-          data={newCust} saving={saving} isNew
-          onChange={setNewCust}
-          onSave={addCustomer}
-          onCancel={() => setShowAdd(false)}
-        />
-      )}
-
-      {/* Filter Tabs + Search */}
-      <div className="flex flex-col md:flex-row gap-2">
+      {/* Filter Tabs + Search Toolbar */}
+      <div className="flex flex-col md:flex-row gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3 items-stretch md:items-center">
         {/* All / Follow-up tabs */}
         <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl p-1 shrink-0">
           <button onClick={() => setFilterMode('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                filterMode === 'all' ? 'bg-white dark:bg-zinc-700 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-              }`}>
-              Semua ({customers.length})
-            </button>
-            <button onClick={() => setFilterMode('followup')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                filterMode === 'followup'
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-700'
-              }`}>
-              <AlertCircle size={11} />
-              Perlu Follow-up
-              {followUpCount > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
-                  filterMode === 'followup' ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-600'
-                }`}>{followUpCount}</span>
-              )}
-            </button>
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              filterMode === 'all' ? 'bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}>
+            Semua ({customers.length})
+          </button>
+          <button onClick={() => setFilterMode('followup')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              filterMode === 'followup'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}>
+            <AlertCircle size={12} />
+            Perlu Follow-up
+            {followUpCount > 0 && (
+              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-extrabold ${
+                filterMode === 'followup' ? 'bg-white/25 text-white' : 'bg-orange-100 text-orange-600'
+              }`}>{followUpCount}</span>
+            )}
+          </button>
         </div>
 
         {/* Segment Filter Dropdown */}
         <div className="shrink-0">
           <select value={activeSegment} onChange={e => setActiveSegment(e.target.value as any)}
-            className="admin-input text-xs font-semibold h-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300">
+            className="admin-input text-xs font-bold h-full border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-xl px-3 py-2 text-zinc-700 dark:text-zinc-300 cursor-pointer focus:outline-none">
             <option value="all">Semua Segmen RFM</option>
             <option value="Champions">🏆 Champions</option>
             <option value="Loyalists">⭐ Loyalists</option>
@@ -468,157 +869,192 @@ function CustomersPageInner() {
           </select>
         </div>
 
+        {/* Search Input */}
         <div className="relative flex-1">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-          <input className="admin-input pl-10" placeholder="Cari nama atau nomor WA..."
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+          <input className="admin-input pl-9 text-xs" placeholder="Cari nama atau nomor WA..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
-      {/* List */}
+      {/* Customers List Cards */}
       {loading ? (
         <AdminSkeleton rows={6} />
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-sm text-zinc-400 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className="text-center py-12 text-xs text-zinc-400 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
           {search ? 'Customer tidak ditemukan.' : 'Belum ada customer. Customer akan otomatis terdaftar saat booking dibuat.'}
         </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-800 shadow-sm">
           {filtered.map(c => (
-            <div key={c.id}>
-              {editId === c.id ? (
-                <div className="p-4">
-                  <CustomerForm data={editData} saving={saving} isNew={false}
-                    onChange={setEditData} onSave={saveEdit} onCancel={() => setEditId(null)} />
+            <div
+              key={c.id}
+              onClick={() => {
+                setSelectedCustomer(c);
+                setDrawerOpen(true);
+                setBookingHistory([]);
+                setLoadingHistory(true);
+                loadHistory(c.id);
+              }}
+              className={`group px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-all border-l-2 ${
+                (isDormant(c) || isEligibleForPromo(c)) 
+                  ? 'border-l-orange-400 bg-orange-50/5 dark:bg-orange-950/5' 
+                  : 'border-l-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                {/* Avatar with initial */}
+                <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 border border-zinc-200/50 dark:border-zinc-700/50 group-hover:border-earth-primary/30 transition-colors">
+                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300 group-hover:text-earth-primary transition-colors">
+                    {(c.name ?? c.wa_number).slice(0, 1).toUpperCase()}
+                  </span>
                 </div>
-              ) : (
-                <div className={`px-4 py-3 ${ (isDormant(c) || isEligibleForPromo(c)) ? 'bg-orange-50/50 dark:bg-orange-950/10 border-l-2 border-l-orange-400' : '' }`}>
-                  {/* Dormant banner */}
-                  {(isDormant(c) || isEligibleForPromo(c)) && (() => {
-                    const promo = getEligiblePromo(c);
-                    let days = 0;
-                    if (c.last_visit) days = Math.floor((Date.now() - new Date(c.last_visit).getTime()) / 86400000);
-                    const recSvc = getTreatmentRecommendation(c.services_history);
-                    return (
-                      <div className="flex flex-col gap-1.5 mb-2 p-2 bg-orange-50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-900/20 rounded-xl">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle size={11} className="text-orange-500 shrink-0" />
-                          <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 flex-1">
-                            {promo 
-                              ? `✨ Eligible untuk diskon ${promo.name} pada kunjungan berikutnya!` 
-                              : `⚠ Sudah ${days} hari tidak order`}
-                          </span>
-                          <button onClick={() => sendReEngageWA(c, promo)}
-                            className="flex items-center shrink-0 gap-1 px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition-colors">
-                            <MessageCircle size={10} /> Kirim WA {promo && 'Promo'}
-                          </button>
-                        </div>
-                        <div className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5 pl-4 mt-[-2px]">
-                          <span>💡 Rekomendasi Cross-Sell:</span>
-                          <strong className="text-earth-primary font-bold">{recSvc}</strong>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div className="flex items-start gap-3">
-                    {/* Avatar */}
-                    <div className="w-9 h-9 rounded-full bg-earth-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <span className="text-xs font-bold text-earth-primary">
-                        {(c.name ?? c.wa_number).slice(0, 1).toUpperCase()}
+
+                {/* Info Column */}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-semibold text-sm text-zinc-900 dark:text-white leading-tight">
+                      {c.name || '(Tanpa Nama)'}
+                    </h4>
+                    {c.segment && (
+                      <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full ${
+                        c.segment === 'Champions' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                        c.segment === 'Loyalists' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' :
+                        c.segment === 'New' ? 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400' :
+                        c.segment === 'About to Sleep' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
+                        'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                      }`}>
+                        {c.segment}
                       </span>
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm text-zinc-900 dark:text-white">{c.name || '(tanpa nama)'}</p>
-                        <TierBadge count={c.effective_count ?? 0} discounts={discounts} />
-                        {c.segment && (
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full select-none ${
-                            c.segment === 'Champions' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' :
-                            c.segment === 'Loyalists' ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400' :
-                            c.segment === 'New' ? 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300' :
-                            c.segment === 'About to Sleep' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400' :
-                            'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400'
-                          }`}>
-                            {c.segment}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                        <span className="flex items-center gap-1 text-xs text-zinc-400">
-                          <Phone size={11} /> {c.wa_number}
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-zinc-500 font-medium">
-                          <Hash size={11} /> {c.effective_count ?? 0}x kunjungan
-                          {c.visit_count_base > 0 && (
-                            <span className="text-zinc-400 font-normal">({c.visit_count_base} offline)</span>
-                          )}
-                        </span>
-                        {isOwner && (c.total_spending ?? 0) > 0 && (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                            <Wallet size={11} /> {formatRp(c.total_spending ?? 0)} LTV
-                          </span>
-                        )}
-                        {c.last_visit && (
-                          <span className="text-[10px] text-zinc-400">Terakhir: {formatDate(c.last_visit)}</span>
-                        )}
-                      </div>
-                      {c.notes && <p className="text-[11px] text-zinc-400 italic mt-0.5">{c.notes}</p>}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1 shrink-0">
-                      {isDormant(c) && (
-                        <button onClick={() => sendReEngageWA(c)}
-                          className="p-2 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/30 text-orange-400" title="Kirim WA Re-engagement">
-                          <MessageCircle size={14} />
-                        </button>
-                      )}
-                      <button onClick={() => loadHistory(c.id)}
-                        className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400" title="Riwayat Booking">
-                        {expandId === c.id ? <ChevronUp size={14} /> : <CalendarCheck size={14} />}
-                      </button>
-                      <button onClick={() => startEdit(c)} className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-400">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => deleteCustomer(c.id, c.name)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    )}
+                    <TierBadge count={c.effective_count ?? 0} discounts={discounts} />
                   </div>
-
-                  {/* Booking history expand */}
-                  {expandId === c.id && bookingHistory[c.id] && (
-                    <div className="mt-3 ml-12 rounded-xl border border-zinc-100 dark:border-zinc-800 overflow-hidden">
-                      {(bookingHistory[c.id] as { id: string; service_name: string; booking_date: string; final_price: number; price: number; status: string; discount_total: number }[]).length === 0 ? (
-                        <p className="text-xs text-zinc-400 text-center py-3">Belum ada booking di sistem.</p>
-                      ) : (
-                        <div className="divide-y divide-zinc-50 dark:divide-zinc-800">
-                          {(bookingHistory[c.id] as { id: string; service_name: string; booking_date: string; final_price: number; price: number; status: string; discount_total: number }[]).map(b => (
-                            <div key={b.id} className="flex items-center justify-between px-3 py-2">
-                              <div>
-                                <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{b.service_name}</p>
-                                <p className="text-[11px] text-zinc-400">{b.booking_date ? formatDate(b.booking_date) : '-'}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs font-mono text-zinc-700 dark:text-zinc-300">{formatRp(b.final_price ?? b.price)}</p>
-                                <span className={`text-[10px] font-medium ${b.status === 'Completed' ? 'text-blue-500' : b.status === 'Canceled' ? 'text-zinc-400' : 'text-amber-500'}`}>
-                                  {b.status}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                  
+                  <div className="flex items-center gap-3 mt-1 text-xs text-zinc-400 flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <Phone size={11} /> {c.wa_number}
+                    </span>
+                    <span className="flex items-center gap-1 font-semibold text-zinc-500 dark:text-zinc-400">
+                      <Hash size={11} /> {c.effective_count ?? 0}x kunjungan
+                      {c.visit_count_base > 0 && (
+                        <span className="text-zinc-400 font-normal ml-0.5">({c.visit_count_base} offline)</span>
                       )}
-                    </div>
-                  )}
+                    </span>
+                    {c.last_visit && (
+                      <span className="text-[10px] text-zinc-400">
+                        Terakhir: {formatDate(c.last_visit)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Right side stats & actions */}
+              <div className="flex items-center gap-4 shrink-0" onClick={e => e.stopPropagation()}>
+                {/* LTV value (hidden on mobile) */}
+                {isOwner && (c.total_spending ?? 0) > 0 && (
+                  <div className="text-right hidden sm:block">
+                    <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Total Spending</p>
+                    <p className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {formatRp(c.total_spending ?? 0)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  {(isDormant(c) || isEligibleForPromo(c)) && (
+                    <button
+                      onClick={() => {
+                        const promo = getEligiblePromo(c);
+                        sendReEngageWA(c, promo);
+                      }}
+                      className="p-2 text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/20 rounded-lg transition-colors"
+                      title="Kirim WhatsApp Re-engagement"
+                    >
+                      <MessageCircle size={14} />
+                    </button>
+                  )}
+                  
+                  <button
+                    onClick={() => {
+                      setSelectedCustomer(c);
+                      setDrawerOpen(true);
+                      setBookingHistory([]);
+                      setLoadingHistory(true);
+                      loadHistory(c.id);
+                    }}
+                    className="p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                    title="Lihat Detail & Riwayat"
+                  >
+                    <CalendarCheck size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => startEdit(c)}
+                    className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 rounded-lg transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => deleteCustomer(c.id, c.name)}
+                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
+                    title="Hapus"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Sliding Customer Detail Drawer */}
+      <CustomerDrawer
+        customer={selectedCustomer}
+        discounts={discounts}
+        bookingHistory={bookingHistory}
+        loadingHistory={loadingHistory}
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSendWA={(draftMessage) => {
+          window.open(`https://wa.me/${selectedCustomer?.wa_number.replace(/\D/g, '')}?text=${encodeURIComponent(draftMessage)}`, '_blank');
+        }}
+        onEdit={() => {
+          if (selectedCustomer) {
+            setDrawerOpen(false);
+            startEdit(selectedCustomer);
+          }
+        }}
+        reEngageDays={reEngageDays}
+        reEngageTemplate={reEngageTemplate}
+        reEngagePromoTemplate={reEngagePromoTemplate}
+      />
+
+      {/* Add Customer Modal */}
+      <CustomerModalForm
+        isOpen={showAdd}
+        data={newCust}
+        saving={saving}
+        isNew={true}
+        onChange={setNewCust}
+        onSave={addCustomer}
+        onCancel={() => setShowAdd(false)}
+      />
+
+      {/* Edit Customer Modal */}
+      <CustomerModalForm
+        isOpen={formOpen}
+        data={editData}
+        saving={saving}
+        isNew={false}
+        onChange={setEditData}
+        onSave={saveEdit}
+        onCancel={() => setFormOpen(false)}
+      />
     </div>
   );
 }

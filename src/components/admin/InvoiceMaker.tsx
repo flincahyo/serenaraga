@@ -67,7 +67,7 @@ function computeAmount(d: Discount, gross: number, items: Item[] = [], servicesL
     if (d.value_type === 'percentage') return Math.round(basis * d.value / 100);
     return d.value;
   }
-  
+
   if (d.target_type === 'category' && d.target_category_id) {
     const matchingItems = items.filter(item => {
       const svc = servicesList.find(s => s.name === item.name);
@@ -87,7 +87,7 @@ function isDiscountValid(d: Discount): boolean {
   if (!d.is_active) return false;
   const today = new Date().toISOString().split('T')[0];
   if (d.valid_from && today < d.valid_from) return false;
-  if (d.valid_to   && today > d.valid_to)   return false;
+  if (d.valid_to && today > d.valid_to) return false;
   // Audit #3 Bug #3: enforce max_uses limit
   if (d.max_uses !== null && d.uses_count >= d.max_uses) return false;
   return true;
@@ -102,43 +102,43 @@ const InvoiceMaker = () => {
   // Audit #2 Bug #1: prevent double-completion if kasir clicks both Download & WA
   const hasSavedRef = useRef(false);
   const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [customerName, setCustomerName]   = useState('');
+  const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [date, setDate]                   = useState('');
-  const [bookingTime, setBookingTime]     = useState('');
-  const [items, setItems]                 = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
-  const [services, setServices]           = useState<Service[]>([]);
-  const [bookings, setBookings]           = useState<Booking[]>([]);
-  const [generating, setGenerating]       = useState(false);
+  const [date, setDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+  const [items, setItems] = useState<Item[]>([{ id: 1, name: '', duration: '', price: 0 }]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [generating, setGenerating] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState('');
   const [invoiceFooter, setInvoiceFooter] = useState('Terima kasih telah mempercayakan ketenangan raga Anda kepada kami.');
   const [invoiceSocial, setInvoiceSocial] = useState('Instagram & Threads: @serena.raga');
   const [commissionPct, setCommissionPct] = useState(30);
-  const [completing, setCompleting]       = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [transportEntries, setTransportEntries] = useState<TransportEntry[]>([{ id: '1', therapist_id: '', fee: '', pct: 100 }]);
   const [transportLabel, setTransportLabel] = useState('Biaya Transport Tambahan');
   // Pool of therapist IDs allowed in transport dropdown. Empty = all therapists (manual mode).
   const [transportTherapistPool, setTransportTherapistPool] = useState<string[]>([]);
 
   // Discount + customer state
-  const [allDiscounts, setAllDiscounts]           = useState<Discount[]>([]);
-  const [appliedDiscounts, setAppliedDiscounts]   = useState<AppliedDiscount[]>([]);
-  const [customerRecord, setCustomerRecord]       = useState<Customer | null>(null);
-  const [effectiveCount, setEffectiveCount]       = useState<number | null>(null);
+  const [allDiscounts, setAllDiscounts] = useState<Discount[]>([]);
+  const [appliedDiscounts, setAppliedDiscounts] = useState<AppliedDiscount[]>([]);
+  const [customerRecord, setCustomerRecord] = useState<Customer | null>(null);
+  const [effectiveCount, setEffectiveCount] = useState<number | null>(null);
   const [eligibleDiscounts, setEligibleDiscounts] = useState<Discount[]>([]);
   const [lookingUpCustomer, setLookingUpCustomer] = useState(false);
-  const [addDiscountId, setAddDiscountId]         = useState('');
+  const [addDiscountId, setAddDiscountId] = useState('');
   const [customDiscountName, setCustomDiscountName] = useState('');
   const [customDiscountAmount, setCustomDiscountAmount] = useState('');
-  const [therapists, setTherapists] = useState<{id: string; name: string; commission_pct: number}[]>([]);
-  const [reEngageDays, setReEngageDays]           = useState(60);
+  const [therapists, setTherapists] = useState<{ id: string; name: string; commission_pct: number }[]>([]);
+  const [reEngageDays, setReEngageDays] = useState(60);
   // Voucher
-  const [voucherCode, setVoucherCode]             = useState('');
-  const [voucherChecking, setVoucherChecking]     = useState(false);
-  const [voucherError, setVoucherError]           = useState('');
-  const [voucherApplied, setVoucherApplied]       = useState<{id:string;code:string;label:string;value:number;value_type:string} | null>(null);
-  const [returningPromos, setReturningPromos]     = useState<Discount[]>([]); // suggested returning customer promos
-  const [categories, setCategories]               = useState<any[]>([]);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [voucherChecking, setVoucherChecking] = useState(false);
+  const [voucherError, setVoucherError] = useState('');
+  const [voucherApplied, setVoucherApplied] = useState<{ id: string; code: string; label: string; value: number; value_type: string } | null>(null);
+  const [returningPromos, setReturningPromos] = useState<Discount[]>([]); // suggested returning customer promos
+  const [categories, setCategories] = useState<any[]>([]);
 
   const supabase = createClient();
   const grossTotal = items.reduce((s, i) => s + Number(i.price), 0);
@@ -194,54 +194,54 @@ const InvoiceMaker = () => {
     if (!date) return;
     const loadDaySchedule = async () => {
       const dW = new Date(date).getDay();
-      const [{data:s}, {data:o}, {data:b}] = await Promise.all([
+      const [{ data: s }, { data: o }, { data: b }] = await Promise.all([
         supabase.from('therapist_shifts').select('*').eq('day_of_week', dW),
         supabase.from('therapist_timeoffs').select('*').eq('off_date', date),
         supabase.from('booking_items').select('therapist_id, bookings!inner(id, booking_time, status)').eq('bookings.booking_date', date)
       ]);
-      setScheduleData({ shifts: s||[], offs: o||[], bks: b||[] });
+      setScheduleData({ shifts: s || [], offs: o || [], bks: b || [] });
     };
     loadDaySchedule();
   }, [date, supabase]);
 
   useEffect(() => {
     if (!bookingTime) { setConflictWarning(null); return; }
-    
+
     for (const item of items) {
-       if (item.therapist_id) {
-           const tid = item.therapist_id;
-           const tname = therapists.find(t=>t.id===tid)?.name;
-           
-           const off = scheduleData.offs.find(o => o.therapist_id === tid);
-           if (off && off.is_full_day) {
-             setConflictWarning(`⚠️ Terapis ${tname} sedang Cuti/Libur Penuh hari ini!`);
-             return;
-           }
-           const shift = scheduleData.shifts.find(s => s.therapist_id === tid);
-           if (shift && !shift.is_working) {
-             setConflictWarning(`⚠️ ${tname} sedang Off/Libur reguler di hari ini.`);
-             return;
-           }
-           if (shift && shift.break_start_time && shift.break_end_time) {
-             if (bookingTime >= shift.break_start_time && bookingTime <= shift.break_end_time) {
-                setConflictWarning(`⚠️ Jam ${bookingTime} berbenturan dengan Jam Istirahat ${tname} (${shift.break_start_time.slice(0,5)}-${shift.break_end_time.slice(0,5)}).`);
-                return;
-             }
-           }
-           
-           const overlappingBk = scheduleData.bks.find(b => {
-             if (b.therapist_id !== tid || b.bookings.status === 'Canceled' || b.bookings.id === selectedBookingId || !b.bookings.booking_time) return false;
-             // approximate 2 hr window conflict warning
-             const h1 = parseInt(b.bookings.booking_time.split(':')[0]);
-             const h2 = parseInt(bookingTime.split(':')[0]);
-             return Math.abs(h1 - h2) < 2;
-           });
-           
-           if (overlappingBk) {
-             setConflictWarning(`🚨 Peringatan: ${tname} kemungkinan memiliki booking lain pada jam ${overlappingBk.bookings.booking_time.slice(0,5)}! Mohon cek Tracker Gantt.`);
-             return;
-           }
-       }
+      if (item.therapist_id) {
+        const tid = item.therapist_id;
+        const tname = therapists.find(t => t.id === tid)?.name;
+
+        const off = scheduleData.offs.find(o => o.therapist_id === tid);
+        if (off && off.is_full_day) {
+          setConflictWarning(`⚠️ Terapis ${tname} sedang Cuti/Libur Penuh hari ini!`);
+          return;
+        }
+        const shift = scheduleData.shifts.find(s => s.therapist_id === tid);
+        if (shift && !shift.is_working) {
+          setConflictWarning(`⚠️ ${tname} sedang Off/Libur reguler di hari ini.`);
+          return;
+        }
+        if (shift && shift.break_start_time && shift.break_end_time) {
+          if (bookingTime >= shift.break_start_time && bookingTime <= shift.break_end_time) {
+            setConflictWarning(`⚠️ Jam ${bookingTime} berbenturan dengan Jam Istirahat ${tname} (${shift.break_start_time.slice(0, 5)}-${shift.break_end_time.slice(0, 5)}).`);
+            return;
+          }
+        }
+
+        const overlappingBk = scheduleData.bks.find(b => {
+          if (b.therapist_id !== tid || b.bookings.status === 'Canceled' || b.bookings.id === selectedBookingId || !b.bookings.booking_time) return false;
+          // approximate 2 hr window conflict warning
+          const h1 = parseInt(b.bookings.booking_time.split(':')[0]);
+          const h2 = parseInt(bookingTime.split(':')[0]);
+          return Math.abs(h1 - h2) < 2;
+        });
+
+        if (overlappingBk) {
+          setConflictWarning(`🚨 Peringatan: ${tname} kemungkinan memiliki booking lain pada jam ${overlappingBk.bookings.booking_time.slice(0, 5)}! Mohon cek Tracker Gantt.`);
+          return;
+        }
+      }
     }
     setConflictWarning(null);
   }, [items, bookingTime, scheduleData, selectedBookingId, therapists]);
@@ -276,16 +276,16 @@ const InvoiceMaker = () => {
   const lookupCustomer = useCallback(async (phone: string) => {
     let clean = phone.replace(/\D/g, '');
     if (clean.startsWith('0')) clean = '62' + clean.substring(1);
-    
+
     if (clean.length < 6) { setCustomerRecord(null); setEffectiveCount(null); setEligibleDiscounts([]); return; }
     setLookingUpCustomer(true);
     const [{ data: cust }, { data: completedB }] = await Promise.all([
       supabase.from('customers').select('id,wa_number,name,visit_count_base').eq('wa_number', clean).single(),
       supabase.from('bookings').select('id').eq('status', 'Completed').eq('phone', clean),
     ]);
-    const base  = cust?.visit_count_base ?? 0;
+    const base = cust?.visit_count_base ?? 0;
     const dbCnt = (completedB?.length ?? 0);
-    const eff   = base + dbCnt;
+    const eff = base + dbCnt;
     setCustomerRecord(cust ?? null);
     if (cust?.name && !customerName) setCustomerName(cust.name);
     setEffectiveCount(eff);
@@ -337,7 +337,7 @@ const InvoiceMaker = () => {
       let changed = false;
       const next = prev.map(a => {
         const d = allDiscounts.find(x => x.id === a.discountId) ||
-                  (a.discountId.startsWith('voucher_') ? { id: a.discountId, target_type: 'global', value_type: a.value_type, value: a.value } : null);
+          (a.discountId.startsWith('voucher_') ? { id: a.discountId, target_type: 'global', value_type: a.value_type, value: a.value } : null);
         const newAmt = d
           ? computeAmount(d as any, grossTotal, items, services)
           : a.value_type === 'percentage' ? Math.round(grossTotal * a.value / 100) : a.value;
@@ -361,7 +361,7 @@ const InvoiceMaker = () => {
       if (!isDiscountValid(d)) return false;
       if (d.type === 'first_customer') return effectiveCount === 0;
       if (d.type === 'loyal') return d.min_orders !== null && effectiveCount >= d.min_orders;
-      
+
       // Targeted discounts are auto-suggested if cart contains matching service or category
       if (d.target_type === 'service' && d.target_service_id) {
         return items.some(item => {
@@ -458,7 +458,7 @@ const InvoiceMaker = () => {
     if (bkItems && bkItems.length > 0) {
       const normalItems = bkItems.filter(bi => bi.service_name !== 'Biaya Transport');
       const transportItems = bkItems.filter(bi => bi.service_name === 'Biaya Transport');
-      
+
       setItems(normalItems.map((bi, i) => {
         const svc = services.find(s => s.name === bi.service_name);
         return {
@@ -632,9 +632,9 @@ const InvoiceMaker = () => {
 
   // Transport: sum all entries
   const totalTransportFee = transportEntries.reduce((s, e) => s + Number(e.fee || 0), 0);
-  
-  const finalTotal    = Math.max(0, grossTotal - totalDiscount) + totalTransportFee;
-  
+
+  const finalTotal = Math.max(0, grossTotal - totalDiscount) + totalTransportFee;
+
   // Per-item commission: use each item's assigned therapist pct, fallback to global commissionPct
   const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
   const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
@@ -659,8 +659,8 @@ const InvoiceMaker = () => {
     if (!e.therapist_id) return s;
     return s + Math.round(Number(e.fee || 0) * (e.pct / 100));
   }, 0);
-  const commission    = commissionServices + commissionTransport;
-  const ownerNet      = finalTotal - commission;
+  const commission = commissionServices + commissionTransport;
+  const ownerNet = finalTotal - commission;
 
   // ── Tier badge helper ──
   const tierBadge = (): string | null => {
@@ -808,7 +808,7 @@ const InvoiceMaker = () => {
         const grossCommission = Math.round(itemBasis * pct / 100);
         const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
         const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
-        
+
         const svc = services.find(s => s.name === item.name);
         const serviceId = svc?.id || null;
         if (item.db_id) {
@@ -921,15 +921,19 @@ const InvoiceMaker = () => {
   );
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 xl:gap-12">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
       {/* ── FORM SECTION ── */}
-      <div className="space-y-4 bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+      <div className="lg:col-span-7 space-y-6 bg-white dark:bg-zinc-900 p-5 sm:p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+        <div>
+          <h2 className="text-sm font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-1">Rincian POS / Checkout</h2>
+          <p className="text-xs text-zinc-450 dark:text-zinc-500">Lengkapi detail treatment, terapis, diskon, dan transport pelanggan.</p>
+        </div>
 
         {/* Pick from Booking */}
-        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700">
-          <div className="flex items-center gap-2 mb-3">
-            <Users size={15} className="text-earth-primary" />
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Pilih dari Booking</label>
+        <div className="bg-zinc-50 dark:bg-zinc-950/40 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 space-y-2">
+          <div className="flex items-center gap-2">
+            <Users size={14} className="text-earth-primary" />
+            <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Pilih dari Antrean Booking</label>
           </div>
           <select value={selectedBookingId} onChange={e => onBookingSelect(e.target.value)} className="admin-input text-xs">
             <option value="">-- Pilih booking untuk auto-isi --</option>
@@ -939,122 +943,149 @@ const InvoiceMaker = () => {
               </option>
             ))}
           </select>
-          {selectedBookingId && <p className="text-[10px] text-zinc-400 mt-2">Data terisi. Kamu tetap bisa edit dan tambah item di bawah.</p>}
+          {selectedBookingId && (
+            <p className="text-[10px] text-zinc-450 dark:text-zinc-550 font-medium">
+              Data booking terisi otomatis. Anda masih dapat memodifikasi item di bawah.
+            </p>
+          )}
         </div>
 
         {/* No + Date + Time */}
-        <div className="grid grid-cols-6 gap-3">
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">No. Invoice</label>
-            <input type="text" value={invoiceNumber} readOnly className="admin-input font-mono text-xs opacity-60 cursor-not-allowed" />
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider mb-1.5 block">No. Invoice</label>
+            <input type="text" value={invoiceNumber} readOnly className="admin-input font-mono text-xs opacity-60 cursor-not-allowed bg-zinc-50 dark:bg-zinc-900" />
           </div>
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Tanggal</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="admin-input text-xs" />
+          <div>
+            <label className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider mb-1.5 block">Tanggal</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="admin-input text-xs font-mono" />
           </div>
-          <div className="col-span-2">
-            <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Waktu / Jam</label>
-            <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} className="admin-input text-xs" />
+          <div>
+            <label className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider mb-1.5 block">Waktu / Jam</label>
+            <input type="time" value={bookingTime} onChange={e => setBookingTime(e.target.value)} className="admin-input text-xs font-mono" />
           </div>
         </div>
 
-        {/* Customer */}
-        <div>
-          <label className="text-xs font-medium text-zinc-500 mb-1.5 block">Nama Pelanggan</label>
-          <input type="text" placeholder="Ibu Rina" value={customerName} onChange={e => setCustomerName(e.target.value)} className="admin-input" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-zinc-500 mb-1.5 block">No. WhatsApp</label>
-          <div className="relative">
-            <input type="tel" placeholder="628xxx" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className="admin-input pr-8" />
-            {lookingUpCustomer && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-zinc-400" />}
+        {/* Customer Info */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider mb-1.5 block">Nama Pelanggan</label>
+            <input type="text" placeholder="Ibu Rina" value={customerName} onChange={e => setCustomerName(e.target.value)} className="admin-input text-xs" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider mb-1.5 block">No. WhatsApp</label>
+            <div className="relative">
+              <input type="tel" placeholder="628xxx" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} className="admin-input pr-8 text-xs font-mono" />
+              {lookingUpCustomer && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-zinc-450" />}
+            </div>
           </div>
         </div>
 
         {/* Customer info card */}
         {effectiveCount !== null && (
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/40 p-3.5 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="flex items-center gap-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                <Hash size={11} /> Kunjungan ke-{effectiveCount + 1}
-              </span>
-              {tierBadge() && (
-                <span className="text-[11px] font-medium text-earth-primary flex items-center gap-1">
-                  <Award size={11} /> {tierBadge()}
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/20 p-4 space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-zinc-150 dark:border-zinc-850">
+              <div className="flex items-center gap-2">
+                <Users size={14} className="text-earth-primary" />
+                <span className="text-xs font-bold text-zinc-850 dark:text-zinc-200">Profil Pelanggan</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300/10 dark:border-zinc-700 font-mono">
+                  KUNJUNGAN KE-{effectiveCount + 1}
                 </span>
-              )}
+                {tierBadge() && (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-earth-primary/10 text-earth-primary border border-earth-primary/20">
+                    {tierBadge()}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Eligible discounts */}
             {eligibleDiscounts.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-medium text-zinc-500">Diskon tersedia:</p>
-                {eligibleDiscounts.map(d => {
-                  const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
-                  const amt = computeAmount(d, grossTotal, items, services);
-                  return (
-                    <label key={d.id} className="flex items-center gap-2.5 cursor-pointer group">
-                      <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
-                        className="accent-earth-primary w-4 h-4" />
-                      <span className="text-xs text-zinc-700 dark:text-zinc-300 flex-1">
-                        {d.name} — {d.value_type === 'percentage' ? `${d.value}%` : formatRp(d.value)}
-                      </span>
-                      <span className={`text-xs font-mono font-semibold ${applied ? 'text-earth-primary' : 'text-zinc-400'}`}>
-                        -{formatRp(amt)}
-                      </span>
-                    </label>
-                  );
-                })}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">Diskon Otomatis Tersedia</p>
+                <div className="space-y-1.5">
+                  {eligibleDiscounts.map(d => {
+                    const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
+                    const amt = computeAmount(d, grossTotal, items, services);
+                    return (
+                      <label key={d.id} className="flex items-center justify-between cursor-pointer group p-1.5 rounded-lg hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors">
+                        <div className="flex items-center gap-2.5">
+                          <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-earth-primary focus:ring-earth-primary w-4 h-4" />
+                          <span className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">
+                            {d.name} {d.value_type === 'percentage' ? `(${d.value}%)` : ''}
+                          </span>
+                        </div>
+                        <span className={`text-xs font-mono font-bold ${applied ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-400'}`}>
+                          -{formatRp(amt)}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* 🔄 Returning Customer Promo Suggestion */}
+            {/* Returning Customer Promo Suggestion */}
             {returningPromos.length > 0 && (
-              <div className="rounded-lg border border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/20 p-3 space-y-2">
-                <p className="text-[11px] font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
-                  🔄 Pelanggan Returning — Promo Tersedia
+              <div className="rounded-xl border border-orange-200 dark:border-orange-900 bg-orange-50/50 dark:bg-orange-950/10 p-3 space-y-2">
+                <p className="text-[10px] font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  🔄 Pelanggan Loyal Lama — Promo Kembali
                 </p>
-                {returningPromos.map(d => {
-                  const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
-                  return (
-                    <label key={d.id} className="flex items-center gap-2.5 cursor-pointer">
-                      <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
-                        className="accent-orange-500 w-4 h-4" />
-                      <span className="text-xs text-orange-700 dark:text-orange-300 flex-1">
-                        {d.name} — {d.value_type === 'percentage' ? `${d.value}%` : formatRp(d.value)}
-                      </span>
-                      <span className={`text-xs font-mono font-semibold ${applied ? 'text-orange-500' : 'text-orange-300'}`}>
-                        -{formatRp(computeAmount(d, grossTotal, items, services))}
-                      </span>
-                    </label>
-                  );
-                })}
+                <div className="space-y-1.5">
+                  {returningPromos.map(d => {
+                    const applied = !!appliedDiscounts.find(a => a.discountId === d.id);
+                    return (
+                      <label key={d.id} className="flex items-center justify-between cursor-pointer p-1 rounded hover:bg-orange-100/20">
+                        <div className="flex items-center gap-2">
+                          <input type="checkbox" checked={applied} onChange={() => toggleEligibleDiscount(d)}
+                            className="rounded border-orange-300 text-orange-600 focus:ring-orange-500 w-4 h-4" />
+                          <span className="text-xs text-orange-850 dark:text-orange-300 font-medium">
+                            {d.name} {d.value_type === 'percentage' ? `(${d.value}%)` : ''}
+                          </span>
+                        </div>
+                        <span className={`text-xs font-mono font-bold ${applied ? 'text-orange-600 dark:text-orange-450' : 'text-orange-300'}`}>
+                          -{formatRp(computeAmount(d, grossTotal, items, services))}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {/* Applied discounts list */}
             {appliedDiscounts.length > 0 && (
-              <div className="space-y-1">
-                {appliedDiscounts
-                  .filter(a => !eligibleDiscounts.find(e => e.id === a.discountId))
-                  .map(a => (
-                    <div key={a.discountId} className="flex items-center gap-2 text-xs">
-                      <Tag size={11} className="text-earth-primary shrink-0" />
-                      <span className="flex-1 text-zinc-700 dark:text-zinc-300">{a.label}</span>
-                      <span className="font-mono font-semibold text-earth-primary">-{formatRp(a.amount)}</span>
-                      <button onClick={() => removeApplied(a.discountId)} className="text-zinc-400 hover:text-red-500 p-0.5">
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
+              <div className="space-y-1.5 border-t border-zinc-150 dark:border-zinc-850 pt-3">
+                <p className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">Diskon Terpasang</p>
+                <div className="space-y-1">
+                  {appliedDiscounts
+                    .filter(a => !eligibleDiscounts.find(e => e.id === a.discountId))
+                    .map(a => (
+                      <div key={a.discountId} className="flex items-center justify-between text-xs bg-white dark:bg-zinc-950 p-2 rounded-lg border border-zinc-100 dark:border-zinc-850">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Tag size={12} className="text-earth-primary shrink-0" />
+                          <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate">{a.label}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">-{formatRp(a.amount)}</span>
+                          <button onClick={() => removeApplied(a.discountId)} className="text-zinc-400 hover:text-red-500 p-0.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded">
+                            <X size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
 
-            {/* Add manual discount */}
-            <div className="flex gap-2">
+            {/* Add manual discount selector */}
+            <div className="flex gap-2 pt-2">
               <select value={addDiscountId} onChange={e => setAddDiscountId(e.target.value)}
                 className="admin-input text-xs flex-1">
-                <option value="">+ Tambah diskon lain...</option>
+                <option value="">+ Pasang diskon terdaftar...</option>
                 {unappliedDiscounts
                   .filter(d => !eligibleDiscounts.find(e => e.id === d.id))
                   .map(d => (
@@ -1065,14 +1096,14 @@ const InvoiceMaker = () => {
               </select>
               {addDiscountId && (
                 <button onClick={addManualDiscount} className="admin-btn-primary py-1.5 px-3 shrink-0">
-                  <Check size={13} />
+                  <Check size={14} />
                 </button>
               )}
             </div>
 
             {/* Voucher Code */}
-            <div className="pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-700/50">
-              <p className="text-[10px] font-semibold text-earth-primary mb-1.5 flex items-center gap-1">🎁 Kode Voucher / Gift Card</p>
+            <div className="pt-3 border-t border-zinc-150 dark:border-zinc-850">
+              <p className="text-[10px] font-bold text-earth-primary mb-1.5 uppercase tracking-wider">🎁 Kode Voucher / Gift Card</p>
               <div className="flex gap-2">
                 <input
                   placeholder="SRAGA-XXXX"
@@ -1081,82 +1112,106 @@ const InvoiceMaker = () => {
                   className="admin-input text-xs flex-1 font-mono tracking-widest uppercase"
                   onKeyDown={e => e.key === 'Enter' && checkVoucher()}
                 />
-                <button onClick={checkVoucher} disabled={!voucherCode.trim() || voucherChecking} className="admin-btn-ghost py-1.5 px-3 shrink-0 text-xs disabled:opacity-50">
-                  {voucherChecking ? <Loader2 size={13} className="animate-spin" /> : 'Cek'}
+                <button onClick={checkVoucher} disabled={!voucherCode.trim() || voucherChecking} className="admin-btn-ghost py-1.5 px-3.5 shrink-0 text-xs disabled:opacity-50">
+                  {voucherChecking ? <Loader2 size={13} className="animate-spin" /> : 'Periksa'}
                 </button>
               </div>
-              {voucherError && <p className="text-[11px] text-red-500 mt-1">{voucherError}</p>}
+              {voucherError && <p className="text-[10px] font-bold text-red-500 mt-1">{voucherError}</p>}
               {voucherApplied && (
-                <div className="mt-2 flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                <div className="mt-2 flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250/20 rounded-xl px-3.5 py-2.5">
                   <div>
-                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{voucherApplied.label}</p>
-                    <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
-                      Potongan: {voucherApplied.value_type === 'flat' ? formatRp(voucherApplied.value) : `${voucherApplied.value}% dari total`}
+                    <p className="text-xs font-bold text-emerald-800 dark:text-emerald-400">{voucherApplied.label}</p>
+                    <p className="text-[10px] text-emerald-650 dark:text-emerald-500 font-medium">
+                      Potongan: {voucherApplied.value_type === 'flat' ? formatRp(voucherApplied.value) : `${voucherApplied.value}% dari subtotal`}
                     </p>
                   </div>
                   <button onClick={applyVoucher} className="admin-btn-primary text-xs py-1 px-3">
-                    <Check size={12} /> Pakai
+                    Pakai Voucher
                   </button>
                 </div>
               )}
             </div>
 
             {/* Custom Manual Discount */}
-            <div className="pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-700/50">
-              <p className="text-[10px] font-medium text-zinc-500 mb-1.5">+ Custom Diskon (manual/kasus khusus)</p>
+            <div className="pt-3 border-t border-zinc-150 dark:border-zinc-850">
+              <p className="text-[10px] font-bold text-zinc-450 dark:text-zinc-550 mb-1.5 uppercase tracking-wider">+ Custom Potongan Manual</p>
               <div className="flex gap-2">
-                <input placeholder="Nama/Detail diskon..." value={customDiscountName} onChange={e => setCustomDiscountName(e.target.value)} className="admin-input text-xs flex-[2]" />
-                <input type="number" placeholder="Rp potongan..." value={customDiscountAmount} onChange={e => setCustomDiscountAmount(e.target.value)} className="admin-input text-xs flex-[1] font-mono" />
+                <input placeholder="Keterangan diskon..." value={customDiscountName} onChange={e => setCustomDiscountName(e.target.value)} className="admin-input text-xs flex-[2]" />
+                <input type="number" placeholder="Rp potongan..." value={customDiscountAmount} onChange={e => setCustomDiscountAmount(e.target.value)} className="admin-input text-xs flex-[1.2] font-mono text-right" />
                 <button onClick={addCustomDiscount} disabled={!customDiscountName || !customDiscountAmount} className="admin-btn-primary py-1.5 px-3 shrink-0 disabled:opacity-50">
-                  <Check size={13} />
+                  <Check size={14} />
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Items */}
-        <div className="relative">
-          <div className="flex justify-between items-center mb-2">
-            <label className="text-xs font-medium text-zinc-500">Daftar Layanan</label>
-            <button onClick={addItem} className="text-xs text-earth-primary font-semibold hover:underline">+ Tambah Item</button>
+        {/* Items List */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center pb-1">
+            <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Layanan yang Dipesan</label>
+            <button onClick={addItem} className="text-xs text-earth-primary font-bold hover:underline flex items-center gap-1">+ Tambah Item</button>
           </div>
+
           {conflictWarning && (
-            <div className="mb-3 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-[11px] font-semibold text-red-600 dark:text-red-400">
+            <div className="px-3.5 py-2.5 bg-red-500/5 border border-red-500/10 rounded-xl text-xs font-semibold text-red-650 dark:text-red-400">
               {conflictWarning}
             </div>
           )}
+
           <div className="space-y-3">
-            {items.map(item => (
-              <div key={item.id} className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-3 space-y-2 border border-zinc-200 dark:border-zinc-700">
-                <select value={item.name} onChange={e => onServiceSelect(item.id, e.target.value)} className="admin-input text-xs">
-                  <option value="">-- Pilih dari pricelist (opsional) --</option>
-                  {categories.map(cat => (
-                    <optgroup key={cat.id} label={cat.label}>
-                      {services.filter(s => s.category === cat.id).map(s => (
-                        <option key={s.id} value={s.name}>{s.name} — Rp {s.price.toLocaleString('id-ID')}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                <div className="grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-5">
-                    <input placeholder="Nama layanan" value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} className="admin-input text-xs w-full" />
+            {items.map((item, idx) => (
+              <div key={item.id} className="bg-zinc-50 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3 shadow-sm relative">
+                <div className="flex items-center justify-between border-b border-zinc-155 dark:border-zinc-850 pb-2">
+                  <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500">ITEM #{idx + 1}</span>
+                  {items.length > 1 && (
+                    <button onClick={() => removeItem(item.id)} className="text-red-550 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 rounded-lg transition-colors">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Select standard service */}
+                <div>
+                  <label className="text-[9px] text-zinc-400 font-extrabold uppercase mb-1 block tracking-wider">Pilih Menu Treatment</label>
+                  <select value={item.name} onChange={e => onServiceSelect(item.id, e.target.value)} className="admin-input text-xs">
+                    <option value="">-- Pilih dari pricelist --</option>
+                    {categories.map(cat => (
+                      <optgroup key={cat.id} label={cat.label}>
+                        {services.filter(s => s.category === cat.id).map(s => (
+                          <option key={s.id} value={s.name}>{s.name} — {formatRp(s.price)}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Overwrite details manually */}
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-6">
+                    <label className="text-[9px] text-zinc-400 font-extrabold uppercase mb-1 block tracking-wider">Nama Treatment</label>
+                    <input placeholder="Nama..." value={item.name} onChange={e => updateItem(item.id, 'name', e.target.value)} className="admin-input text-xs" />
                   </div>
                   <div className="col-span-3">
-                    <input placeholder="Durasi" value={item.duration} onChange={e => updateItem(item.id, 'duration', e.target.value)} className="admin-input text-xs w-full text-center" />
+                    <label className="text-[9px] text-zinc-400 font-extrabold uppercase mb-1 block tracking-wider text-center">Durasi</label>
+                    <input placeholder="90m..." value={item.duration} onChange={e => updateItem(item.id, 'duration', e.target.value)} className="admin-input text-xs text-center font-mono" />
                   </div>
                   <div className="col-span-3">
-                    <input type="number" placeholder="Harga" value={item.price || ''} onChange={e => updateItem(item.id, 'price', Number(e.target.value))} className="admin-input text-xs w-full text-right font-mono" />
-                  </div>
-                  <div className="col-span-1 flex justify-center">
-                    <button onClick={() => removeItem(item.id)} className="text-red-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                    <label className="text-[9px] text-zinc-400 font-extrabold uppercase mb-1 block tracking-wider text-right">Harga</label>
+                    <input type="number" placeholder="Rp..." value={item.price || ''} onChange={e => updateItem(item.id, 'price', Number(e.target.value))} className="admin-input text-xs text-right font-mono" />
                   </div>
                 </div>
-                <div className="mt-2">
-                  <select className="admin-input text-xs bg-white dark:bg-zinc-900 border-dashed" value={item.therapist_id || ''} onChange={e => updateItem(item.id, 'therapist_id', e.target.value)}>
-                    <option value="">-- Assign Terapis (opsional) --</option>
-                    {therapists.map(t => <option key={t.id} value={t.id}>{t.name} {isOwner ? `(Fee ${t.commission_pct}%)` : ''}</option>)}
+
+                {/* Therapist selection */}
+                <div>
+                  <label className="text-[9px] text-zinc-400 font-extrabold uppercase mb-1 block tracking-wider">Terapis Penanggung Jawab</label>
+                  <select className="admin-input text-xs" value={item.therapist_id || ''} onChange={e => updateItem(item.id, 'therapist_id', e.target.value)}>
+                    <option value="">-- Pilih Terapis --</option>
+                    {therapists.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {isOwner ? `(Fee ${t.commission_pct}%)` : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1164,318 +1219,333 @@ const InvoiceMaker = () => {
           </div>
         </div>
 
-        {/* Transport Fee — per terapis */}
-        <div className="bg-zinc-50 dark:bg-zinc-800 rounded-xl p-4 border border-zinc-200 dark:border-zinc-700 space-y-2.5">
-          <div className="flex items-center justify-between">
-            <input type="text" value={transportLabel} onChange={e => setTransportLabel(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-zinc-600 dark:text-zinc-300 outline-none border-b border-dashed border-zinc-300 dark:border-zinc-600 hover:border-earth-primary focus:border-earth-primary w-fit pb-0.5" />
+        {/* Transport fee per therapist */}
+        <div className="bg-zinc-50 dark:bg-zinc-955/20 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3.5 shadow-sm">
+          <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-850 pb-2">
+            <div className="flex items-center gap-1.5">
+              <Bus size={14} className="text-earth-primary" />
+              <input
+                type="text"
+                value={transportLabel}
+                onChange={e => setTransportLabel(e.target.value)}
+                className="bg-transparent text-xs font-bold text-zinc-700 dark:text-zinc-300 outline-none border-b border-dashed border-zinc-300 dark:border-zinc-700 hover:border-earth-primary focus:border-earth-primary w-40 pb-0.5"
+              />
+            </div>
             {totalTransportFee > 0 && (
-              <span className="text-[10px] text-earth-primary font-mono font-semibold">
-                Total: Rp {totalTransportFee.toLocaleString('id-ID')}
+              <span className="text-xs text-earth-primary font-mono font-bold">
+                {formatRp(totalTransportFee)}
               </span>
             )}
           </div>
+
           <div className="space-y-2">
             {transportEntries.map((entry) => {
-              // Therapists available in pool (booking-filtered or all)
               const poolTherapists = transportTherapistPool.length > 0
                 ? therapists.filter(t => transportTherapistPool.includes(t.id))
                 : therapists;
-              // Exclude therapists already selected in OTHER entries (prevent duplicates)
               const usedIds = transportEntries
                 .filter(te => te.id !== entry.id && te.therapist_id)
                 .map(te => te.therapist_id);
               const availableTherapists = poolTherapists.filter(t => !usedIds.includes(t.id));
+
               return (
-              <div key={entry.id} className="flex gap-2 items-center">
-                <select
-                  value={entry.therapist_id}
-                  onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, therapist_id: e.target.value } : te))}
-                  className="admin-input text-xs flex-1 min-w-0"
-                >
-                  <option value="">→ Ke Owner</option>
-                  {availableTherapists.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  {/* Show current value even if not in pool (e.g. re-loaded from DB) */}
-                  {entry.therapist_id && !availableTherapists.find(t => t.id === entry.therapist_id) && (() => {
-                    const t = therapists.find(x => x.id === entry.therapist_id);
-                    return t ? <option key={t.id} value={t.id}>{t.name}</option> : null;
-                  })()}
-                </select>
-                <input
-                  type="number" placeholder="Nominal"
-                  value={entry.fee}
-                  onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, fee: e.target.value === '' ? '' : Number(e.target.value) } : te))}
-                  className="admin-input text-xs font-mono w-[110px] text-right"
-                />
-                {isOwner && entry.therapist_id && (
-                  <div className="flex items-center gap-0.5 bg-white dark:bg-zinc-900 px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 shrink-0">
-                    <input
-                      type="number" max={100} min={0} value={entry.pct}
-                      onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, pct: Number(e.target.value) } : te))}
-                      className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[35px] outline-none"
-                    />
-                    <span className="text-[10px] text-zinc-400 font-bold">%</span>
-                  </div>
-                )}
-                {transportEntries.length > 1 && (
-                  <button
-                    onClick={() => setTransportEntries(prev => prev.filter(te => te.id !== entry.id))}
-                    className="text-red-400 hover:text-red-500 p-1 shrink-0"
+                <div key={entry.id} className="flex gap-2 items-center">
+                  <select
+                    value={entry.therapist_id}
+                    onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, therapist_id: e.target.value } : te))}
+                    className="admin-input text-xs flex-1 min-w-0"
                   >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            );
+                    <option value="">→ Ke Owner (Milik Spa)</option>
+                    {availableTherapists.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {entry.therapist_id && !availableTherapists.find(t => t.id === entry.therapist_id) && (() => {
+                      const t = therapists.find(x => x.id === entry.therapist_id);
+                      return t ? <option key={t.id} value={t.id}>{t.name}</option> : null;
+                    })()}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Fee Rp..."
+                    value={entry.fee}
+                    onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, fee: e.target.value === '' ? '' : Number(e.target.value) } : te))}
+                    className="admin-input text-xs font-mono w-28 text-right"
+                  />
+                  {isOwner && entry.therapist_id && (
+                    <div className="flex items-center gap-0.5 bg-white dark:bg-zinc-950 px-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-850 shrink-0">
+                      <input
+                        type="number"
+                        max={100}
+                        min={0}
+                        value={entry.pct}
+                        onChange={e => setTransportEntries(prev => prev.map(te => te.id === entry.id ? { ...te, pct: Number(e.target.value) } : te))}
+                        className="bg-transparent text-end font-mono text-xs font-bold text-earth-primary w-[30px] outline-none"
+                      />
+                      <span className="text-[10px] text-zinc-450 font-bold">%</span>
+                    </div>
+                  )}
+                  {transportEntries.length > 1 && (
+                    <button
+                      onClick={() => setTransportEntries(prev => prev.filter(te => te.id !== entry.id))}
+                      className="text-red-500 hover:text-red-650 p-1 shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              );
             })}
           </div>
+
           <button
             onClick={() => setTransportEntries(prev => [...prev, { id: Date.now().toString(), therapist_id: '', fee: '', pct: 100 }])}
-            className="text-xs text-earth-primary font-semibold hover:underline flex items-center gap-1"
+            className="text-xs text-earth-primary font-bold hover:underline flex items-center gap-1 mt-1"
           >
             <Plus size={12} /> Tambah Transport Lain
           </button>
         </div>
 
-        {/* Summary + Commission breakdown */}
-        <div className="rounded-xl bg-earth-primary/5 dark:bg-earth-primary/10 p-4 space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Subtotal</span>
-            <span className="text-base font-bold text-zinc-700 dark:text-zinc-300 font-mono">{formatRp(grossTotal)}</span>
+        {/* Pricing Summary card */}
+        <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 p-5 space-y-3.5 shadow-sm">
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-zinc-550 dark:text-zinc-450 font-semibold uppercase">Subtotal Menu</span>
+            <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300 font-mono">{formatRp(grossTotal)}</span>
           </div>
+
           {appliedDiscounts.map(a => (
-            <div key={a.discountId} className="flex justify-between items-center text-sm">
-              <span className="text-xs text-zinc-500 flex items-center gap-1"><Tag size={10} /> {a.label}</span>
-              <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold">-{formatRp(a.amount)}</span>
+            <div key={a.discountId} className="flex justify-between items-center text-xs">
+              <span className="text-zinc-500 flex items-center gap-1"><Tag size={11} className="text-earth-primary" /> {a.label}</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">-{formatRp(a.amount)}</span>
             </div>
           ))}
+
           {totalDiscount > 0 && (
-            <div className="flex justify-between items-center pt-1 border-t border-earth-primary/10">
-              <span className="text-sm font-bold text-zinc-700 dark:text-zinc-200">Total Bayar</span>
+            <div className="flex justify-between items-center pt-2.5 border-t border-dashed border-zinc-200 dark:border-zinc-800">
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase">Total Tagihan</span>
               <span className="text-lg font-bold text-earth-primary font-mono">{formatRp(finalTotal)}</span>
             </div>
           )}
+
           {!totalDiscount && (
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">Total Invoice</span>
+            <div className="flex justify-between items-center pt-2.5 border-t border-dashed border-zinc-200 dark:border-zinc-800">
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase">Total Invoice</span>
               <span className="text-lg font-bold text-earth-primary font-mono">{formatRp(finalTotal)}</span>
             </div>
           )}
+
           {isOwner && commission > 0 && finalTotal > 0 && (
-            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-earth-primary/10">
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="flex items-center gap-1"><Percent size={11} className="text-amber-500" /> Terapis ({items.some(i => i.therapist_id && therapists.find(t => t.id === i.therapist_id)) ? 'per terapis' : `${commissionPct}%`}{totalTransportFee > 0 ? ' + Transport' : ''})</span>
-                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{formatRp(commission)}</span>
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-200 dark:border-zinc-800 text-xs">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-850 p-2.5 rounded-xl">
+                <span className="flex items-center gap-1 text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">
+                  <Percent size={11} className="text-amber-500" /> Terapis ({items.some(i => i.therapist_id && therapists.find(t => t.id === i.therapist_id)) ? 'Detail' : `${commissionPct}%`})
+                </span>
+                <span className="font-mono font-bold text-amber-600 dark:text-amber-400 block mt-1">{formatRp(commission)}</span>
               </div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 text-right">
-                <span>Pemilik (Net)</span>
-                <p className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{formatRp(ownerNet)}</p>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-850 p-2.5 rounded-xl text-right">
+                <span className="text-[10px] font-bold text-zinc-450 dark:text-zinc-500 uppercase tracking-wider">Net Pemilik</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 block mt-1">{formatRp(ownerNet)}</span>
               </div>
             </div>
           )}
         </div>
 
         {/* ── STICKY FOOTER (Summary & Actions) ── */}
-        <div className="sticky bottom-4 z-20 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl p-4 sm:p-5 rounded-2xl shadow-[0_-10px_30px_-5px_rgba(0,0,0,0.05)] dark:shadow-none border border-zinc-200 dark:border-zinc-700/50 space-y-3">
-          
-          {/* Action Buttons */}
-          <div className="flex gap-3">
+        <div className="sticky bottom-4 z-20 bg-white dark:bg-zinc-900 p-4 sm:p-5 rounded-2xl shadow-xl border border-zinc-200 dark:border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-zinc-450 uppercase mb-0.5">Total Tagihan</p>
+              <p className="text-xl font-bold text-earth-primary font-mono leading-none">{formatRp(finalTotal)}</p>
+            </div>
+
+            <div className="text-right">
+              {selectedBookingId && (
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold uppercase tracking-wide mb-0.5">Booking → Completed</p>
+              )}
+              {isOwner && commissionPct > 0 && finalTotal > 0 && (
+                <p className="text-[10px] text-zinc-450 font-bold">Net Pemilik: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-extrabold">{formatRp(ownerNet)}</span></p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
             <button onClick={shareToWhatsApp} disabled={generating || completing}
-              className="admin-btn-primary flex-1 justify-center py-3.5 disabled:opacity-60 shadow-lg shadow-earth-primary/20">
-              {generating || completing ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
+              className="admin-btn-primary flex-1 justify-center py-3 disabled:opacity-60 shadow-md">
+              {generating || completing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
               {selectedBookingId ? 'Selesaikan & Kirim WA' : 'Kirim WA'}
             </button>
             <button onClick={downloadInvoice} disabled={generating || completing}
-              className="admin-btn-ghost px-4 py-3.5 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700" title="Download PNG">
-              <Download size={15} />
+              className="admin-btn-ghost px-4 py-3 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-800 rounded-xl" title="Download PNG">
+              <Download size={14} />
             </button>
-          </div>
-
-          <div className="flex items-center justify-between px-2">
-            <div>
-              <p className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">Total Tagihan</p>
-              <p className="text-xl font-bold text-earth-primary font-mono leading-none">{formatRp(finalTotal)}</p>
-            </div>
-            
-            <div className="text-right">
-               {selectedBookingId && (
-                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mb-0.5">Booking → Completed</p>
-               )}
-               {isOwner && commissionPct > 0 && finalTotal > 0 && (
-                 <p className="text-[10px] text-zinc-500 font-medium">Net Pemilik: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-bold">{formatRp(ownerNet)}</span></p>
-               )}
-            </div>
           </div>
         </div>
       </div>
 
       {/* ── PREVIEW SECTION ── */}
-      <div className="space-y-3">
+      <div className="lg:col-span-5 lg:sticky lg:top-6 space-y-3">
         <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest px-1">Preview Invoice</h3>
         {/* overflow-x-auto wraps the 480px invoice so mobile can scroll horizontally */}
         <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-lg">
           <div style={{ minWidth: 480 }}>
-          <div ref={invoiceRef} className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden" style={{ width: 480, minHeight: 680 }}>
-            {/* Top Accent Strip */}
-            <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
-            
-            {/* Watermark Logo (Tiled Banking Style - Sharp Vector) */}
-            <div className="absolute inset-0 z-0 pointer-events-none select-none">
-              <svg className="w-full h-full" style={{ opacity: 0.12 }}>
-                <defs>
-                  <pattern 
-                    id="watermark-pattern-maker" 
-                    width="130" 
-                    height="130" 
-                    patternUnits="userSpaceOnUse"
-                    patternTransform="rotate(-20)"
-                  >
-                    <g transform="translate(20, 20) scale(0.06)">
-                      <SerenaLogoPaths monochrome={true} color="#8b5e3c" idSuffix="watermark-maker" />
-                    </g>
-                  </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#watermark-pattern-maker)" />
-              </svg>
-            </div>
+            <div ref={invoiceRef} className="bg-[#FDFBF7] text-zinc-900 font-sans relative overflow-hidden" style={{ width: 480, minHeight: 680 }}>
+              {/* Top Accent Strip */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-[#8B5E3C]" />
 
-            {/* Content Container */}
-            <div className="relative z-10 p-10 mt-2">
-            
-            {/* Header */}
-            <div className="flex justify-between items-start mb-12">
-              <div>
-                <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
-                  <SerenaLogoSvg
-                    className="absolute h-[260px] w-auto max-w-none object-contain -ml-6" 
-                    idSuffix="header-maker"
-                  />
-                </div>
-                <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
+              {/* Watermark Logo (Tiled Banking Style - Sharp Vector) */}
+              <div className="absolute inset-0 z-0 pointer-events-none select-none">
+                <svg className="w-full h-full" style={{ opacity: 0.12 }}>
+                  <defs>
+                    <pattern
+                      id="watermark-pattern-maker"
+                      width="130"
+                      height="130"
+                      patternUnits="userSpaceOnUse"
+                      patternTransform="rotate(-20)"
+                    >
+                      <g transform="translate(20, 20) scale(0.06)">
+                        <SerenaLogoPaths monochrome={true} color="#8b5e3c" idSuffix="watermark-maker" />
+                      </g>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#watermark-pattern-maker)" />
+                </svg>
               </div>
-              <div className="text-right">
-                <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8, letterSpacing: '0.1em' }}>INVOICE</div>
-                <div className="font-mono text-[10px] font-bold text-zinc-500">{invoiceNumber}</div>
-                <div className="text-[9px] font-medium text-zinc-400 mt-1">
-                  {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </div>
-              </div>
-            </div>
 
-            {/* Bill To */}
-            <div style={{ borderLeft: '3px solid #8B5E3C', paddingLeft: 16, marginBottom: 40 }}>
-              <p style={{ fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#8B5E3C', opacity: 0.7, marginBottom: 4 }}>Ditujukan Untuk:</p>
-              <h4 style={{ fontSize: 20, fontWeight: 800, color: '#27272a', letterSpacing: '-0.02em' }}>{customerName || 'Nama Pelanggan'}</h4>
-            </div>
+              {/* Content Container */}
+              <div className="relative z-10 p-10 mt-2">
 
-            {/* Items */}
-            <div style={{ marginBottom: 40 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e4e4e7', paddingBottom: 10, marginBottom: 14, fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
-                <span>Item &amp; Layanan</span><span>Harga</span>
-              </div>
-              {Object.values(
-                items.reduce((acc, item) => {
-                  const key = item.parent_bundle_name || String(item.id);
-                  if (!acc[key]) {
-                    let parentDetails = item.details;
-                    let parentDuration = item.duration;
-                    if (item.parent_bundle_name) {
-                      const parentSvc = services.find(s => s.name === item.parent_bundle_name);
-                      if (parentSvc) {
-                        parentDetails = parentSvc.details || '';
-                        const dMatch = parentSvc.details?.match(/(\d+)\s*m(?:enit)?/i);
-                        parentDuration = dMatch?.[1] ? `${dMatch[1]}m` : '';
-                      } else {
-                        parentDetails = '';
-                        parentDuration = '';
-                      }
-                    }
-                    acc[key] = { ...item, name: item.parent_bundle_name || item.name, price: 0, duration: parentDuration || '', details: parentDetails || '' };
-                  }
-                  acc[key].price += Number(item.price);
-                  return acc;
-                }, {} as Record<string, Item>)
-              ).map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottom: '1px dashed #e4e4e7' }}>
+                {/* Header */}
+                <div className="flex justify-between items-start mb-12">
                   <div>
-                    <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>
-                    {item.details && <p style={{ fontSize: 9, color: '#71717a', lineHeight: 1.3, maxWidth: 260 }}>{item.details}</p>}
-                  </div>
-                  <p style={{ fontWeight: 700, fontSize: 13, color: '#3f3f46' }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
-                </div>
-              ))}
-
-              {totalTransportFee > 0 && (() => {
-                const tCount = transportEntries.filter(e => Number(e.fee) > 0 && e.therapist_id).length;
-                const suffix = tCount === 1 ? ' (1 Terapis)' : tCount > 1 ? ` (${tCount} Terapis)` : '';
-                return (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '10px 12px', background: 'rgba(139,94,60,0.06)', borderRadius: 8, border: '1px solid rgba(139,94,60,0.1)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Bus size={13} color="#8B5E3C" /> 
-                      <p style={{ fontWeight: 600, color: '#8B5E3C', fontSize: 11, letterSpacing: '0.02em' }}>
-                        {transportLabel}{suffix}
-                      </p>
+                    <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
+                      <SerenaLogoSvg
+                        className="absolute h-[260px] w-auto max-w-none object-contain -ml-6"
+                        idSuffix="header-maker"
+                      />
                     </div>
-                    <p style={{ fontWeight: 700, color: '#8B5E3C', fontSize: 12 }}>Rp {totalTransportFee.toLocaleString('id-ID')}</p>
+                    <p style={{ fontSize: 8, letterSpacing: '0.3em', fontWeight: 700, color: '#8B5E3C', marginTop: 4 }}>COMFORTABLE HOME MASSAGE</p>
                   </div>
-                );
-              })()}
-
-              {/* Discount lines */}
-              <div style={{ marginTop: 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: appliedDiscounts.length > 0 ? 6 : 10 }}>
-                  <span>Subtotal</span><span>Rp {(grossTotal + totalTransportFee).toLocaleString('id-ID')}</span>
-                </div>
-                {appliedDiscounts.length > 0 && (
-                   <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#059669', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                     <Tag size={10} /> <span>Discount Applied</span>
-                   </div>
-                )}
-                {appliedDiscounts.map(a => (
-                  <div key={a.discountId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#059669', marginBottom: 6, paddingLeft: 14 }}>
-                    <span>↳ {a.label} {a.value_type === 'percentage' ? `(${a.value}%)` : ''}</span>
-                    <span style={{ fontWeight: 700 }}>-Rp {a.amount.toLocaleString('id-ID')}</span>
+                  <div className="text-right">
+                    <div style={{ display: 'inline-block', padding: '4px 12px', background: '#8B5E3C', color: '#fff', fontSize: 10, fontWeight: 900, fontStyle: 'italic', borderRadius: 6, marginBottom: 8, letterSpacing: '0.1em' }}>INVOICE</div>
+                    <div className="font-mono text-[10px] font-bold text-zinc-500">{invoiceNumber}</div>
+                    <div className="text-[9px] font-medium text-zinc-400 mt-1">
+                      {new Date(date + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
                   </div>
-                ))}
+                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#8B5E3C', borderRadius: '12px 12px 12px 0', color: '#fff', marginTop: 14, boxShadow: '0 4px 12px rgba(139,94,60,0.2)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.3)' }}></div>
-                    <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.9)' }}>Total Bayar</span>
+                {/* Bill To */}
+                <div style={{ borderLeft: '3px solid #8B5E3C', paddingLeft: 16, marginBottom: 40 }}>
+                  <p style={{ fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#8B5E3C', opacity: 0.7, marginBottom: 4 }}>Ditujukan Untuk:</p>
+                  <h4 style={{ fontSize: 20, fontWeight: 800, color: '#27272a', letterSpacing: '-0.02em' }}>{customerName || 'Nama Pelanggan'}</h4>
+                </div>
+
+                {/* Items */}
+                <div style={{ marginBottom: 40 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e4e4e7', paddingBottom: 10, marginBottom: 14, fontSize: 8, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa' }}>
+                    <span>Item &amp; Layanan</span><span>Harga</span>
                   </div>
-                  <span style={{ fontSize: 20, fontWeight: 700, fontStyle: 'italic', letterSpacing: '0.02em' }}>Rp {finalTotal.toLocaleString('id-ID')}</span>
-                </div>
-              </div>
-            </div>
+                  {Object.values(
+                    items.reduce((acc, item) => {
+                      const key = item.parent_bundle_name || String(item.id);
+                      if (!acc[key]) {
+                        let parentDetails = item.details;
+                        let parentDuration = item.duration;
+                        if (item.parent_bundle_name) {
+                          const parentSvc = services.find(s => s.name === item.parent_bundle_name);
+                          if (parentSvc) {
+                            parentDetails = parentSvc.details || '';
+                            const dMatch = parentSvc.details?.match(/(\d+)\s*m(?:enit)?/i);
+                            parentDuration = dMatch?.[1] ? `${dMatch[1]}m` : '';
+                          } else {
+                            parentDetails = '';
+                            parentDuration = '';
+                          }
+                        }
+                        acc[key] = { ...item, name: item.parent_bundle_name || item.name, price: 0, duration: parentDuration || '', details: parentDetails || '' };
+                      }
+                      acc[key].price += Number(item.price);
+                      return acc;
+                    }, {} as Record<string, Item>)
+                  ).map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottom: '1px dashed #e4e4e7' }}>
+                      <div>
+                        <p style={{ fontWeight: 700, color: '#27272a', fontSize: 13, marginBottom: 2 }}>{item.name || 'Pilih Layanan...'}</p>
+                        {item.details && <p style={{ fontSize: 9, color: '#71717a', lineHeight: 1.3, maxWidth: 260 }}>{item.details}</p>}
+                      </div>
+                      <p style={{ fontWeight: 700, fontSize: 13, color: '#3f3f46' }}>Rp {Number(item.price).toLocaleString('id-ID')}</p>
+                    </div>
+                  ))}
 
-            {/* Footer */}
-            <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px solid #f4f4f5', paddingTop: 20, paddingBottom: 10 }}>
-              <p style={{ fontSize: 11.5, fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: 12 }}>"{invoiceFooter}"</p>
-              
-              {/* Minimalist social details styled like Feed Studio */}
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, fontSize: 9.5, fontWeight: 700, color: '#8B5E3C', letterSpacing: '0.05em', opacity: 0.8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <InstagramIcon size={11} />
-                  <span style={{ textTransform: 'lowercase' }}>{(() => {
-                    const parts = invoiceSocial.split('/').map(p => p.trim());
-                    let instagram = parts[0]?.replace(/Instagram\s*&\s*Threads:\s*/i, '').trim() || '@serena.raga';
-                    if (!instagram.startsWith('@') && instagram.length > 0) instagram = `@${instagram}`;
-                    return instagram;
-                  })()}</span>
+                  {totalTransportFee > 0 && (() => {
+                    const tCount = transportEntries.filter(e => Number(e.fee) > 0 && e.therapist_id).length;
+                    const suffix = tCount === 1 ? ' (1 Terapis)' : tCount > 1 ? ` (${tCount} Terapis)` : '';
+                    return (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '10px 12px', background: 'rgba(139,94,60,0.06)', borderRadius: 8, border: '1px solid rgba(139,94,60,0.1)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Bus size={13} color="#8B5E3C" />
+                          <p style={{ fontWeight: 600, color: '#8B5E3C', fontSize: 11, letterSpacing: '0.02em' }}>
+                            {transportLabel}{suffix}
+                          </p>
+                        </div>
+                        <p style={{ fontWeight: 700, color: '#8B5E3C', fontSize: 12 }}>Rp {totalTransportFee.toLocaleString('id-ID')}</p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Discount lines */}
+                  <div style={{ marginTop: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: appliedDiscounts.length > 0 ? 6 : 10 }}>
+                      <span>Subtotal</span><span>Rp {(grossTotal + totalTransportFee).toLocaleString('id-ID')}</span>
+                    </div>
+                    {appliedDiscounts.length > 0 && (
+                      <div style={{ fontSize: 9, fontWeight: 900, textTransform: 'uppercase', color: '#059669', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Tag size={10} /> <span>Discount Applied</span>
+                      </div>
+                    )}
+                    {appliedDiscounts.map(a => (
+                      <div key={a.discountId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#059669', marginBottom: 6, paddingLeft: 14 }}>
+                        <span>↳ {a.label} {a.value_type === 'percentage' ? `(${a.value}%)` : ''}</span>
+                        <span style={{ fontWeight: 700 }}>-Rp {a.amount.toLocaleString('id-ID')}</span>
+                      </div>
+                    ))}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', background: '#8B5E3C', borderRadius: '12px 12px 12px 0', color: '#fff', marginTop: 14, boxShadow: '0 4px 12px rgba(139,94,60,0.2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.3)' }}></div>
+                        <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'rgba(255,255,255,0.9)' }}>Total Bayar</span>
+                      </div>
+                      <span style={{ fontSize: 20, fontWeight: 700, fontStyle: 'italic', letterSpacing: '0.02em' }}>Rp {finalTotal.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ width: 1, height: 10, background: 'rgba(139,94,60,0.25)' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <Globe size={11} style={{ strokeWidth: 2.5 }} />
-                  <span style={{ textTransform: 'lowercase' }}>{(() => {
-                    const parts = invoiceSocial.split('/').map(p => p.trim());
-                    return parts[1] || 'www.serenaraga.fit';
-                  })()}</span>
+
+                {/* Footer */}
+                <div style={{ textAlign: 'center', margin: '40px auto 0', borderTop: '1px solid #f4f4f5', paddingTop: 20, paddingBottom: 10 }}>
+                  <p style={{ fontSize: 11.5, fontStyle: 'italic', fontFamily: 'Georgia, serif', color: '#8B5E3C', opacity: 0.8, marginBottom: 12 }}>"{invoiceFooter}"</p>
+
+                  {/* Minimalist social details styled like Feed Studio */}
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14, fontSize: 9.5, fontWeight: 700, color: '#8B5E3C', letterSpacing: '0.05em', opacity: 0.8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <InstagramIcon size={11} />
+                      <span style={{ textTransform: 'lowercase' }}>{(() => {
+                        const parts = invoiceSocial.split('/').map(p => p.trim());
+                        let instagram = parts[0]?.replace(/Instagram\s*&\s*Threads:\s*/i, '').trim() || '@serena.raga';
+                        if (!instagram.startsWith('@') && instagram.length > 0) instagram = `@${instagram}`;
+                        return instagram;
+                      })()}</span>
+                    </div>
+                    <div style={{ width: 1, height: 10, background: 'rgba(139,94,60,0.25)' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Globe size={11} style={{ strokeWidth: 2.5 }} />
+                      <span style={{ textTransform: 'lowercase' }}>{(() => {
+                        const parts = invoiceSocial.split('/').map(p => p.trim());
+                        return parts[1] || 'www.serenaraga.fit';
+                      })()}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            
-            </div> {/* End of Content Container */}
-          </div> {/* end invoiceRef */}
+
+              </div> {/* End of Content Container */}
+            </div> {/* end invoiceRef */}
           </div> {/* end minWidth:480 wrapper */}
         </div> {/* end overflow-x-auto */}
       </div> {/* end space-y-3 preview section */}

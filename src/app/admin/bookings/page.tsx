@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, MessageCircle, Loader2, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List } from 'lucide-react';
+import { Plus, MessageCircle, Loader2, ChevronDown, Search, Pencil, Trash2, AlertTriangle, LayoutGrid, List, Calendar, Clock, Phone, DollarSign, Award, Tag, Users, Percent, X, Notebook } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
@@ -18,15 +19,322 @@ type Service = { id: string; name: string; price: number; category: string; is_b
 
 const STATUS_OPTIONS = ['Pending', 'Confirmed', 'Completed', 'Canceled'];
 const STATUS_STYLES: Record<string, string> = {
-  Pending:   'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-800',
-  Confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800',
-  Completed: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-800',
+  Pending:   'bg-yellow-50 text-yellow-700 border-yellow-250/20 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-900',
+  Confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-255/20 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900',
+  Completed: 'bg-blue-50 text-blue-700 border-blue-250/20 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900',
   Canceled:  'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700',
 };
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 const formatRp   = (n: number) => `Rp ${Number(n).toLocaleString('id-ID')}`;
 
+// ──────────────────────────────────────────
+// BookingDrawer Component
+// ──────────────────────────────────────────
+function BookingDrawer({
+  booking,
+  isOpen,
+  onClose,
+  onEdit,
+  onDelete,
+  onSendWA,
+  updateStatus,
+  therapists,
+  isOwner,
+}: {
+  booking: Booking | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSendWA: () => void;
+  updateStatus: (id: string, s: string) => Promise<void>;
+  therapists: { id: string; name: string }[];
+  isOwner: boolean;
+}) {
+  const supabase = createClient();
+  const [activeTab, setActiveTab] = useState<'info' | 'financial'>('info');
+  const [bookingItems, setBookingItems] = useState<any[]>([]);
+  const [bookingDiscounts, setBookingDiscounts] = useState<any[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && booking) {
+      setActiveTab('info');
+      setLoadingDetails(true);
+      Promise.all([
+        supabase.from('booking_items').select('*').eq('booking_id', booking.id).order('sort_order'),
+        supabase.from('booking_discounts').select('*').eq('booking_id', booking.id)
+      ]).then(([{ data: items }, { data: discounts }]) => {
+        if (items) setBookingItems(items);
+        if (discounts) setBookingDiscounts(discounts);
+        setLoadingDetails(false);
+      });
+    }
+  }, [isOpen, booking]);
+
+  if (!booking) return null;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.4 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/30 z-40"
+          />
+
+          {/* Drawer Panel */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed right-0 top-0 bottom-0 w-full md:max-w-xl bg-white dark:bg-zinc-950 shadow-2xl z-50 border-l border-zinc-200 dark:border-zinc-800 flex flex-col"
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-earth-primary to-emerald-600 flex items-center justify-center text-white font-bold shadow-sm shrink-0">
+                  {booking.customer_name.slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-zinc-900 dark:text-white leading-tight">
+                    {booking.customer_name}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-mono mt-0.5">{booking.phone}</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Sub-Tabs Selector */}
+            <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 border-b border-zinc-200 dark:border-zinc-800">
+              <button
+                onClick={() => setActiveTab('info')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'info'
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-850 dark:hover:text-zinc-305'
+                }`}
+              >
+                Info Booking & Layanan
+              </button>
+              <button
+                onClick={() => setActiveTab('financial')}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  activeTab === 'financial'
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-850 dark:hover:text-zinc-305'
+                }`}
+              >
+                Komisi & Finansial
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin">
+              {activeTab === 'info' && (
+                <div className="space-y-5">
+                  {/* Status Badge Select Grid */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Status Booking</span>
+                    <div className="grid grid-cols-4 gap-1.5 bg-zinc-105 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200/50 dark:border-zinc-800">
+                      {STATUS_OPTIONS.map(s => {
+                        const active = booking.status === s;
+                        const COLOR_MAP: Record<string, string> = {
+                          Pending: 'bg-amber-500 text-white',
+                          Confirmed: 'bg-emerald-500 text-white',
+                          Completed: 'bg-blue-500 text-white',
+                          Canceled: 'bg-zinc-500 text-white',
+                        };
+                        return (
+                          <button
+                            key={s}
+                            onClick={() => updateStatus(booking.id, s)}
+                            className={`py-1.5 rounded-lg text-[10px] font-bold transition-all truncate ${
+                              active
+                                ? `${COLOR_MAP[s]} shadow-sm`
+                                : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                            }`}
+                          >
+                            {s.toUpperCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Basic details */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                      <span className="text-[10px] text-zinc-400 font-bold block uppercase">Tanggal Booking</span>
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 mt-1 block">
+                        {booking.booking_date ? formatDate(booking.booking_date) : '-'}
+                      </span>
+                    </div>
+                    <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                      <span className="text-[10px] text-zinc-400 font-bold block uppercase">Jam / Waktu</span>
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200 mt-1 block">
+                        {booking.booking_time ? booking.booking_time.slice(0, 5) : '-'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Booking items list */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Daftar Layanan</span>
+                    {loadingDetails ? (
+                      <div className="flex justify-center p-6"><Loader2 size={20} className="animate-spin text-zinc-400" /></div>
+                    ) : bookingItems.length === 0 ? (
+                      <div className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl text-xs text-zinc-500 border border-dashed text-center">
+                        Single service: {booking.service_name}
+                      </div>
+                    ) : (
+                      <div className="border border-zinc-200 dark:border-zinc-850 rounded-2xl divide-y divide-zinc-150 dark:divide-zinc-850 overflow-hidden bg-white dark:bg-zinc-900">
+                        {bookingItems.map((item, idx) => {
+                          const therapistName = therapists.find(t => t.id === item.therapist_id)?.name || 'Belum di-assign';
+                          return (
+                            <div key={item.id || idx} className="p-3.5 space-y-1">
+                              <div className="flex justify-between items-start text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                                <span>{item.service_name}</span>
+                                <span className="font-mono text-zinc-600 dark:text-zinc-400">{formatRp(item.price)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-zinc-400 font-medium">
+                                <span>Terapis: <span className="text-zinc-650 dark:text-zinc-300 font-bold">{therapistName}</span></span>
+                                {item.duration && <span>⏱ {item.duration}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notes */}
+                  {booking.notes && (
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Catatan / Permintaan</span>
+                      <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                        {booking.notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'financial' && (
+                <div className="space-y-5">
+                  {/* Total summary board */}
+                  <div className="p-4 bg-earth-primary/5 dark:bg-earth-primary/10 border border-earth-primary/10 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-zinc-550 dark:text-zinc-450 font-bold uppercase">Subtotal</span>
+                      <span className="text-sm font-bold font-mono text-zinc-850 dark:text-zinc-200">{formatRp(booking.price)}</span>
+                    </div>
+
+                    {bookingDiscounts.map(d => (
+                      <div key={d.id} className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400">
+                        <span>↳ Diskon: {d.discount_label}</span>
+                        <span className="font-mono font-bold">-{formatRp(d.discount_amount)}</span>
+                      </div>
+                    ))}
+
+                    <div className="flex justify-between items-center pt-2.5 border-t border-dashed border-zinc-200 dark:border-zinc-800 text-xs">
+                      <span className="text-zinc-700 dark:text-zinc-300 font-bold uppercase">Total Akhir</span>
+                      <span className="text-base font-bold font-mono text-earth-primary">{formatRp(booking.final_price ?? booking.price)}</span>
+                    </div>
+                  </div>
+
+                  {/* Commission calculation (Owner only) */}
+                  {isOwner && booking.status === 'Completed' && (
+                    <div className="space-y-3">
+                      <span className="text-[10px] text-zinc-450 font-bold uppercase tracking-wider block">Rincian Bagi Hasil & BHP</span>
+                      
+                      <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl divide-y divide-zinc-150 dark:divide-zinc-855 overflow-hidden bg-white dark:bg-zinc-900">
+                        {bookingItems.map((item, idx) => {
+                          const t = therapists.find(x => x.id === item.therapist_id);
+                          return (
+                            <div key={item.id || idx} className="p-3.5 space-y-1.5 text-xs">
+                              <div className="flex justify-between items-center font-bold text-zinc-855 dark:text-zinc-200">
+                                <span>{item.service_name}</span>
+                                {t && <span className="font-mono text-amber-600 dark:text-amber-400">Fee: {formatRp(item.commission_earned)}</span>}
+                              </div>
+                              <div className="flex justify-between items-center text-[10px] text-zinc-450 dark:text-zinc-400 font-medium">
+                                <span>Terapis: {t?.name || 'N/A'}</span>
+                                {item.bhp_cost > 0 && <span>BHP: {formatRp(item.bhp_cost)}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Financial Net */}
+                      <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+                        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Total Terapis</span>
+                          <span className="font-mono font-bold text-amber-650 dark:text-amber-400 block mt-1">
+                            {formatRp(bookingItems.reduce((s, i) => s + (i.commission_earned || 0), 0))}
+                          </span>
+                        </div>
+                        <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl text-right">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Net Pemilik</span>
+                          <span className="font-mono font-bold text-emerald-605 dark:text-emerald-400 block mt-1">
+                            {formatRp((booking.final_price ?? booking.price) - bookingItems.reduce((s, i) => s + (i.commission_earned || 0), 0))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {booking.status !== 'Completed' && (
+                    <p className="text-xs text-zinc-450 dark:text-zinc-500 text-center py-4 italic leading-relaxed">
+                      Rincian komisi dan bagi hasil akan tercatat secara otomatis setelah status booking diubah menjadi **Completed**.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Actions Footer */}
+            <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex gap-2 justify-end">
+              <button
+                onClick={onSendWA}
+                className="admin-btn-ghost text-xs py-2 px-3 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 hover:text-emerald-600 flex items-center gap-1.5"
+              >
+                <MessageCircle size={14} /> Send WA
+              </button>
+              <button
+                onClick={onEdit}
+                className="admin-btn-ghost text-xs py-2 px-3 flex items-center gap-1.5"
+              >
+                <Pencil size={14} /> Edit
+              </button>
+              <button
+                onClick={onDelete}
+                className="admin-btn-primary bg-red-500 hover:bg-red-650 text-white border-red-500 text-xs py-2 px-3 flex items-center gap-1.5"
+              >
+                <Trash2 size={14} /> Hapus
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ──────────────────────────────────────────
+// Main Page Component
+// ──────────────────────────────────────────
 export default function BookingsPage() {
   const { user } = useUser();
   const isOwner = user?.role !== 'cashier';
@@ -38,15 +346,19 @@ export default function BookingsPage() {
   const [loading, setLoading]         = useState(true);
   const [filterStatus, setFilterStatus] = useState('Hari Ini');
   const [search, setSearch]           = useState('');
-  // BookingFormModal state
+
+  // Form & Modals state
   const [showForm, setShowForm]   = useState(false);
   const [editId, setEditId]       = useState<string | null>(null);
   const [deleteId, setDeleteId]   = useState<string | null>(null);
   const [deleting, setDeleting]   = useState(false);
 
+  // Drawer state
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const [reminderTemplate, setReminderTemplate] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
-
 
   const supabase = createClient();
 
@@ -69,33 +381,16 @@ export default function BookingsPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-
-  // Hitung BHP aktual per layanan (used by updateStatus commission recalc)
-  const calculateBhpCost = async (serviceName: string): Promise<number> => {
-    const svc = services.find(s => s.name === serviceName);
-    if (!svc) return 0;
-    const [{ data: svcMats }, { data: globalMats }] = await Promise.all([
-      supabase.from('service_materials').select('qty_multiplier, material:materials(id,pack_price,customers_per_pack,is_global)').eq('service_id', svc.id),
-      supabase.from('materials').select('id, pack_price, customers_per_pack').eq('is_global', true),
-    ]);
-    type MatObj = { id: string; pack_price: number; customers_per_pack: number; is_global: boolean };
-    type SvcMatRow = { qty_multiplier: number; material: MatObj | MatObj[] | null };
-    type GlobalMatRow = { id: string; pack_price: number; customers_per_pack: number };
-    const getMat = (raw: MatObj | MatObj[] | null): MatObj | null => Array.isArray(raw) ? (raw[0] ?? null) : raw ?? null;
-    const rows = (svcMats ?? []) as unknown as SvcMatRow[];
-    const assignedGlobalIds = new Set(rows.map(sm => getMat(sm.material)).filter((m): m is MatObj => m !== null && m.is_global).map(m => m.id));
-    let total = 0;
-    for (const sm of rows) { const m = getMat(sm.material); if (m && m.customers_per_pack > 0) total += sm.qty_multiplier * (m.pack_price / m.customers_per_pack); }
-    for (const gm of (globalMats ?? []) as unknown as GlobalMatRow[]) { if (!assignedGlobalIds.has(gm.id) && gm.customers_per_pack > 0) total += gm.pack_price / gm.customers_per_pack; }
-    return Math.round(total);
-  };
-
-  // EC#7: updateStatus recalculates commission when set to Completed
   const updateStatus = async (id: string, status: string) => {
     const { data: orig } = await supabase.from('bookings').select('status').eq('id', id).single();
     
     await supabase.from('bookings').update({ status }).eq('id', id);
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+    
+    // Sync drawer model state if open
+    if (selectedBooking && selectedBooking.id === id) {
+      setSelectedBooking(prev => prev ? { ...prev, status } : null);
+    }
     
     if (status === 'Completed') {
       const { data: items } = await supabase.from('booking_items').select('*, therapist_id').eq('booking_id', id);
@@ -126,8 +421,6 @@ export default function BookingsPage() {
         }));
       }
     } else if (orig?.status === 'Completed') {
-      // Reverted from Completed to something else!
-      // Decrement uses count, delete discounts, delete transport, reset commissions
       const { data: oldDiscounts } = await supabase
         .from('booking_discounts')
         .select('discount_id')
@@ -163,11 +456,12 @@ export default function BookingsPage() {
     setDeleting(true);
     await supabase.from('bookings').delete().eq('id', deleteId);
     setBookings(prev => prev.filter(b => b.id !== deleteId));
+    if (selectedBooking?.id === deleteId) {
+      setDrawerOpen(false);
+    }
     setDeleteId(null);
     setDeleting(false);
   };
-
-
 
   const sendWA = (b: Booking) => {
     const template = reminderTemplate ||
@@ -195,11 +489,10 @@ export default function BookingsPage() {
       b.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
       b.service_name?.toLowerCase().includes(search.toLowerCase()));
 
-  // Fix #7: bulk WA reminder for tomorrow's Confirmed bookings
   const tomorrowConfirmed = bookings.filter(b => b.booking_date === tomorrowString && b.status === 'Confirmed');
   const sendBulkReminder = () => {
     tomorrowConfirmed.forEach((b, i) => {
-      setTimeout(() => sendWA(b), i * 600); // stagger 600ms to avoid popup blocker
+      setTimeout(() => sendWA(b), i * 600);
     });
   };
 
@@ -208,57 +501,61 @@ export default function BookingsPage() {
   const tomorrowCount = bookings.filter(b => b.booking_date === tomorrowString).length;
 
   return (
-    <div className="space-y-5 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Bookings</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">{bookings.length} total pesanan</p>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+            <Calendar size={20} className="text-earth-primary" /> Antrean Bookings
+          </h1>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 font-medium">
+            {bookings.length} total pesanan · {bookings.filter(b => b.status === 'Pending').length} pending · {bookings.filter(b => b.status === 'Confirmed').length} dikonfirmasi
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* View toggle */}
-          <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 gap-0.5">
+          <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 gap-0.5">
             <button onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-md transition-colors ${ viewMode === 'list' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600' }`}>
+              className={`p-1.5 rounded-lg transition-colors ${ viewMode === 'list' ? 'bg-white dark:bg-zinc-800 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-400 hover:text-zinc-650' }`}>
               <List size={15} />
             </button>
             <button onClick={() => setViewMode('kanban')}
-              className={`p-1.5 rounded-md transition-colors ${ viewMode === 'kanban' ? 'bg-white dark:bg-zinc-700 shadow-sm text-zinc-900 dark:text-white' : 'text-zinc-400 hover:text-zinc-600' }`}>
+              className={`p-1.5 rounded-lg transition-colors ${ viewMode === 'kanban' ? 'bg-white dark:bg-zinc-800 shadow-sm text-zinc-900 dark:text-zinc-100' : 'text-zinc-400 hover:text-zinc-650' }`}>
               <LayoutGrid size={15} />
             </button>
           </div>
-          <button onClick={openAdd} className="admin-btn-primary">
+          <button onClick={openAdd} className="admin-btn-primary text-xs">
             <Plus size={16} /> Tambah Booking
           </button>
         </div>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
         {['Hari Ini', 'Besok', 'Semua', ...STATUS_OPTIONS].map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all border ${
               filterStatus === s
-                ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900'
-                : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-900 shadow-sm'
+                : 'bg-white border-zinc-200 text-zinc-550 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
             }`}>
             {s}{s === 'Hari Ini' ? ` (${todayCount})` : s === 'Besok' ? ` (${tomorrowCount})` : s !== 'Semua' && counts[s] !== undefined ? ` (${counts[s]})` : s === 'Semua' ? ` (${bookings.length})` : ''}
           </button>
         ))}
       </div>
 
-      {/* Fix #7: Bulk WA Reminder for tomorrow's bookings */}
+      {/* Bulk WA Reminder Banner */}
       {tomorrowConfirmed.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+        <div className="flex items-center justify-between px-4 py-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250/20 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2">
-            <MessageCircle size={14} className="text-emerald-600 shrink-0" />
-            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-              {tomorrowConfirmed.length} booking besok belum direminder
+            <MessageCircle size={15} className="text-emerald-600 shrink-0" />
+            <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+              {tomorrowConfirmed.length} booking besok belum diingatkan (confirmed)
             </p>
           </div>
           <button onClick={sendBulkReminder}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg transition-colors">
-            <MessageCircle size={12} /> Reminder Semua
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-colors shadow-sm shadow-emerald-500/10">
+            <MessageCircle size={13} /> Kirim Pengingat Semua
           </button>
         </div>
       )}
@@ -267,7 +564,7 @@ export default function BookingsPage() {
       {viewMode === 'list' && (
         <div className="relative">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-          <input className="admin-input pl-10" placeholder="Cari nama atau layanan..."
+          <input className="admin-input pl-10 text-xs" placeholder="Cari nama pelanggan atau jenis layanan..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       )}
@@ -276,117 +573,190 @@ export default function BookingsPage() {
         <AdminSkeleton rows={5} />
       ) : viewMode === 'kanban' ? (
         // ── Kanban Board ──
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
           {STATUS_OPTIONS.map(status => {
             const KANBAN_HEADER: Record<string, string> = {
-              Pending:   'border-amber-400 bg-amber-50 dark:bg-amber-950/20',
-              Confirmed: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20',
-              Completed: 'border-blue-400 bg-blue-50 dark:bg-blue-950/20',
-              Canceled:  'border-zinc-400 bg-zinc-100 dark:bg-zinc-800/50',
+              Pending:   'border-amber-400 bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400',
+              Confirmed: 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400',
+              Completed: 'border-blue-400 bg-blue-50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400',
+              Canceled:  'border-zinc-400 bg-zinc-100 dark:bg-zinc-800/50 text-zinc-650 dark:text-zinc-400',
             };
             const KANBAN_DOT: Record<string, string> = {
               Pending: 'bg-amber-400', Confirmed: 'bg-emerald-400',
-              Completed: 'bg-blue-400', Canceled: 'bg-zinc-400',
+              Completed: 'bg-blue-400', Canceled: 'bg-zinc-450',
             };
             const colBookings = bookings
               .filter(b => b.status === status)
               .sort((a, b) => a.booking_date?.localeCompare(b.booking_date ?? '') ?? 0);
             return (
-              <div key={status} className="space-y-2">
+              <div key={status} className="space-y-2 bg-zinc-50/50 dark:bg-zinc-950/20 p-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-inner">
                 {/* Column header */}
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-l-4 ${KANBAN_HEADER[status]}`}>
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border-l-4 font-bold text-xs ${KANBAN_HEADER[status]}`}>
                   <span className={`w-2 h-2 rounded-full ${KANBAN_DOT[status]}`} />
-                  <span className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{status}</span>
-                  <span className="ml-auto text-[10px] font-bold text-zinc-400">{colBookings.length}</span>
+                  <span className="uppercase tracking-wider">{status}</span>
+                  <span className="ml-auto text-[10px] bg-zinc-200/50 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full font-bold">{colBookings.length}</span>
                 </div>
                 {/* Cards */}
-                <div className="space-y-2 min-h-[80px]">
-                  {colBookings.length === 0 && (
-                    <div className="text-center py-6 text-[11px] text-zinc-300 dark:text-zinc-600">Kosong</div>
-                  )}
-                  {colBookings.map(b => (
-                    <div key={b.id} className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 shadow-sm hover:border-earth-primary/30 transition-colors group">
-                      <div className="flex items-start justify-between gap-1 mb-2">
-                        <p className="text-xs font-semibold text-zinc-900 dark:text-white leading-tight">{b.customer_name}</p>
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                          <button onClick={() => openEdit(b)} className="p-1 rounded text-blue-400 hover:text-blue-600"><Pencil size={11} /></button>
-                          <button onClick={() => setDeleteId(b.id)} className="p-1 rounded text-red-300 hover:text-red-500"><Trash2 size={11} /></button>
+                <div className="space-y-2 min-h-[150px] max-h-[70vh] overflow-y-auto pr-1 scrollbar-thin">
+                  {colBookings.length === 0 ? (
+                    <div className="text-center py-12 text-[10px] text-zinc-400 font-medium italic border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">Kosong</div>
+                  ) : (
+                    colBookings.map(b => (
+                      <div
+                        key={b.id}
+                        onClick={() => {
+                          setSelectedBooking(b);
+                          setDrawerOpen(true);
+                        }}
+                        className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 p-3.5 shadow-sm hover:border-earth-primary/40 transition-all group cursor-pointer relative"
+                      >
+                        <div className="flex items-start justify-between gap-1 mb-1.5">
+                          <p className="text-xs font-bold text-zinc-850 dark:text-white leading-tight">{b.customer_name}</p>
+                          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => openEdit(b)} className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-950/20 text-blue-500"><Pencil size={11} /></button>
+                            <button onClick={() => setDeleteId(b.id)} className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20 text-red-400"><Trash2 size={11} /></button>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-zinc-450 dark:text-zinc-400 mb-2.5 line-clamp-1">{b.service_name}</p>
+                        
+                        <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-850 pt-2 text-[9px] font-bold">
+                          <span className="text-zinc-400 font-mono">
+                            {b.booking_time ? b.booking_time.slice(0, 5) : ''}
+                          </span>
+                          <span className="text-earth-primary font-mono font-bold">
+                            {formatRp(b.final_price ?? b.price ?? 0)}
+                          </span>
                         </div>
                       </div>
-                      <p className="text-[10px] text-zinc-500 mb-1 line-clamp-2">{b.service_name}</p>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-zinc-400">
-                          {b.booking_date ? formatDate(b.booking_date) : '-'}
-                          {b.booking_time ? ` · ${b.booking_time.slice(0,5)}` : ''}
-                        </span>
-                        <span className="text-[10px] font-bold text-earth-primary">
-                          {formatRp(b.final_price ?? b.price ?? 0)}
-                        </span>
-                      </div>
-                      {/* Move status buttons */}
-                      <div className="flex gap-1 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                        {STATUS_OPTIONS.filter(s => s !== status).map(s => (
-                          <button key={s} onClick={() => updateStatus(b.id, s)}
-                            className="flex-1 text-[9px] font-semibold py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors truncate">
-                            → {s}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        // ── List View (original) ──
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+        <div className="space-y-3 max-h-[calc(100vh-340px)] md:max-h-[calc(100vh-280px)] overflow-y-auto pr-1.5 scrollbar-thin">
           {filtered.length === 0 ? (
-            <div className="text-center py-12 text-sm text-zinc-400">Tidak ada booking ditemukan.</div>
+            <div className="text-center py-12 text-xs text-zinc-400 italic bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">Tidak ada booking ditemukan.</div>
           ) : (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {filtered.map(b => (
-                <div key={b.id} className="px-4 py-3 flex items-center gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-zinc-900 dark:text-white">{b.customer_name}</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">{b.phone}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      {b.service_name} · {b.booking_date ? formatDate(b.booking_date) : '-'} {b.booking_time ? b.booking_time.slice(0, 5) : ''}
-                    </p>
+            filtered.map(b => (
+              <div
+                key={b.id}
+                onClick={() => {
+                  setSelectedBooking(b);
+                  setDrawerOpen(true);
+                }}
+                className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 cursor-pointer transition-colors shadow-sm relative overflow-hidden"
+              >
+                {/* Left Accent Status Bar */}
+                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+                  b.status === 'Pending' ? 'bg-amber-400' :
+                  b.status === 'Confirmed' ? 'bg-emerald-500' :
+                  b.status === 'Completed' ? 'bg-blue-500' :
+                  'bg-zinc-400'
+                }`} />
+
+                <div className="pl-2 space-y-3">
+                  {/* Line 1: Name & Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-zinc-900 dark:text-white text-xs sm:text-sm leading-tight truncate">
+                        {b.customer_name}
+                      </h4>
+                      <p className="text-[10px] sm:text-xs text-zinc-500 dark:text-zinc-450 font-medium mt-0.5 truncate">
+                        {b.service_name}
+                      </p>
+                    </div>
+
+                    {/* Interactive Status Select Badge */}
+                    <div className="relative shrink-0 flex items-center" onClick={e => e.stopPropagation()}>
+                      <select
+                        value={b.status}
+                        onChange={e => updateStatus(b.id, e.target.value)}
+                        className={`appearance-none pl-3 pr-7.5 rounded-full border text-[10px] font-extrabold cursor-pointer transition-all outline-none focus:ring-1 focus:ring-earth-primary/30 h-7 leading-none ${STATUS_STYLES[b.status] ?? STATUS_STYLES.Pending}`}
+                      >
+                        {STATUS_OPTIONS.map(s => (
+                          <option key={s} value={s} className="bg-white text-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 font-bold">
+                            {s.toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={11} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                    </div>
                   </div>
-                  <div className="text-right hidden md:block shrink-0">
-                    <p className="text-sm font-mono text-zinc-700 dark:text-zinc-300">{formatRp(b.final_price ?? b.price ?? 0)}</p>
-                    {(b.discount_total ?? 0) > 0 && (
-                      <p className="text-[10px] text-emerald-600 font-medium">-{formatRp(b.discount_total ?? 0)}</p>
-                    )}
+
+                  {/* Line 2: Date & Time */}
+                  <div className="flex items-center gap-2 text-[10px] font-semibold text-zinc-450 dark:text-zinc-500 font-mono">
+                    <span className="flex items-center gap-1">
+                      <Calendar size={11} className="text-zinc-400 shrink-0" />
+                      {b.booking_date ? formatDate(b.booking_date) : '-'}
+                    </span>
+                    <span className="text-zinc-350 dark:text-zinc-750">|</span>
+                    <span className="flex items-center gap-1">
+                      <Clock size={11} className="text-zinc-400 shrink-0" />
+                      {b.booking_time ? b.booking_time.slice(0, 5) : ''}
+                    </span>
                   </div>
-                  {/* Status */}
-                  <div className="relative shrink-0">
-                    <select value={b.status} onChange={e => updateStatus(b.id, e.target.value)}
-                      className={`appearance-none pl-3 pr-7 py-1 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${STATUS_STYLES[b.status] ?? STATUS_STYLES.Pending}`}>
-                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+
+                  {/* Line 3: Price & Actions */}
+                  <div className="flex items-center justify-between border-t border-zinc-100 dark:border-zinc-850 pt-3">
+                    <div>
+                      <p className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white font-mono leading-none">
+                        {formatRp(b.final_price ?? b.price ?? 0)}
+                      </p>
+                      {(b.discount_total ?? 0) > 0 && (
+                        <p className="text-[9px] text-emerald-600 dark:text-emerald-400 font-extrabold mt-0.5">
+                          -{formatRp(b.discount_total ?? 0)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => sendWA(b)} className="p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/20 text-emerald-500 transition-colors" title="Kirim WA">
+                        <MessageCircle size={14} />
+                      </button>
+                      <button onClick={() => openEdit(b)} className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/20 text-blue-500 transition-colors" title="Edit Booking">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => setDeleteId(b.id)} className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 text-red-400 transition-colors" title="Hapus Booking">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
-                  {/* Actions */}
-                  <button onClick={() => sendWA(b)} className="shrink-0 p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-500">
-                    <MessageCircle size={16} />
-                  </button>
-                  <button onClick={() => openEdit(b)} className="shrink-0 p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30 text-blue-500">
-                    <Pencil size={15} />
-                  </button>
-                  <button onClick={() => setDeleteId(b.id)} className="shrink-0 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-red-400">
-                    <Trash2 size={15} />
-                  </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
       )}
 
-      {/* Add / Edit Modal */}
+      {/* Booking Details sliding drawer */}
+      <BookingDrawer
+        booking={selectedBooking}
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onEdit={() => {
+          if (selectedBooking) {
+            setDrawerOpen(false);
+            openEdit(selectedBooking);
+          }
+        }}
+        onDelete={() => {
+          if (selectedBooking) {
+            setDrawerOpen(false);
+            setDeleteId(selectedBooking.id);
+          }
+        }}
+        onSendWA={() => {
+          if (selectedBooking) sendWA(selectedBooking);
+        }}
+        updateStatus={updateStatus}
+        therapists={therapists}
+        isOwner={isOwner}
+      />
+
+      {/* Add / Edit Form Modal */}
       <BookingFormModal
         open={showForm}
         onClose={() => { setShowForm(false); setEditId(null); }}
@@ -398,29 +768,28 @@ export default function BookingsPage() {
         isOwner={isOwner}
       />
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation Modal (Blur-free) */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteId(null)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 z-10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 w-full max-w-sm">
             <div className="flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center">
-                <AlertTriangle size={22} className="text-red-500" />
+                <AlertTriangle size={22} className="text-red-550" />
               </div>
-              <h3 className="font-semibold text-zinc-900 dark:text-white">Hapus Booking?</h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {bookings.find(b => b.id === deleteId)?.customer_name} — tindakan ini tidak bisa dibatalkan.
+              <h3 className="font-semibold text-zinc-900 dark:text-white text-sm">Hapus Booking?</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                Booking atas nama <strong className="text-zinc-700 dark:text-zinc-300">{bookings.find(b => b.id === deleteId)?.customer_name}</strong> akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
                 {bookings.find(b => b.id === deleteId)?.status === 'Completed' && (
-                  <span className="block mt-1 text-red-500 font-medium text-xs">
-                    ⚠ Booking ini sudah Completed — komisi terapis di laporan bisa tidak balance!
+                  <span className="block mt-2 text-red-500 font-bold text-[10px] uppercase">
+                    ⚠ Perhatian: Booking status Completed. Menghapus akan merusak balance komisi di laporan!
                   </span>
                 )}
               </p>
               <div className="flex gap-3 w-full pt-2">
-                <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center">Batal</button>
+                <button onClick={() => setDeleteId(null)} className="admin-btn-ghost flex-1 justify-center text-xs">Batal</button>
                 <button onClick={confirmDelete} disabled={deleting}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-60">
-                  {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Hapus
+                  className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-500 hover:bg-red-650 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-60 shadow-sm">
+                  {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Hapus
                 </button>
               </div>
             </div>

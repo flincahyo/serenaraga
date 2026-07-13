@@ -283,11 +283,9 @@ export default function DiscountsPage() {
     if (!editId) return;
     setSaving(true);
     
-    // Clean database payload to avoid sending virtual fields like 'borne_by'
-    const { borne_by, ...dbPayload } = editData;
     const payload = {
-      ...dbPayload,
-      is_owner_borne: borne_by === 'owner'
+      ...editData,
+      is_owner_borne: editData.borne_by === 'owner'
     };
 
     const { error } = await supabase.from('discounts').update(payload).eq('id', editId);
@@ -303,11 +301,9 @@ export default function DiscountsPage() {
   const addDiscount = async () => {
     setSaving(true);
     
-    // Clean database payload to avoid sending virtual fields like 'borne_by'
-    const { borne_by, ...dbPayload } = newDisc;
     const payload = {
-      ...dbPayload,
-      is_owner_borne: borne_by === 'owner',
+      ...newDisc,
+      is_owner_borne: newDisc.borne_by === 'owner',
       uses_count: 0
     };
 

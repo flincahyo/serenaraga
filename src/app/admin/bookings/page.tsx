@@ -92,8 +92,11 @@ export default function BookingsPage() {
 
   // EC#7: updateStatus recalculates commission when set to Completed
   const updateStatus = async (id: string, status: string) => {
+    const { data: orig } = await supabase.from('bookings').select('status').eq('id', id).single();
+    
     await supabase.from('bookings').update({ status }).eq('id', id);
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+    
     if (status === 'Completed') {
       const { data: items } = await supabase.from('booking_items').select('*, therapist_id').eq('booking_id', id);
       const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total, therapist_discount_total').eq('id', id).single();
@@ -122,6 +125,28 @@ export default function BookingsPage() {
           await supabase.from('booking_items').update({ commission_earned: earned }).eq('id', item.id);
         }));
       }
+    } else if (orig?.status === 'Completed') {
+      // Reverted from Completed to something else!
+      // Decrement uses count, delete discounts, delete transport, reset commissions
+      const { data: oldDiscounts } = await supabase
+        .from('booking_discounts')
+        .select('discount_id')
+        .eq('booking_id', id);
+      if (oldDiscounts && oldDiscounts.length > 0) {
+        for (const d of oldDiscounts) {
+          if (d.discount_id) {
+            const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', d.discount_id).single();
+            if (fresh) {
+              await supabase.from('discounts')
+                .update({ uses_count: Math.max(0, (fresh.uses_count ?? 0) - 1) })
+                .eq('id', d.discount_id);
+            }
+          }
+        }
+      }
+      await supabase.from('booking_discounts').delete().eq('booking_id', id);
+      await supabase.from('booking_items').delete().eq('booking_id', id).eq('service_name', 'Biaya Transport');
+      await supabase.from('booking_items').update({ commission_earned: 0 }).eq('booking_id', id);
     }
   };
 

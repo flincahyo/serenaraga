@@ -730,6 +730,7 @@ const InvoiceMaker = () => {
     if (!selectedBookingId) return;
     // Audit #2 Bug #1: double-completion guard
     if (hasSavedRef.current) return;
+    hasSavedRef.current = true;
 
     // Fix #15: verify current status from DB before proceeding
     const { data: currentBooking } = await supabase
@@ -738,141 +739,149 @@ const InvoiceMaker = () => {
       const confirmed = window.confirm(
         'Booking ini sudah berstatus COMPLETED.\n\nMelanjutkan akan menimpa data invoice, komisi, dan diskon yang telah tersimpan.\n\nYakin ingin mengubah data?'
       );
-      if (!confirmed) return;
+      if (!confirmed) {
+        hasSavedRef.current = false;
+        return;
+      }
     }
 
-    hasSavedRef.current = true;
     setCompleting(true);
-    let clean = customerPhone.replace(/\D/g, '');
-    if (clean.startsWith('0')) clean = '62' + clean.substring(1);
+    try {
+      let clean = customerPhone.replace(/\D/g, '');
+      if (clean.startsWith('0')) clean = '62' + clean.substring(1);
 
-    // 1. Upsert customer
-    let customerId = customerRecord?.id ?? null;
-    if (clean && clean.length > 5) {
-      if (!customerId) {
-        const { data: newCust } = await supabase
-          .from('customers')
-          .upsert({ wa_number: clean, name: customerName },
-            { onConflict: 'wa_number', ignoreDuplicates: true })
-          .select('id').single();
-        if (!newCust) {
-          const { data: ex } = await supabase.from('customers').select('id').eq('wa_number', clean).single();
-          customerId = ex?.id ?? null;
-        } else customerId = newCust.id;
+      // 1. Upsert customer
+      let customerId = customerRecord?.id ?? null;
+      if (clean && clean.length > 5) {
+        if (!customerId) {
+          const { data: newCust } = await supabase
+            .from('customers')
+            .upsert({ wa_number: clean, name: customerName },
+              { onConflict: 'wa_number', ignoreDuplicates: true })
+            .select('id').single();
+          if (!newCust) {
+            const { data: ex } = await supabase.from('customers').select('id').eq('wa_number', clean).single();
+            customerId = ex?.id ?? null;
+          } else customerId = newCust.id;
+        }
       }
-    }
 
-    // Fetch BHP for each item
-    const itemsWithBhp = await Promise.all(
-      items.map(async (item) => {
-        const bhp = await calcBhp(item.name);
-        return { ...item, bhp };
-      })
-    );
-    const totalBhp = itemsWithBhp.reduce((s, i) => s + i.bhp, 0);
-
-    // 2. Update booking
-    const displayName = items.map(i => i.name).join(' + ');
-    await supabase.from('bookings').update({
-      status: 'Completed',
-      service_name: displayName,
-      customer_id: customerId,
-      discount_total: totalDiscount,
-      final_price: finalTotal,
-      price: grossTotal + totalTransportFee,
-      bhp_cost: totalBhp,
-      shared_discount_total: sharedDiscountAmount,
-      therapist_discount_total: therapistDiscountAmount,
-    }).eq('id', selectedBookingId);
-
-    // 3. Update/insert booking_items per item
-    const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
-    const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
-    for (const item of itemsWithBhp) {
-      const itemSharedDiscount = item.price * sharedDiscountPerGross;
-      const itemTherapistDiscount = item.price * therapistDiscountPerGross;
-      let pct = commissionPct;
-      if (item.therapist_id) {
-        const t = therapists.find(x => x.id === item.therapist_id);
-        if (t) pct = t.commission_pct;
-      }
-      const maxBasisReduction = Math.round(item.price * 5 / 100);
-      const basisReduction = Math.min(itemTherapistDiscount, maxBasisReduction);
-      const itemBasis = item.price - basisReduction;
-      const grossCommission = Math.round(itemBasis * pct / 100);
-      const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
-      const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
-      
-      const svc = services.find(s => s.name === item.name);
-      const serviceId = svc?.id || null;
-      if (item.db_id) {
-        // UPDATE existing item
-        await supabase.from('booking_items').update({
-          therapist_id: item.therapist_id || null,
-          commission_earned: itemCommission,
-          bhp_cost: item.bhp,
-          service_id: serviceId,
-        }).eq('id', item.db_id);
-      } else {
-        // Audit #2 Bug #6: INSERT items that have no db_id yet
-        await supabase.from('booking_items').insert({
-          booking_id: selectedBookingId,
-          service_name: item.name,
-          price: item.price,
-          therapist_id: item.therapist_id || null,
-          commission_earned: itemCommission,
-          bhp_cost: item.bhp,
-          service_id: serviceId,
-        });
-      }
-    }
-
-    await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
-    for (const entry of transportEntries) {
-      if (Number(entry.fee) > 0) {
-        // No therapist assigned → commission_earned = 0 (full transport amount to owner)
-        const entryCommission = entry.therapist_id
-          ? Math.round(Number(entry.fee) * (entry.pct / 100))
-          : 0;
-        await supabase.from('booking_items').insert({
-          booking_id: selectedBookingId,
-          service_name: 'Biaya Transport',
-          price: Number(entry.fee),
-          commission_earned: entryCommission,
-          therapist_id: entry.therapist_id || null,
-          sort_order: 999,
-        });
-      }
-    }
-
-    // 4. Audit #2 Bug #2: DELETE existing discounts first to prevent duplicates on re-complete
-    await supabase.from('booking_discounts').delete().eq('booking_id', selectedBookingId);
-    if (appliedDiscounts.length > 0) {
-      await supabase.from('booking_discounts').insert(
-        appliedDiscounts.map(a => ({
-          booking_id: selectedBookingId,
-          discount_id: a.discountId.startsWith('custom_') ? null : (a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId),
-          discount_label: a.label,
-          discount_value_type: a.value_type,
-          discount_value: a.value,
-          discount_amount: a.amount,
-          is_owner_borne: a.is_owner_borne,
-        }))
+      // Fetch BHP for each item
+      const itemsWithBhp = await Promise.all(
+        items.map(async (item) => {
+          const bhp = await calcBhp(item.name);
+          return { ...item, bhp };
+        })
       );
-      // Audit #2 Bug #4: re-fetch from DB before increment to avoid stale read race condition
-      for (const a of appliedDiscounts) {
-        if (a.discountId.startsWith('custom_')) continue;
-        const realId = a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId;
-        const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', realId).single();
-        await supabase.from('discounts')
-          .update({ uses_count: (fresh?.uses_count ?? 0) + 1 })
-          .eq('id', realId);
-      }
-    }
+      const totalBhp = itemsWithBhp.reduce((s, i) => s + i.bhp, 0);
 
-    // Audit #2 Bug #5: refresh booking list so completed booking disappears from dropdown
-    await fetchAll();
-    setCompleting(false);
+      // 2. Update booking
+      const displayName = items.map(i => i.name).join(' + ');
+      await supabase.from('bookings').update({
+        status: 'Completed',
+        service_name: displayName,
+        customer_id: customerId,
+        discount_total: totalDiscount,
+        final_price: finalTotal,
+        price: grossTotal + totalTransportFee,
+        bhp_cost: totalBhp,
+        shared_discount_total: sharedDiscountAmount,
+        therapist_discount_total: therapistDiscountAmount,
+      }).eq('id', selectedBookingId);
+
+      // 3. Update/insert booking_items per item
+      const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
+      const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
+      for (const item of itemsWithBhp) {
+        const itemSharedDiscount = item.price * sharedDiscountPerGross;
+        const itemTherapistDiscount = item.price * therapistDiscountPerGross;
+        let pct = commissionPct;
+        if (item.therapist_id) {
+          const t = therapists.find(x => x.id === item.therapist_id);
+          if (t) pct = t.commission_pct;
+        }
+        const maxBasisReduction = Math.round(item.price * 5 / 100);
+        const basisReduction = Math.min(itemTherapistDiscount, maxBasisReduction);
+        const itemBasis = item.price - basisReduction;
+        const grossCommission = Math.round(itemBasis * pct / 100);
+        const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
+        const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
+        
+        const svc = services.find(s => s.name === item.name);
+        const serviceId = svc?.id || null;
+        if (item.db_id) {
+          // UPDATE existing item
+          await supabase.from('booking_items').update({
+            therapist_id: item.therapist_id || null,
+            commission_earned: itemCommission,
+            bhp_cost: item.bhp,
+            service_id: serviceId,
+          }).eq('id', item.db_id);
+        } else {
+          // Audit #2 Bug #6: INSERT items that have no db_id yet
+          await supabase.from('booking_items').insert({
+            booking_id: selectedBookingId,
+            service_name: item.name,
+            price: item.price,
+            therapist_id: item.therapist_id || null,
+            commission_earned: itemCommission,
+            bhp_cost: item.bhp,
+            service_id: serviceId,
+          });
+        }
+      }
+
+      await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
+      for (const entry of transportEntries) {
+        if (Number(entry.fee) > 0) {
+          // No therapist assigned → commission_earned = 0 (full transport amount to owner)
+          const entryCommission = entry.therapist_id
+            ? Math.round(Number(entry.fee) * (entry.pct / 100))
+            : 0;
+          await supabase.from('booking_items').insert({
+            booking_id: selectedBookingId,
+            service_name: 'Biaya Transport',
+            price: Number(entry.fee),
+            commission_earned: entryCommission,
+            therapist_id: entry.therapist_id || null,
+            sort_order: 999,
+          });
+        }
+      }
+
+      // 4. Audit #2 Bug #2: DELETE existing discounts first to prevent duplicates on re-complete
+      await supabase.from('booking_discounts').delete().eq('booking_id', selectedBookingId);
+      if (appliedDiscounts.length > 0) {
+        await supabase.from('booking_discounts').insert(
+          appliedDiscounts.map(a => ({
+            booking_id: selectedBookingId,
+            discount_id: a.discountId.startsWith('custom_') ? null : (a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId),
+            discount_label: a.label,
+            discount_value_type: a.value_type,
+            discount_value: a.value,
+            discount_amount: a.amount,
+            is_owner_borne: a.is_owner_borne,
+          }))
+        );
+        // Audit #2 Bug #4: re-fetch from DB before increment to avoid stale read race condition
+        for (const a of appliedDiscounts) {
+          if (a.discountId.startsWith('custom_')) continue;
+          const realId = a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId;
+          const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', realId).single();
+          await supabase.from('discounts')
+            .update({ uses_count: (fresh?.uses_count ?? 0) + 1 })
+            .eq('id', realId);
+        }
+      }
+
+      // Audit #2 Bug #5: refresh booking list so completed booking disappears from dropdown
+      await fetchAll();
+    } catch (err) {
+      console.error(err);
+      hasSavedRef.current = false;
+    } finally {
+      setCompleting(false);
+    }
   };
 
   const downloadInvoice = async () => {

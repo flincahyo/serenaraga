@@ -72,8 +72,16 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
           supabase.from('booking_items').select('*').eq('booking_id', editBookingId).order('sort_order'),
         ]);
         if (b) setForm({ customer_name: b.customer_name ?? '', phone: b.phone ?? '62', booking_date: b.booking_date ?? '', booking_time: b.booking_time ?? '', status: b.status ?? 'Pending', notes: b.notes ?? '', discount_total: b.discount_total ?? 0, shared_discount_total: b.shared_discount_total ?? 0, therapist_discount_total: b.therapist_discount_total ?? 0 });
-        if (bi && bi.length > 0) setItems(bi.map((it: any, i: number) => ({ tempId: i, service_id: it.service_id ?? '', service_name: it.service_name, price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '', parent_bundle_name: it.parent_bundle_name ?? '' })));
-        else setItems([EMPTY_ITEM()]);
+        if (bi && bi.length > 0) {
+          const normalItems = bi.filter((it: any) => it.service_name !== 'Biaya Transport');
+          if (normalItems.length > 0) {
+            setItems(normalItems.map((it: any, i: number) => ({ tempId: i, service_id: it.service_id ?? '', service_name: it.service_name, price: it.price, duration: it.duration ?? '', therapist_id: it.therapist_id ?? '', parent_bundle_name: it.parent_bundle_name ?? '' })));
+          } else {
+            setItems([EMPTY_ITEM()]);
+          }
+        } else {
+          setItems([EMPTY_ITEM()]);
+        }
       })();
     } else {
       setForm(EMPTY_FORM(defaultDate ?? ''));
@@ -188,10 +196,35 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
     const payload = { customer_name: form.customer_name, phone: phone || form.phone, booking_date: form.booking_date, booking_time: form.booking_time, status: form.status, notes: form.notes, service_name: withBhp.map(i => i.service_name).join(' + '), price: totalPrice, bhp_cost: totalBhp, final_price: Math.max(0, totalPrice - (form.discount_total || 0)), discount_total: form.discount_total, shared_discount_total: form.shared_discount_total, therapist_discount_total: form.therapist_discount_total, customer_id: customerId };
 
     let bookingId: string;
-    if (editBookingId) { await supabase.from('bookings').update(payload).eq('id', editBookingId); bookingId = editBookingId; }
+    if (editBookingId) {
+      const { data: orig } = await supabase.from('bookings').select('status').eq('id', editBookingId).single();
+      await supabase.from('bookings').update(payload).eq('id', editBookingId);
+      bookingId = editBookingId;
+      
+      if (orig?.status === 'Completed' && form.status !== 'Completed') {
+        const { data: oldDiscounts } = await supabase
+          .from('booking_discounts')
+          .select('discount_id')
+          .eq('booking_id', bookingId);
+        if (oldDiscounts && oldDiscounts.length > 0) {
+          for (const d of oldDiscounts) {
+            if (d.discount_id) {
+              const { data: fresh } = await supabase.from('discounts').select('uses_count').eq('id', d.discount_id).single();
+              if (fresh) {
+                await supabase.from('discounts')
+                  .update({ uses_count: Math.max(0, (fresh.uses_count ?? 0) - 1) })
+                  .eq('id', d.discount_id);
+              }
+            }
+          }
+        }
+        await supabase.from('booking_discounts').delete().eq('booking_id', bookingId);
+        await supabase.from('booking_items').delete().eq('booking_id', bookingId).eq('service_name', 'Biaya Transport');
+      }
+    }
     else { const { data: nb } = await supabase.from('bookings').insert(payload).select('id').single(); bookingId = nb!.id; }
 
-    await supabase.from('booking_items').delete().eq('booking_id', bookingId);
+    await supabase.from('booking_items').delete().eq('booking_id', bookingId).neq('service_name', 'Biaya Transport');
     await supabase.from('booking_items').insert(withBhp.map((item, idx) => {
       let earned = 0;
       if (form.status === 'Completed' && item.therapist_id) {

@@ -435,6 +435,11 @@ export default function ReportsPage() {
   const [searchTerm, setSearchTerm]         = useState<string>('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const supabase = createClient();
 
@@ -873,22 +878,24 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -15, bottom: 0 }} barCategoryGap="25%" barGap={3}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" className="dark:stroke-zinc-850" />
-                      <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#71717A', fontWeight: 700 }} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: '#71717A', fontWeight: 600 }}
-                        tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}jt` : String(v)} />
-                      <Tooltip
-                        content={<CustomTooltip />}
-                        cursor={{ fill: 'rgba(139,94,60,0.03)', radius: 4 }}
-                      />
-                      <Bar dataKey="gross"   name="gross"   fill="#8B5E3C" radius={[4,4,0,0]} />
-                      <Bar dataKey="terapis" name="terapis" fill="#FBBF24" radius={[4,4,0,0]} />
-                      <Bar dataKey="bhp"     name="bhp"     fill="#60A5FA" radius={[4,4,0,0]} />
-                      <Bar dataKey="net"     name="net"     fill="#10B981" radius={[4,4,0,0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {isMounted && (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -15, bottom: 0 }} barCategoryGap="25%" barGap={3}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F4F4F5" className="dark:stroke-zinc-850" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#71717A', fontWeight: 700 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: '#71717A', fontWeight: 600 }}
+                          tickFormatter={v => v >= 1000000 ? `${(v/1000000).toFixed(1)}jt` : String(v)} />
+                        <Tooltip
+                          content={<CustomTooltip />}
+                          cursor={{ fill: 'rgba(139,94,60,0.03)', radius: 4 }}
+                        />
+                        <Bar dataKey="gross"   name="gross"   fill="#8B5E3C" radius={[4,4,0,0]} />
+                        <Bar dataKey="terapis" name="terapis" fill="#FBBF24" radius={[4,4,0,0]} />
+                        <Bar dataKey="bhp"     name="bhp"     fill="#60A5FA" radius={[4,4,0,0]} />
+                        <Bar dataKey="net"     name="net"     fill="#10B981" radius={[4,4,0,0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 

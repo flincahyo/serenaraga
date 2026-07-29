@@ -101,7 +101,7 @@ const TRANSFER_CATEGORY: CategoryItem = {
   id: 'internal_transfer', label: 'Transfer Internal Kas', icon: ArrowLeftRight
 };
 
-function getCategoryDetails(catRaw: string, type: TransactionType): CategoryItem {
+function getCategoryDetails(catRaw: string, type?: TransactionType): CategoryItem {
   if (catRaw === 'internal_transfer') return TRANSFER_CATEGORY;
 
   const all = [...CATEGORIES_INFLOW, ...CATEGORIES_OUTFLOW];
@@ -743,7 +743,7 @@ export default function FinancePage() {
       }).replace('.', ':');
 
       const jenisStr = t.type === 'inflow' ? 'Pemasukan' : 'Pengeluaran';
-      const catStr = getCategoryDetails(t.category).label;
+      const catStr = getCategoryDetails(t.category, t.type).label;
       const descStr = `"${t.description.replace(/"/g, '""')}"`;
       const refStr = `"${(t.reference_id || '-').replace(/"/g, '""')}"`;
       const accStr = t.payment_account.toUpperCase();

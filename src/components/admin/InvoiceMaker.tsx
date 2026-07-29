@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import {
   Download, Plus, Trash2, Loader2, Share2, Users, Percent,
-  Tag, X, Check, Award, Hash, Bus, Globe
+  Tag, X, Check, Award, Hash, Bus, Globe, Smartphone, Building2, Banknote, CreditCard,
+  QrCode, Landmark, Wallet, Coins
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
@@ -139,6 +140,17 @@ const InvoiceMaker = () => {
   const [voucherApplied, setVoucherApplied] = useState<{ id: string; code: string; label: string; value: number; value_type: string } | null>(null);
   const [returningPromos, setReturningPromos] = useState<Discount[]>([]); // suggested returning customer promos
   const [categories, setCategories] = useState<any[]>([]);
+  const [paymentAccount, setPaymentAccount] = useState<string>('qris');
+  const [availableAccounts, setAvailableAccounts] = useState<{ id: string; label: string; icon: string }[]>([
+    { id: 'qris', label: 'QRIS', icon: 'Smartphone' },
+    { id: 'bca', label: 'BCA', icon: 'Building2' },
+    { id: 'cash', label: 'Cash', icon: 'Banknote' },
+    { id: 'edc', label: 'EDC', icon: 'CreditCard' },
+  ]);
+
+  const ACCOUNT_ICONS: Record<string, any> = {
+    Smartphone, Building2, Banknote, CreditCard, QrCode, Landmark, Wallet, Coins,
+  };
 
   const supabase = createClient();
   const grossTotal = items.reduce((s, i) => s + Number(i.price), 0);
@@ -148,7 +160,7 @@ const InvoiceMaker = () => {
       supabase.from('services').select('id,name,price,details,category,is_bundle,bundle_child_ids,estimated_duration').order('category').order('sort_order'),
       supabase.from('bookings').select('id,customer_name,phone,service_name,booking_date,booking_time,price,status')
         .in('status', ['Pending', 'Confirmed']).order('booking_date', { ascending: false }).limit(50),
-      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days']),
+      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text', 'invoice_social_text', 'terapis_commission_pct', 're_engagement_days', 'payment_accounts']),
       supabase.from('discounts').select('*').eq('is_active', true),
       supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
       supabase.from('service_categories').select('*').order('sort_order'),
@@ -174,6 +186,20 @@ const InvoiceMaker = () => {
         if (key === 'invoice_social_text') setInvoiceSocial(value);
         if (key === 'terapis_commission_pct') setCommissionPct(Number(value) || 30);
         if (key === 're_engagement_days') setReEngageDays(Number(value) || 60);
+        if (key === 'payment_accounts' && value) {
+          try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const filtered = parsed.filter((a: any) => a.show_in_invoice !== false);
+              if (filtered.length > 0) {
+                setAvailableAccounts(filtered);
+                setPaymentAccount(prev => (filtered.some((f: any) => f.id === prev) ? prev : filtered[0].id));
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing payment_accounts setting:', e);
+          }
+        }
       });
     }
   }, []);
@@ -876,6 +902,23 @@ const InvoiceMaker = () => {
         }
       }
 
+      // 5. Sync to cash_transactions ledger automatically
+      try {
+        await supabase.from('cash_transactions').delete().eq('reference_id', invoiceNumber);
+        await supabase.from('cash_transactions').insert({
+          transaction_date: new Date().toISOString(),
+          type: 'inflow',
+          category: 'service_income',
+          payment_account: paymentAccount,
+          amount: finalTotal,
+          description: `${customerName || 'Pelanggan'} - ${invoiceNumber}`,
+          reference_id: invoiceNumber,
+          created_by: user?.displayName || user?.email || 'Admin'
+        });
+      } catch (cashErr) {
+        console.error('Failed to sync transaction to cash_transactions:', cashErr);
+      }
+
       // Audit #2 Bug #5: refresh booking list so completed booking disappears from dropdown
       await fetchAll();
     } catch (err) {
@@ -1362,6 +1405,33 @@ const InvoiceMaker = () => {
               {isOwner && commissionPct > 0 && finalTotal > 0 && (
                 <p className="text-[10px] text-zinc-450 font-bold">Net Pemilik: <span className="font-mono text-zinc-700 dark:text-zinc-300 font-extrabold">{formatRp(ownerNet)}</span></p>
               )}
+            </div>
+          </div>
+
+          {/* Payment Account Selection */}
+          <div className="pt-2.5 border-t border-zinc-150 dark:border-zinc-800">
+            <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block mb-1.5">
+              Metode Pembayaran (Buku Kas)
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {availableAccounts.map(method => {
+                const Icon = ACCOUNT_ICONS[method.icon] || Wallet;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => setPaymentAccount(method.id)}
+                    className={`px-2 py-1.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      paymentAccount === method.id
+                        ? 'bg-earth-primary text-white border-earth-primary shadow-xs'
+                        : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span className="truncate">{method.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

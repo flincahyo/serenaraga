@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   Users, Search, Plus, Pencil, Check, X, Loader2,
   Phone, CalendarCheck, Award, Hash, Trash2, TrendingUp, Wallet, Star, MessageCircle, AlertCircle,
+  Clock, Tag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase';
@@ -495,38 +496,89 @@ function CustomerDrawer({
                   <p className="text-xs text-zinc-400 text-center py-4">Belum ada booking di sistem.</p>
                 ) : (
                   <div className="relative pl-4 border-l border-zinc-200 dark:border-zinc-800 space-y-4 ml-1 pt-1">
-                    {bookingHistory.map((b) => (
-                      <div key={b.id} className="relative">
-                        <div className={`absolute w-2.5 h-2.5 rounded-full -left-[21.5px] top-1 border-2 border-white dark:border-zinc-950 ${
-                          b.status === 'Completed' ? 'bg-emerald-500' :
-                          b.status === 'Canceled' ? 'bg-zinc-400' :
-                          'bg-amber-500'
-                        }`} />
-                        
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 leading-tight">
+                    {bookingHistory.map((b) => {
+                      // Extract unique therapist names from booking items
+                      const therapistNames = Array.from(new Set(
+                        b.booking_items
+                          ?.map((item: any) => item.therapists?.name)
+                          .filter(Boolean)
+                      )).join(', ');
+
+                      const paidTotal = b.final_price ?? b.price;
+                      const discount = b.discount_total ?? 0;
+                      const hasDiscount = discount > 0;
+                      const bhpCost = b.bhp_cost ?? 0;
+
+                      return (
+                        <div key={b.id} className="relative">
+                          {/* Circle indicator on vertical timeline */}
+                          <div className={`absolute w-2.5 h-2.5 rounded-full -left-[21.5px] top-3 border-2 border-white dark:border-zinc-950 ${
+                            b.status === 'Completed' ? 'bg-emerald-500' :
+                            b.status === 'Canceled' ? 'bg-zinc-400' :
+                            'bg-amber-500'
+                          }`} />
+                          
+                          <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/80 rounded-xl p-3 space-y-2 text-xs">
+                            {/* Date, Time & Status Header */}
+                            <div className="flex justify-between items-center text-[10px] text-zinc-400 dark:text-zinc-500">
+                              <div className="flex items-center gap-1 font-semibold font-mono">
+                                <span>{b.booking_date ? formatDate(b.booking_date) : '-'}</span>
+                                {b.booking_time && (
+                                  <>
+                                    <span className="text-zinc-300">•</span>
+                                    <span className="flex items-center gap-0.5"><Clock size={9} /> {b.booking_time.slice(0, 5)}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-md border ${
+                                b.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' :
+                                b.status === 'Canceled' ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20' :
+                                'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                              }`}>
+                                {b.status}
+                              </span>
+                            </div>
+
+                            {/* Service name */}
+                            <p className="font-bold text-zinc-800 dark:text-zinc-250 leading-snug">
                               {b.service_name}
                             </p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">
-                              {b.booking_date ? formatDate(b.booking_date) : '-'}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 font-mono leading-none">
-                              {formatRp(b.final_price ?? b.price)}
-                            </p>
-                            <span className={`text-[9px] font-semibold mt-0.5 inline-block ${
-                              b.status === 'Completed' ? 'text-emerald-500' :
-                              b.status === 'Canceled' ? 'text-zinc-400' :
-                              'text-amber-500'
-                            }`}>
-                              {b.status}
-                            </span>
+
+                            {/* Therapist Details */}
+                            {therapistNames && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">
+                                <Users size={11} className="text-zinc-450 shrink-0" />
+                                <span>Terapis: <span className="font-bold text-zinc-700 dark:text-zinc-350">{therapistNames}</span></span>
+                              </div>
+                            )}
+
+                            {/* Financial breakdown */}
+                            <div className="border-t border-dashed border-zinc-200 dark:border-zinc-800/80 pt-2 flex items-center justify-between gap-1.5 text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span>Gross: <span className="font-mono text-zinc-500 dark:text-zinc-400">{formatRp(b.price)}</span></span>
+                                {hasDiscount && (
+                                  <span className="text-emerald-600 flex items-center gap-0.5"><Tag size={9} /> -{formatRp(discount)}</span>
+                                )}
+                                {bhpCost > 0 && (
+                                  <span className="text-blue-500">BHP: -{formatRp(bhpCost)}</span>
+                                )}
+                              </div>
+                              <div className="font-bold text-zinc-800 dark:text-zinc-300">
+                                <span>Bayar: <span className="font-mono text-emerald-650 dark:text-emerald-400 font-bold text-xs">{formatRp(paidTotal)}</span></span>
+                              </div>
+                            </div>
+
+                            {/* Session notes */}
+                            {b.notes && (
+                              <div className="bg-amber-50/30 dark:bg-amber-955/5 border border-amber-100/30 dark:border-amber-900/10 p-2 rounded-lg text-[9px] text-zinc-550 dark:text-zinc-400 leading-relaxed">
+                                <span className="font-bold block uppercase text-[8px] text-amber-700 dark:text-amber-500 tracking-wider mb-0.5">Catatan Sesi</span>
+                                <span className="italic">"{b.notes}"</span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -652,7 +704,15 @@ function CustomersPageInner() {
     setLoadingHistory(true);
     const { data } = await supabase
       .from('bookings')
-      .select('id, service_name, booking_date, price, final_price, status, discount_total')
+      .select(`
+        id, service_name, booking_date, booking_time, price, final_price, status, discount_total, notes, bhp_cost,
+        booking_items (
+          id, service_name, price, bhp_cost, commission_earned,
+          therapists (
+            name
+          )
+        )
+      `)
       .eq('customer_id', customerId)
       .order('booking_date', { ascending: false })
       .limit(10);

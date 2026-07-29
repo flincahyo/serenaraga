@@ -504,6 +504,10 @@ export default function ReportsPage() {
     return bookings.filter(b => b.booking_date && b.booking_date.substring(0, 7) === selectedPeriod);
   }, [bookings, selectedPeriod]);
 
+  // Pagination State
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   // ── Filter bookings by month AND search query (for the list table) ──
   const tableFilteredBookings = useMemo(() => {
     if (!searchTerm.trim()) return periodFilteredBookings;
@@ -514,6 +518,29 @@ export default function ReportsPage() {
       b.id.toLowerCase().includes(q)
     );
   }, [periodFilteredBookings, searchTerm]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedPeriod, itemsPerPage]);
+
+  const sortedBookings = useMemo(() => {
+    return [...tableFilteredBookings].reverse();
+  }, [tableFilteredBookings]);
+
+  const totalFilteredCount = sortedBookings.length;
+  const numPerPage = itemsPerPage === 'all' ? totalFilteredCount : Number(itemsPerPage);
+  const totalPages = itemsPerPage === 'all' || totalFilteredCount === 0 ? 1 : Math.ceil(totalFilteredCount / numPerPage);
+
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = totalFilteredCount === 0 ? 0 : (safeCurrentPage - 1) * numPerPage;
+  const endIndex = itemsPerPage === 'all' ? totalFilteredCount : Math.min(startIndex + numPerPage, totalFilteredCount);
+
+  const paginatedBookings = useMemo(() => {
+    return itemsPerPage === 'all'
+      ? sortedBookings
+      : sortedBookings.slice(startIndex, endIndex);
+  }, [sortedBookings, itemsPerPage, startIndex, endIndex]);
 
   // ── Monthly chart data leading up to the selected period (6-month range) ──
   const monthlyData = useMemo(() => {
@@ -991,7 +1018,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-150 dark:divide-zinc-850 text-zinc-700 dark:text-zinc-300">
-                      {[...tableFilteredBookings].reverse().map(b => {
+                      {paginatedBookings.map(b => {
                         const paidTotal = b.final_price ?? b.price;
                         const discount = b.discount_total ?? 0;
                         const terapisCut = calcTerapisCut(b);
@@ -1042,6 +1069,58 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Footer Pagination & Rows Per Page Bar */}
+                {!loading && totalFilteredCount > 0 && (
+                  <div className="px-4 py-3 bg-zinc-50/80 dark:bg-zinc-950/40 border-t border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    {/* Info text */}
+                    <div className="text-zinc-500 dark:text-zinc-400 text-[11px] font-medium">
+                      Menampilkan <span className="font-bold text-zinc-900 dark:text-white font-mono">{startIndex + 1}</span> - <span className="font-bold text-zinc-900 dark:text-white font-mono">{endIndex}</span> dari <span className="font-bold text-zinc-900 dark:text-white font-mono">{totalFilteredCount}</span> transaksi
+                    </div>
+
+                    {/* Controls right */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Rows per page selector */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">Tampilkan:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={e => setItemsPerPage(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                          className="admin-input py-1 px-2 text-xs font-semibold w-auto"
+                        >
+                          <option value={10}>10 / hal</option>
+                          <option value={25}>25 / hal</option>
+                          <option value={50}>50 / hal</option>
+                          <option value={100}>100 / hal</option>
+                          <option value="all">Semua</option>
+                        </select>
+                      </div>
+
+                      {/* Page Nav */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            disabled={safeCurrentPage <= 1}
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            className="px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          >
+                            ‹ Prev
+                          </button>
+                          <span className="text-[11px] font-mono font-bold text-zinc-600 dark:text-zinc-400 px-1">
+                            {safeCurrentPage} / {totalPages}
+                          </span>
+                          <button
+                            disabled={safeCurrentPage >= totalPages}
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            className="px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          >
+                            Next ›
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

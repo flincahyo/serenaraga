@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Plus, Search, Trash2, Pencil, CalendarDays, Download, ToggleLeft, ToggleRight, Check, X, Loader2, Users, MessageCircle, Clock, Award, Wallet } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, CalendarDays, Download, ToggleLeft, ToggleRight, Check, X, Loader2, Users, MessageCircle, Clock, Award, Wallet, AlertCircle, Smartphone, Building2, Banknote } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createClient } from '@/lib/supabase';
 import { toPng } from 'html-to-image';
@@ -167,9 +167,61 @@ function TherapistDrawer({
   const [payoutItems, setPayoutItems] = useState<PayoutItem[]>([]);
   const [fetchingPayout, setFetchingPayout] = useState(false);
   const [generatingSlip, setGeneratingSlip] = useState(false);
+  const { user } = useUser();
   const [manualTipAmount, setManualTipAmount] = useState<number | ''>('');
   const [manualTipNote, setManualTipNote] = useState<string>('');
+  const [payoutAccount, setPayoutAccount] = useState<'cash' | 'bca' | 'qris' | 'edc'>('qris');
+  const [recordingPayout, setRecordingPayout] = useState(false);
+  const [payoutRecorded, setPayoutRecorded] = useState(false);
   const slipRef = useRef<HTMLDivElement>(null);
+
+  // Custom Confirm/Alert Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type?: 'warning' | 'danger' | 'info';
+    confirmLabel?: string;
+    cancelLabel?: string | null;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'warning',
+    cancelLabel: 'Batal',
+    onConfirm: () => {},
+  });
+
+  const showAlert = (title: string, message: string, type: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      type,
+      cancelLabel: null,
+      confirmLabel: 'Mengerti',
+      onConfirm: () => {},
+    });
+  };
+
+  const showConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    type: 'warning' | 'danger' | 'info' = 'warning',
+    confirmLabel = 'Ya, Lanjutkan'
+  ) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      type,
+      cancelLabel: 'Batal',
+      confirmLabel,
+      onConfirm,
+    });
+  };
 
   // Shift & Timeoff States
   const [shifts, setShifts] = useState<any[]>([]);
@@ -345,7 +397,7 @@ function TherapistDrawer({
     await supabase.from('settings').upsert({ key: 'therapist_last_order_prefs', value: JSON.stringify(prefs) });
 
     setSaving(false);
-    alert('Jadwal rutin berhasil disimpan.');
+    showAlert('Shift Berhasil Disimpan', 'Konfigurasi jadwal rutin terapis berhasil diperbarui.', 'info');
   };
 
   const addTimeoff = async () => {
@@ -367,12 +419,19 @@ function TherapistDrawer({
     setSaving(false);
   };
 
-  const deleteTimeoff = async (id: string, reason: string) => {
-    if (!confirm(`Hapus jadwal libur/izin "${reason}"?`)) return;
-    setSaving(true);
-    await supabase.from('therapist_timeoffs').delete().eq('id', id);
-    setTimeoffs(prev => prev.filter(x => x.id !== id));
-    setSaving(false);
+  const deleteTimeoff = (id: string, reason: string) => {
+    showConfirm(
+      'Hapus Jadwal Libur',
+      `Yakin ingin menghapus jadwal libur/izin "${reason || 'Izin'}"?`,
+      async () => {
+        setSaving(true);
+        await supabase.from('therapist_timeoffs').delete().eq('id', id);
+        setTimeoffs(prev => prev.filter(x => x.id !== id));
+        setSaving(false);
+      },
+      'danger',
+      'Hapus Libur'
+    );
   };
 
   const captureSlip = async (): Promise<string | null> => {
@@ -456,6 +515,104 @@ function TherapistDrawer({
       link.click();
     }
     setGeneratingSlip(false);
+  };
+
+  const doInsertPayoutRecord = async (currentRefId: string, finalPayout: number) => {
+    setRecordingPayout(true);
+    try {
+      const periodText = payoutStart === payoutEnd
+        ? formatDate(payoutStart)
+        : `${formatDate(payoutStart)} - ${formatDate(payoutEnd)}`;
+
+      const tipText = manualTipAmount ? ` (+ Tips/Kasbon ${formatRp(Number(manualTipAmount))})` : '';
+      const desc = `Gaji & Komisi Terapis ${therapist!.name} (${periodText}) - ${payoutItems.length} Jobs${tipText}`;
+
+      const { error } = await supabase.from('cash_transactions').insert({
+        transaction_date: new Date().toISOString(),
+        type: 'outflow',
+        category: 'payroll',
+        payment_account: payoutAccount,
+        amount: finalPayout,
+        description: desc,
+        reference_id: currentRefId,
+        created_by: user?.displayName || user?.email || 'Admin',
+      });
+
+      if (error) {
+        showAlert('Gagal Mencatat Payout', error.message, 'danger');
+      } else {
+        setPayoutRecorded(true);
+        setTimeout(() => setPayoutRecorded(false), 4000);
+      }
+    } catch (err: any) {
+      showAlert('Terjadi Kesalahan', err.message, 'danger');
+    } finally {
+      setRecordingPayout(false);
+    }
+  };
+
+  const recordPayoutToCashbook = async () => {
+    if (!therapist || payoutItems.length === 0) return;
+    const totalPayout = payoutItems.reduce((s, i) => s + i.commission_earned, 0);
+    const finalPayout = totalPayout + Number(manualTipAmount || 0);
+
+    if (finalPayout <= 0) {
+      showAlert('Nominal Rp 0', 'Total nominal payout komisi adalah Rp 0.', 'warning');
+      return;
+    }
+
+    const tShortId = therapist.id.substring(0, 8);
+    const currentRefId = `PAYOUT-${tShortId}-${payoutStart}-${payoutEnd}`;
+
+    // 1. Check all existing payouts for this therapist to catch any overlapping date ranges
+    const { data: existingPayouts } = await supabase
+      .from('cash_transactions')
+      .select('id, reference_id, description, amount, transaction_date')
+      .eq('category', 'payroll')
+      .ilike('reference_id', `PAYOUT-${tShortId}%`);
+
+    let overlappingRecords: typeof existingPayouts = [];
+
+    if (existingPayouts && existingPayouts.length > 0) {
+      overlappingRecords = existingPayouts.filter(record => {
+        if (!record.reference_id) return false;
+        if (record.reference_id === currentRefId) return true;
+
+        const parts = record.reference_id.split('-');
+        if (parts.length >= 8) {
+          const exStart = `${parts[2]}-${parts[3]}-${parts[4]}`;
+          const exEnd = `${parts[5]}-${parts[6]}-${parts[7]}`;
+
+          // Overlap condition: (Start1 <= End2) AND (End1 >= Start2)
+          if (payoutStart <= exEnd && payoutEnd >= exStart) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    if (overlappingRecords && overlappingRecords.length > 0) {
+      const overlapDetails = overlappingRecords.map(r => `• ${r.description} (${formatRp(Number(r.amount))})`).join('\n');
+      const periodText = payoutStart === payoutEnd
+        ? formatDate(payoutStart)
+        : `${formatDate(payoutStart)} s/d ${formatDate(payoutEnd)}`;
+
+      showConfirm(
+        'Peringatan Tumpang Tindih Payout',
+        `Sebagian atau seluruh tanggal periode ini (${periodText}) SUDAH PERNAH DICATAT di Buku Kas:\n\n${overlapDetails}\n\nHapus catatan lama dan gantikan dengan payout periode baru ini (${formatRp(finalPayout)})?`,
+        async () => {
+          const idsToDelete = overlappingRecords!.map(r => r.id);
+          await supabase.from('cash_transactions').delete().in('id', idsToDelete);
+          await doInsertPayoutRecord(currentRefId, finalPayout);
+        },
+        'warning',
+        'Ganti Catatan Lama'
+      );
+      return;
+    }
+
+    await doInsertPayoutRecord(currentRefId, finalPayout);
   };
 
   const totalPayout = payoutItems.reduce((s, i) => s + i.commission_earned, 0);
@@ -732,22 +889,61 @@ function TherapistDrawer({
 
                   {payoutItems.length > 0 && (
                     <div className="space-y-4">
-                      {/* Action buttons */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={generateSlipImage}
-                          disabled={generatingSlip}
-                          className="flex-1 bg-zinc-900 dark:bg-zinc-800 border border-zinc-900 dark:border-zinc-700 text-white hover:bg-zinc-800 dark:hover:bg-zinc-700 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
-                        >
-                          {generatingSlip ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Unduh Slip Image
-                        </button>
-                        <button
-                          onClick={shareToWhatsApp}
-                          disabled={generatingSlip}
-                          className="flex-1 bg-[#25D366] hover:bg-[#1da851] text-white flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
-                        >
-                          {generatingSlip ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />} Share WA Terapis
-                        </button>
+                      {/* Action buttons with account selector */}
+                      <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-2xl space-y-3 shadow-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Pilih Rekening Pembayaran Payout:</span>
+                          <div className="flex bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-semibold gap-1">
+                            {[
+                              { id: 'qris', label: 'QRIS', icon: Smartphone },
+                              { id: 'bca', label: 'BCA', icon: Building2 },
+                              { id: 'cash', label: 'Cash', icon: Banknote },
+                            ].map(acc => {
+                              const Icon = acc.icon;
+                              return (
+                                <button
+                                  key={acc.id}
+                                  type="button"
+                                  onClick={() => setPayoutAccount(acc.id as any)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                                    payoutAccount === acc.id
+                                      ? 'bg-earth-primary text-white shadow-xs'
+                                      : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                                  }`}
+                                >
+                                  <Icon size={12} />
+                                  <span>{acc.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={recordPayoutToCashbook}
+                            disabled={recordingPayout || finalPayout <= 0}
+                            className="flex-1 bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-sm"
+                            title="Catat pengeluaran pembayaran komisi ini ke Buku Kas"
+                          >
+                            {recordingPayout ? <Loader2 size={14} className="animate-spin" /> : payoutRecorded ? <Check size={14} /> : <Wallet size={14} />}
+                            <span>{payoutRecorded ? 'Tersimpan di Buku Kas!' : 'Catat Pembayaran di Buku Kas'}</span>
+                          </button>
+                          <button
+                            onClick={generateSlipImage}
+                            disabled={generatingSlip}
+                            className="bg-zinc-900 dark:bg-zinc-800 border border-zinc-900 dark:border-zinc-700 text-white hover:bg-zinc-800 dark:hover:bg-zinc-700 flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+                          >
+                            {generatingSlip ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Slip PNG
+                          </button>
+                          <button
+                            onClick={shareToWhatsApp}
+                            disabled={generatingSlip}
+                            className="bg-[#25D366] hover:bg-[#1da851] text-white flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-colors disabled:opacity-50"
+                          >
+                            {generatingSlip ? <Loader2 size={13} className="animate-spin" /> : <MessageCircle size={13} />} WA
+                          </button>
+                        </div>
                       </div>
 
                       {/* Slip Design Container */}
@@ -880,6 +1076,56 @@ function TherapistDrawer({
               )}
             </div>
           </motion.div>
+
+          {/* Custom Confirm / Alert Modal Dialog */}
+          {confirmDialog.isOpen && (
+            <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl p-5 space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    confirmDialog.type === 'danger'
+                      ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/50'
+                      : confirmDialog.type === 'warning'
+                      ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/50'
+                      : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/50'
+                  }`}>
+                    <AlertCircle size={20} />
+                  </div>
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white leading-snug">{confirmDialog.title}</h4>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed whitespace-pre-line break-words">{confirmDialog.message}</p>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                  {confirmDialog.cancelLabel && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                      className="px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    >
+                      {confirmDialog.cancelLabel}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                      confirmDialog.onConfirm();
+                    }}
+                    className={`px-4 py-2 rounded-xl text-white text-xs font-bold shadow-xs transition-colors ${
+                      confirmDialog.type === 'danger'
+                        ? 'bg-rose-600 hover:bg-rose-700'
+                        : confirmDialog.type === 'warning'
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-earth-primary hover:bg-earth-dark'
+                    }`}
+                  >
+                    {confirmDialog.confirmLabel || 'Ya, Lanjutkan'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </AnimatePresence>

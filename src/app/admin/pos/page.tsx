@@ -5,7 +5,8 @@ import { toPng } from 'html-to-image';
 import {
   ShoppingCart, Trash2, Plus, Minus, User, Phone, Download,
   Share2, ChevronRight, X, Check, Loader2, Tag, Search,
-  Sparkles, Receipt, Globe
+  Sparkles, Receipt, Globe, Smartphone, Building2, Banknote, CreditCard,
+  QrCode, Landmark, Wallet, Coins
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { SerenaLogoPaths } from '@/components/SerenaLogoSvg';
@@ -109,6 +110,17 @@ export default function POSPage() {
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
   const [lookingUp, setLookingUp]   = useState(false);
+  const [paymentAccount, setPaymentAccount] = useState<string>('qris');
+  const [availableAccounts, setAvailableAccounts] = useState<{ id: string; label: string; icon: string }[]>([
+    { id: 'qris', label: 'QRIS', icon: 'Smartphone' },
+    { id: 'bca', label: 'BCA', icon: 'Building2' },
+    { id: 'cash', label: 'Cash', icon: 'Banknote' },
+    { id: 'edc', label: 'EDC', icon: 'CreditCard' },
+  ]);
+
+  const ACCOUNT_ICONS: Record<string, any> = {
+    Smartphone, Building2, Banknote, CreditCard, QrCode, Landmark, Wallet, Coins,
+  };
 
   // ── Totals ──
   const subtotal = cart.reduce((s, c) => s + c.price * c.qty, 0);
@@ -133,7 +145,7 @@ export default function POSPage() {
         .neq('category', 'split_items').order('category').order('sort_order'),
       supabase.from('therapists').select('id,name,commission_pct').eq('is_active', true).order('name'),
       supabase.from('discounts').select('*').eq('is_active', true),
-      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text','invoice_social_text']),
+      supabase.from('settings').select('key, value').in('key', ['invoice_footer_text','invoice_social_text', 'payment_accounts']),
       supabase.from('service_categories').select('*').neq('id', 'split_items').order('sort_order'),
     ]);
     if (svcData)      setServices(svcData);
@@ -141,6 +153,26 @@ export default function POSPage() {
     if (discData)     setDiscounts(discData);
     if (catData && catData.length > 0) {
       setDbCategories(catData);
+    }
+    if (settingsData) {
+      settingsData.forEach(({ key, value }) => {
+        if (key === 'invoice_footer_text') setInvoiceFooter(value);
+        if (key === 'invoice_social_text') setInvoiceSocial(value);
+        if (key === 'payment_accounts' && value) {
+          try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const filtered = parsed.filter((a: any) => a.show_in_invoice !== false);
+              if (filtered.length > 0) {
+                setAvailableAccounts(filtered);
+                setPaymentAccount(prev => (filtered.some((f: any) => f.id === prev) ? prev : filtered[0].id));
+              }
+            }
+          } catch (e) {
+            console.error('Error parsing payment_accounts setting:', e);
+          }
+        }
+      });
     } else {
       setDbCategories([
         { id: 'packages', label: 'Paket' },
@@ -351,6 +383,23 @@ export default function POSPage() {
       );
     } catch (err) {
       console.error('Failed to save booking items:', err);
+    }
+
+    // Sync to cash_transactions ledger
+    try {
+      await supabase.from('cash_transactions').delete().eq('reference_id', deterministicInvoiceNo);
+      await supabase.from('cash_transactions').insert({
+        transaction_date: new Date().toISOString(),
+        type: 'inflow',
+        category: 'service_income',
+        payment_account: paymentAccount,
+        amount: total,
+        description: `${customerName || 'Pelanggan POS'} - ${deterministicInvoiceNo}`,
+        reference_id: deterministicInvoiceNo,
+        created_by: 'Kasir POS'
+      });
+    } catch (cashErr) {
+      console.error('Failed to sync POS to cash_transactions:', cashErr);
     }
 
     setSaved(true);
@@ -671,6 +720,33 @@ export default function POSPage() {
                 <span className="text-xs font-bold text-amber-600">-{formatRp(discountAmount)}</span>
               </div>
             )}
+
+            {/* Payment Account Selector */}
+            <div className="pt-1">
+              <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block mb-1">
+                Metode Pembayaran (Buku Kas)
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                {availableAccounts.map(m => {
+                  const Icon = ACCOUNT_ICONS[m.icon] || Wallet;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setPaymentAccount(m.id)}
+                      className={`py-1.5 px-1 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all border ${
+                        paymentAccount === m.id
+                          ? 'bg-earth-primary text-white border-earth-primary shadow-xs'
+                          : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'
+                      }`}
+                    >
+                      <Icon size={12} />
+                      <span className="truncate">{m.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Total */}
             <div className="flex items-center justify-between">

@@ -536,6 +536,27 @@ export default function FinancePage() {
     });
   };
 
+  // Helper to extract clean filename path from Supabase storage public URL
+  const extractMediaFileName = (url: string | null | undefined): string | null => {
+    if (!url || typeof url !== 'string') return null;
+    if (url.startsWith('data:')) return null;
+
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const mediaIdx = cleanUrl.indexOf('/media/');
+    if (mediaIdx !== -1) {
+      const rawPath = cleanUrl.substring(mediaIdx + '/media/'.length);
+      return rawPath ? decodeURIComponent(rawPath) : null;
+    }
+
+    const segments = cleanUrl.split('/');
+    const lastSegment = segments[segments.length - 1];
+    if (lastSegment && (lastSegment.startsWith('receipt_') || lastSegment.includes('.'))) {
+      return decodeURIComponent(lastSegment);
+    }
+
+    return null;
+  };
+
   // Handle Delete Receipt File & Clear from Database
   const handleDeleteReceipt = (tx: CashTransaction) => {
     showConfirm(
@@ -543,10 +564,11 @@ export default function FinancePage() {
       `Yakin ingin menghapus foto struk dari transaksi "${tx.description}"? Foto akan dihapus permanen dari Supabase Storage.`,
       async () => {
         try {
-          if (tx.receipt_url && tx.receipt_url.includes('storage/v1/object/public/media/')) {
-            const fileName = tx.receipt_url.split('/storage/v1/object/public/media/').pop();
-            if (fileName) {
-              await supabase.storage.from('media').remove([decodeURIComponent(fileName)]);
+          const fileName = extractMediaFileName(tx.receipt_url);
+          if (fileName) {
+            const { error: storageErr } = await supabase.storage.from('media').remove([fileName]);
+            if (storageErr) {
+              console.error('Supabase storage remove error:', storageErr);
             }
           }
 
@@ -688,11 +710,19 @@ export default function FinancePage() {
 
   // Delete transaction
   const handleDelete = (id: string) => {
+    const targetTx = transactions.find(t => t.id === id);
     showConfirm(
       'Hapus Catatan Transaksi',
       'Yakin ingin menghapus catatan transaksi ini dari Buku Kas? Tindakan ini tidak dapat dibatalkan.',
       async () => {
         try {
+          if (targetTx?.receipt_url) {
+            const fileName = extractMediaFileName(targetTx.receipt_url);
+            if (fileName) {
+              await supabase.storage.from('media').remove([fileName]);
+            }
+          }
+
           const { error } = await supabase.from('cash_transactions').delete().eq('id', id);
           if (error) {
             showAlert('Gagal Menghapus', error.message, 'danger');

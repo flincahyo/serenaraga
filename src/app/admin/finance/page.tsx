@@ -339,6 +339,7 @@ export default function FinancePage() {
 
   // Receipt Viewer Modal State
   const [viewReceiptUrl, setViewReceiptUrl] = useState<string | null>(null);
+  const [viewReceiptTx, setViewReceiptTx] = useState<CashTransaction | null>(null);
 
   // Custom Confirm/Alert Dialog State
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -451,10 +452,70 @@ export default function FinancePage() {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  // Upload receipt helper
-  const uploadReceiptFile = async (file: File): Promise<string | null> => {
+  // Canvas-based image compression helper (Resizes max 1200px, JPEG 0.75 Quality to compress ~3MB to ~150KB while text stays crisp)
+  const compressImageFile = (file: File, maxWidth = 1200, quality = 0.75): Promise<File> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/') || file.size < 200 * 1024) {
+        return resolve(file);
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.src = url;
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxWidth) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxWidth) / height);
+            height = maxWidth;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(file);
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return resolve(file);
+            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+    });
+  };
+
+  // Upload receipt helper with automatic client-side compression
+  const uploadReceiptFile = async (rawFile: File): Promise<string | null> => {
     try {
-      const ext = file.name.split('.').pop() || 'png';
+      const file = await compressImageFile(rawFile);
+      const ext = file.name.split('.').pop() || 'jpg';
       const fileName = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
       const { error: uploadErr } = await supabase.storage.from('media').upload(fileName, file, { contentType: file.type });
       if (!uploadErr) {
@@ -466,12 +527,49 @@ export default function FinancePage() {
     }
 
     // Fallback: Data URL if storage bucket fails
+    const compressed = await compressImageFile(rawFile);
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
       reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(compressed);
     });
+  };
+
+  // Handle Delete Receipt File & Clear from Database
+  const handleDeleteReceipt = (tx: CashTransaction) => {
+    showConfirm(
+      'Hapus Foto Struk',
+      `Yakin ingin menghapus foto struk dari transaksi "${tx.description}"? Foto akan dihapus permanen dari Supabase Storage.`,
+      async () => {
+        try {
+          if (tx.receipt_url && tx.receipt_url.includes('storage/v1/object/public/media/')) {
+            const fileName = tx.receipt_url.split('/storage/v1/object/public/media/').pop();
+            if (fileName) {
+              await supabase.storage.from('media').remove([decodeURIComponent(fileName)]);
+            }
+          }
+
+          const { error } = await supabase
+            .from('cash_transactions')
+            .update({ receipt_url: null })
+            .eq('id', tx.id);
+
+          if (error) {
+            showAlert('Gagal Menghapus Struk', error.message, 'danger');
+          } else {
+            setViewReceiptUrl(null);
+            setViewReceiptTx(null);
+            fetchTransactions();
+            showAlert('Struk Terhapus', 'Foto struk telah berhasil dihapus.', 'info');
+          }
+        } catch (err: any) {
+          showAlert('Terjadi Kesalahan', err.message, 'danger');
+        }
+      },
+      'danger',
+      'Hapus Foto Struk'
+    );
   };
 
   // Helper to format ISO timestamp preserving current local time of day
@@ -1193,7 +1291,10 @@ export default function FinancePage() {
                   <div className="flex items-center justify-end gap-2 pt-1.5 border-t border-dashed border-zinc-100 dark:border-zinc-800">
                     {t.receipt_url && (
                       <button
-                        onClick={() => setViewReceiptUrl(t.receipt_url!)}
+                        onClick={() => {
+                          setViewReceiptUrl(t.receipt_url!);
+                          setViewReceiptTx(t);
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-[10px] font-bold flex items-center gap-1 border border-amber-200/50"
                       >
                         <FileText size={11} />
@@ -1300,7 +1401,10 @@ export default function FinancePage() {
                         <div className="flex items-center justify-center gap-1">
                           {t.receipt_url && (
                             <button
-                              onClick={() => setViewReceiptUrl(t.receipt_url!)}
+                              onClick={() => {
+                                setViewReceiptUrl(t.receipt_url!);
+                                setViewReceiptTx(t);
+                              }}
                               className="px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 hover:bg-amber-100 transition-colors text-[10px] font-bold flex items-center gap-1 border border-amber-200/50"
                               title="Lihat Struk/Nota"
                             >
@@ -1380,19 +1484,19 @@ export default function FinancePage() {
 
       {/* ── 1. Standard Transaction Modal (Expense / Income) ── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-fadeIn">
             {/* Header */}
-            <div className={`p-4 border-b flex items-center justify-between ${modalType === 'inflow' ? 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30' : 'bg-rose-50/50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30'}`}>
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${modalType === 'inflow' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
+            <div className={`p-4 border-b flex items-center justify-between shrink-0 ${modalType === 'inflow' ? 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30' : 'bg-rose-50/50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30'}`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${modalType === 'inflow' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>
                   {modalType === 'inflow' ? <ArrowUpRight size={18} /> : <ArrowDownRight size={18} />}
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
                     {modalType === 'inflow' ? 'Catat Pemasukan Manual' : 'Catat Pengeluaran Operasional'}
                   </h3>
-                  <p className="text-[10px] text-zinc-500">Isi formulir pencatatan buku kas secara rinci.</p>
+                  <p className="text-[10px] text-zinc-500">Isi formulir pencatatan kas secara rinci.</p>
                 </div>
               </div>
               <button
@@ -1404,21 +1508,24 @@ export default function FinancePage() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 minimal-scrollbar">
               {/* Nominal */}
               <div>
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                   Nominal Transaksi (Rp) *
                 </label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  placeholder="0"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  className="admin-input font-mono font-bold text-lg text-earth-primary"
-                />
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-sm text-zinc-400">Rp</span>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    placeholder="0"
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
+                    className="admin-input pl-10 font-mono font-bold text-lg text-earth-primary"
+                  />
+                </div>
               </div>
 
               {/* Kategori */}
@@ -1426,7 +1533,7 @@ export default function FinancePage() {
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1.5">
                   Kategori Transaksi *
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1 minimal-scrollbar">
+                <div className="grid grid-cols-2 gap-1.5 max-h-40 overflow-y-auto pr-1 minimal-scrollbar">
                   {(modalType === 'inflow' ? CATEGORIES_INFLOW : CATEGORIES_OUTFLOW).map(c => {
                     const Icon = c.icon;
                     const isSelected = category === c.id;
@@ -1435,14 +1542,14 @@ export default function FinancePage() {
                         key={c.id}
                         type="button"
                         onClick={() => setCategory(c.id)}
-                        className={`p-2.5 rounded-xl border text-left text-xs font-semibold flex items-center gap-2 transition-all ${
+                        className={`p-2 rounded-xl border text-left text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
                           isSelected
                             ? 'bg-earth-primary text-white border-earth-primary shadow-xs'
                             : 'bg-zinc-50 dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-earth-primary/50'
                         }`}
                       >
-                        <Icon size={15} className={`shrink-0 ${isSelected ? 'text-white' : 'text-zinc-500 dark:text-zinc-400'}`} />
-                        <span className="leading-tight flex-1 break-words">{c.label}</span>
+                        <Icon size={14} className={`shrink-0 ${isSelected ? 'text-white' : 'text-zinc-500 dark:text-zinc-400'}`} />
+                        <span className="leading-tight flex-1 truncate">{c.label}</span>
                       </button>
                     );
                   })}
@@ -1454,23 +1561,24 @@ export default function FinancePage() {
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                   {modalType === 'inflow' ? 'Masuk ke Rekening *' : 'Diambil dari Rekening *'}
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {customAccounts.map(acc => {
                     const cfg = getAccountConfig(acc.id);
                     const Icon = cfg.icon;
+                    const isSelected = account === acc.id;
                     return (
                       <button
                         key={acc.id}
                         type="button"
                         onClick={() => setAccount(acc.id)}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all ${
-                          account === acc.id
-                            ? 'bg-earth-primary text-white border-earth-primary shadow-xs'
+                        className={`p-2 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
+                          isSelected
+                            ? 'bg-earth-primary text-white border-earth-primary shadow-xs font-bold'
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
                         }`}
                       >
-                        <Icon size={14} />
-                        <span>{cfg.label}</span>
+                        <Icon size={14} className="shrink-0" />
+                        <span className="truncate">{cfg.label}</span>
                       </button>
                     );
                   })}
@@ -1485,7 +1593,7 @@ export default function FinancePage() {
                 <input
                   type="text"
                   required
-                  placeholder={modalType === 'inflow' ? 'Contoh: Suntikan Modal Owner...' : 'Contoh: Beli Galon Air & Tisu...'}
+                  placeholder={modalType === 'inflow' ? 'Cth: Suntikan Modal Owner...' : 'Cth: Beli Galon Air & Tisu...'}
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   className="admin-input text-xs"
@@ -1511,7 +1619,7 @@ export default function FinancePage() {
                   }}
                 />
                 {receiptPreview ? (
-                  <div className="relative rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 h-24 bg-zinc-50 flex items-center justify-center">
+                  <div className="relative rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 h-20 bg-zinc-50 flex items-center justify-center">
                     <img src={receiptPreview} alt="Struk Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -1528,7 +1636,7 @@ export default function FinancePage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-earth-primary bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                    className="w-full py-2 px-3 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-earth-primary bg-zinc-50 dark:bg-zinc-800/50 text-zinc-500 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
                   >
                     <Upload size={14} />
                     <span>Upload Nota / Struk Pembelian</span>
@@ -1550,7 +1658,7 @@ export default function FinancePage() {
               </div>
 
               {/* Submit Buttons */}
-              <div className="flex gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
@@ -1574,19 +1682,19 @@ export default function FinancePage() {
 
       {/* ── 2. Internal Cash Transfer Modal ── */}
       {transferModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fadeIn">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-fadeIn">
             {/* Header */}
-            <div className="p-4 border-b border-blue-100 dark:border-blue-900/30 bg-blue-50/50 dark:bg-blue-950/20 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+            <div className="p-4 border-b border-blue-100 dark:border-blue-900/30 bg-blue-50/50 dark:bg-blue-950/20 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <ArrowLeftRight size={18} />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                    Transfer Antar Rekening (Pindah Kas)
+                    Transfer Antar Rekening
                   </h3>
-                  <p className="text-[10px] text-zinc-500">Pindahkan kas antar QRIS, BCA, Cash Laci, atau EDC.</p>
+                  <p className="text-[10px] text-zinc-500">Pindahkan saldo kas antar rekening/bank.</p>
                 </div>
               </div>
               <button
@@ -1598,21 +1706,24 @@ export default function FinancePage() {
             </div>
 
             {/* Form */}
-            <form onSubmit={handleTransferSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleTransferSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 minimal-scrollbar">
               {/* Nominal */}
               <div>
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                   Nominal Transfer (Rp) *
                 </label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  placeholder="0"
-                  value={transferAmount}
-                  onChange={e => setTransferAmount(e.target.value)}
-                  className="admin-input font-mono font-bold text-lg text-blue-600 dark:text-blue-400"
-                />
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-sm text-blue-500">Rp</span>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    placeholder="0"
+                    value={transferAmount}
+                    onChange={e => setTransferAmount(e.target.value)}
+                    className="admin-input pl-10 font-mono font-bold text-lg text-blue-600 dark:text-blue-400"
+                  />
+                </div>
               </div>
 
               {/* Dari Rekening (Asal) */}
@@ -1620,23 +1731,24 @@ export default function FinancePage() {
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                   Dari Rekening (Asal) *
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {customAccounts.map(acc => {
                     const cfg = getAccountConfig(acc.id);
                     const Icon = cfg.icon;
+                    const isSelected = transferFrom === acc.id;
                     return (
                       <button
                         key={acc.id}
                         type="button"
                         onClick={() => setTransferFrom(acc.id)}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all ${
-                          transferFrom === acc.id
+                        className={`p-2 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
+                          isSelected
                             ? 'bg-blue-600 text-white border-blue-600 shadow-xs font-bold'
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
                         }`}
                       >
-                        <Icon size={14} />
-                        <span>{cfg.label}</span>
+                        <Icon size={14} className="shrink-0" />
+                        <span className="truncate">{cfg.label}</span>
                       </button>
                     );
                   })}
@@ -1648,11 +1760,12 @@ export default function FinancePage() {
                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                   Ke Rekening (Tujuan) *
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {customAccounts.map(acc => {
                     const cfg = getAccountConfig(acc.id);
                     const Icon = cfg.icon;
                     const isDisabled = transferFrom === acc.id;
+                    const isSelected = transferTo === acc.id;
 
                     return (
                       <button
@@ -1660,16 +1773,16 @@ export default function FinancePage() {
                         type="button"
                         disabled={isDisabled}
                         onClick={() => setTransferTo(acc.id)}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all ${
+                        className={`p-2 rounded-xl border text-[11px] font-semibold flex items-center gap-1.5 transition-all ${
                           isDisabled
                             ? 'opacity-40 cursor-not-allowed bg-zinc-100 text-zinc-400 border-zinc-200'
-                            : transferTo === acc.id
+                            : isSelected
                             ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs font-bold'
                             : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700'
                         }`}
                       >
-                        <Icon size={14} />
-                        <span>{cfg.label}</span>
+                        <Icon size={14} className="shrink-0" />
+                        <span className="truncate">{cfg.label}</span>
                       </button>
                     );
                   })}
@@ -1683,7 +1796,7 @@ export default function FinancePage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Contoh: Settlement Midtrans QRIS ke BCA..."
+                  placeholder="Cth: Settlement QRIS ke BCA..."
                   value={transferNotes}
                   onChange={e => setTransferNotes(e.target.value)}
                   className="admin-input text-xs"
@@ -1704,7 +1817,7 @@ export default function FinancePage() {
               </div>
 
               {/* Submit Buttons */}
-              <div className="flex gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
                 <button
                   type="button"
                   onClick={() => setTransferModalOpen(false)}
@@ -1729,37 +1842,57 @@ export default function FinancePage() {
       {/* ── 3. Receipt Viewer Modal ── */}
       {viewReceiptUrl && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800">
-            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <FileText size={18} className="text-amber-500" />
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Bukti Struk / Nota</h3>
               </div>
               <button
-                onClick={() => setViewReceiptUrl(null)}
+                onClick={() => {
+                  setViewReceiptUrl(null);
+                  setViewReceiptTx(null);
+                }}
                 className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg"
               >
                 <X size={18} />
               </button>
             </div>
-            <div className="p-4 bg-zinc-900 flex items-center justify-center max-h-[70vh] overflow-auto">
+            <div className="p-4 bg-zinc-900 flex items-center justify-center flex-1 min-h-0 overflow-auto">
               <img src={viewReceiptUrl} alt="Struk Pembelian" className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-md" />
             </div>
-            <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end gap-2">
-              <a
-                href={viewReceiptUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-xl bg-earth-primary text-white text-xs font-bold flex items-center gap-1.5 shadow-xs hover:bg-earth-dark transition-all"
-              >
-                <Download size={14} /> Buka / Unduh Gambar
-              </a>
-              <button
-                onClick={() => setViewReceiptUrl(null)}
-                className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                Tutup
-              </button>
+            <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+              {viewReceiptTx ? (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteReceipt(viewReceiptTx)}
+                  className="px-3.5 py-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/40 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                  title="Hapus gambar struk ini dari database & storage"
+                >
+                  <Trash2 size={14} />
+                  <span>Hapus Struk</span>
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={viewReceiptUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3.5 py-2 rounded-xl bg-earth-primary text-white text-xs font-bold flex items-center gap-1.5 shadow-xs hover:bg-earth-dark transition-all"
+                >
+                  <Download size={14} /> Unduh
+                </a>
+                <button
+                  onClick={() => {
+                    setViewReceiptUrl(null);
+                    setViewReceiptTx(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
           </div>
         </div>

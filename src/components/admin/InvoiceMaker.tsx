@@ -817,7 +817,23 @@ const InvoiceMaker = () => {
         therapist_discount_total: therapistDiscountAmount,
       }).eq('id', selectedBookingId);
 
-      // 3. Update/insert booking_items per item
+      // 3. Clean up stale booking_items and update/insert active items
+      const currentDbIds = itemsWithBhp.map(i => i.db_id).filter(Boolean);
+      if (currentDbIds.length > 0) {
+        await supabase
+          .from('booking_items')
+          .delete()
+          .eq('booking_id', selectedBookingId)
+          .neq('service_name', 'Biaya Transport')
+          .not('id', 'in', `(${currentDbIds.join(',')})`);
+      } else {
+        await supabase
+          .from('booking_items')
+          .delete()
+          .eq('booking_id', selectedBookingId)
+          .neq('service_name', 'Biaya Transport');
+      }
+
       const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
       const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
       for (const item of itemsWithBhp) {
@@ -833,13 +849,15 @@ const InvoiceMaker = () => {
         const itemBasis = item.price - basisReduction;
         const grossCommission = Math.round(itemBasis * pct / 100);
         const therapistBearsShared = Math.round(itemSharedDiscount * 50 / 100);
-        const itemCommission = Math.max(0, grossCommission - therapistBearsShared);
+        const itemCommission = item.therapist_id ? Math.max(0, grossCommission - therapistBearsShared) : 0;
 
         const svc = services.find(s => s.name === item.name);
         const serviceId = svc?.id || null;
         if (item.db_id) {
           // UPDATE existing item
           await supabase.from('booking_items').update({
+            service_name: item.name,
+            price: item.price,
             therapist_id: item.therapist_id || null,
             commission_earned: itemCommission,
             bhp_cost: item.bhp,

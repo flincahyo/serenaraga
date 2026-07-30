@@ -408,15 +408,21 @@ export const GiftVoucher: React.FC<TemplateProps> = ({ draft, Logo, WAIco, Insta
       <div className="flex-1 h-full flex flex-col relative z-10">
 
         {/* Main content body */}
-        <div className="flex-1 px-[45px] pt-[20px] pb-[10px] flex flex-col relative z-10">
-          <div className="flex justify-between items-start h-[60px] flex-shrink-0 font-sans">
+        <div className="flex-1 px-[45px] pt-[16px] pb-[4px] flex flex-col relative z-10">
+          <div className="flex justify-between items-center h-[60px] flex-shrink-0 font-sans">
             <div className="relative w-[200px] h-[60px] overflow-hidden">
               <img src="/serenalogo.svg" className={`absolute top-1/2 -left-2 -translate-y-1/2 h-[160px] w-auto max-w-none object-contain ${isLight ? 'brightness-0' : 'brightness-0 invert'} opacity-80`} crossOrigin="anonymous" />
             </div>
+
+            {(vData.partner_logo || vData.partnerLogo) && (
+              <div className="h-[60px] max-w-[220px] flex items-center justify-end relative">
+                <img src={vData.partner_logo || vData.partnerLogo} alt="Partner Logo" className="max-h-[50px] max-w-[200px] object-contain opacity-90" crossOrigin="anonymous" />
+              </div>
+            )}
           </div>
 
           {/* Center */}
-          <div className="flex-1 flex flex-col items-center justify-center text-center font-sans -mt-10">
+          <div className="flex-1 flex flex-col items-center justify-center text-center font-sans -mt-12">
             {vData.tagline && (
               <p className={`text-[15px] font-sans italic tracking-wide max-w-[400px] mb-1 mt-0 ${isLight ? 'text-[#8B6B4E]/90' : 'text-white/70'} focus:outline-none focus:bg-white/10 px-2 py-1 rounded-sm cursor-text`}
                 contentEditable suppressContentEditableWarning
@@ -467,28 +473,28 @@ export const GiftVoucher: React.FC<TemplateProps> = ({ draft, Logo, WAIco, Insta
         </div>
 
         {/* Bottom strip */}
-        <div className={`h-[100px] flex-shrink-0 px-[45px] flex justify-between items-center gap-[40px] relative z-10 border-t ${isLight ? 'border-[#4a4138]/20 bg-white/40' : 'border-white/20 bg-black/40'} backdrop-blur-md font-sans`}>
+        <div className={`h-[118px] flex-shrink-0 px-[45px] py-[12px] flex justify-between items-center gap-[40px] relative z-10 border-t ${isLight ? 'border-[#4a4138]/20 bg-white/40' : 'border-white/20 bg-black/40'} backdrop-blur-md font-sans`}>
           <div className="flex-1">
-            <p className={`text-[11px] tracking-[.18em] font-bold font-sans mb-1.5 mt-0 ${isLight ? 'text-[#6B4E37]' : 'text-white/60'}`}>SYARAT & KETENTUAN:</p>
-            <div className="flex gap-1.5 mb-1">
-              <span className={`text-[12px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
-              <p className={`text-[12px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
+            <p className={`text-[12px] tracking-[.18em] font-bold font-sans mb-1 mt-0 ${isLight ? 'text-[#6B4E37]' : 'text-white/60'}`}>SYARAT & KETENTUAN:</p>
+            <div className="flex gap-1.5 mb-0.5">
+              <span className={`text-[13px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
+              <p className={`text-[13px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
                 contentEditable suppressContentEditableWarning
                 onBlur={(e) => { if (onEdit) onEdit('voucherData.terms1', e.currentTarget.textContent || ''); }}>
                 {vData.terms1 || 'Berlaku untuk layanan Home Service Massage.'}
               </p>
             </div>
-            <div className="flex gap-1.5 mb-1">
-              <span className={`text-[12px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
-              <p className={`text-[12px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
+            <div className="flex gap-1.5 mb-0.5">
+              <span className={`text-[13px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
+              <p className={`text-[13px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
                 contentEditable suppressContentEditableWarning
                 onBlur={(e) => { if (onEdit) onEdit('voucherData.terms2', e.currentTarget.textContent || ''); }}>
                 {vData.terms2 || 'Wajib melakukan reservasi maksimal H-1 sebelum kedatangan.'}
               </p>
             </div>
-            <div className="flex gap-1.5 mb-1">
-              <span className={`text-[12px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
-              <p className={`text-[12px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
+            <div className="flex gap-1.5 mb-0.5">
+              <span className={`text-[13px] font-sans flex-shrink-0 leading-[1.3] ${isLight ? 'text-[#7A6050]' : 'text-white/50'}`}>•</span>
+              <p className={`text-[13px] font-sans leading-[1.3] m-0 ${isLight ? 'text-[#7A6050]' : 'text-white/50'} focus:outline-none focus:bg-white/10 px-1 rounded-sm cursor-text`}
                 contentEditable suppressContentEditableWarning
                 onBlur={(e) => { if (onEdit) onEdit('voucherData.terms3', e.currentTarget.textContent || ''); }}>
                 {vData.terms3 || 'Voucher tidak dapat diuangkan atau digabung dengan promo lainnya.'}
@@ -566,10 +572,15 @@ export const EventRedemptionVoucher: React.FC<TemplateProps> = ({ draft, Logo, W
         {/* LEFT SIDE: Brand & Title & Item */}
         <div className="flex flex-col justify-between h-full w-[50%] flex-shrink-0">
           {/* Logo */}
-          <div className="flex flex-col items-start">
+          <div className="flex justify-between items-center w-full">
             <div className="relative w-[220px] h-[60px] overflow-hidden">
               <img src="/serenalogo.svg" className={`absolute top-1/2 -left-2 -translate-y-1/2 h-[150px] w-auto max-w-none object-contain ${isLight ? 'brightness-0' : 'brightness-0 invert'} opacity-95`} crossOrigin="anonymous" />
             </div>
+            {(vData.partner_logo || vData.partnerLogo) && (
+              <div className="h-[60px] max-w-[200px] flex items-center justify-end relative">
+                <img src={vData.partner_logo || vData.partnerLogo} alt="Partner Logo" className="max-h-[50px] max-w-[180px] object-contain opacity-90" crossOrigin="anonymous" />
+              </div>
+            )}
           </div>
 
           {/* Title & Item description */}

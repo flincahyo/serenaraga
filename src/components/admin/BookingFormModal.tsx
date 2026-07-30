@@ -247,6 +247,41 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
       return { booking_id: bookingId, service_id: item.service_id || null, service_name: item.service_name, price: Number(item.price), bhp_cost: item.bhp, duration: item.duration || null, therapist_id: item.therapist_id || null, commission_earned: earned, sort_order: idx, parent_bundle_name: item.parent_bundle_name || null };
     }));
 
+    // Cashbook ledger synchronization
+    try {
+      const dateObj = new Date(form.booking_date + 'T00:00:00');
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const last4 = bookingId.substring(bookingId.length - 4).toUpperCase();
+      const refId = `SR-${y}${m}-${last4}`;
+      const finalTotal = Math.max(0, totalPrice - (form.discount_total || 0));
+
+      if (form.status === 'Completed') {
+        const { data: existingTx } = await supabase.from('cash_transactions').select('id').eq('reference_id', refId).maybeSingle();
+        if (existingTx) {
+          await supabase.from('cash_transactions').update({
+            amount: finalTotal,
+            description: `${form.customer_name} - ${refId}`,
+          }).eq('id', existingTx.id);
+        } else {
+          await supabase.from('cash_transactions').insert({
+            transaction_date: new Date().toISOString(),
+            type: 'inflow',
+            category: 'service_income',
+            payment_account: 'qris',
+            amount: finalTotal,
+            description: `${form.customer_name} - ${refId}`,
+            reference_id: refId,
+            created_by: 'Booking Form'
+          });
+        }
+      } else {
+        await supabase.from('cash_transactions').delete().eq('reference_id', refId);
+      }
+    } catch (cashErr) {
+      console.error('Failed to sync cash_transactions in BookingFormModal:', cashErr);
+    }
+
     setSaving(false);
     onSaved();
     onClose();

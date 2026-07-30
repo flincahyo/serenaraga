@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Gift, Plus, Copy, Check, X, Loader2, Tag, Clock, Users, RefreshCw, Ban, Palette, Layers, ChevronRight, Printer, Trash2, Globe } from 'lucide-react';
+import { Gift, Plus, Copy, Check, X, Loader2, Tag, Clock, Users, RefreshCw, Ban, Palette, Layers, ChevronRight, Printer, Trash2, Globe, Upload } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 import { useUser } from '@/lib/user-context';
@@ -1353,6 +1353,37 @@ export default function VouchersPage() {
                       />
                     </div>
 
+                    {/* Logo Partner / Kolaborasi Brand */}
+                    <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-2xl border border-zinc-100 dark:border-zinc-800">
+                      <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">Logo Partner / Kolaborasi (Opsional)</label>
+                      {customLogo ? (
+                        <div className="flex items-center justify-between p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl">
+                          <div className="flex items-center gap-2 max-w-[180px] truncate">
+                            <img src={customLogo} alt="Partner Logo" className="w-8 h-8 object-contain rounded border p-0.5" />
+                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 truncate">Logo Partner Diset</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCustomLogo(null)}
+                            className="text-xs text-red-500 font-bold hover:underline px-1"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="cursor-pointer flex items-center justify-center gap-2 p-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl text-zinc-600 dark:text-zinc-300 text-xs font-semibold transition-all">
+                          <Upload size={14} className="text-earth-primary" />
+                          <span>Upload Logo Brand Partner</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleLogoUpload}
+                          />
+                        </label>
+                      )}
+                    </div>
+
                   </div>
                 </div>
 
@@ -1561,19 +1592,20 @@ export default function VouchersPage() {
                       {/* Left: Branding & Info */}
                       <div className="flex flex-col justify-between h-full w-[50%] flex-shrink-0">
                         {/* Logo rendering */}
-                        <div className="flex flex-col items-start justify-center h-[80px]">
-                          {customLogo ? (
-                            <img src={customLogo} alt="Custom Logo" className="h-[80px] w-auto max-w-[240px] object-contain" />
-                          ) : (
-                            <div className="relative w-[220px] h-[60px] overflow-hidden">
-                              <img
-                                src="/serenalogo2.svg"
-                                className={`absolute top-1/2 -left-2 -translate-y-1/2 h-[150px] w-auto max-w-none object-contain ${
-                                  ['#FAF6EF', '#E6D7C3', '#C2C5BA', '#D2A888'].includes(kuponForm.bgColor.toUpperCase())
-                                    ? 'brightness-0'
-                                    : 'brightness-0 invert'
-                                } opacity-95`}
-                              />
+                        <div className="flex justify-between items-center w-full h-[80px]">
+                          <div className="relative w-[220px] h-[60px] overflow-hidden">
+                            <img
+                              src="/serenalogo2.svg"
+                              className={`absolute top-1/2 -left-2 -translate-y-1/2 h-[150px] w-auto max-w-none object-contain ${
+                                ['#FAF6EF', '#E6D7C3', '#C2C5BA', '#D2A888'].includes(kuponForm.bgColor.toUpperCase())
+                                  ? 'brightness-0'
+                                  : 'brightness-0 invert'
+                              } opacity-95`}
+                            />
+                          </div>
+                          {customLogo && (
+                            <div className="h-[60px] max-w-[200px] flex items-center justify-end relative">
+                              <img src={customLogo} alt="Partner Logo" className="max-h-[50px] max-w-[180px] object-contain opacity-90" />
                             </div>
                           )}
                         </div>

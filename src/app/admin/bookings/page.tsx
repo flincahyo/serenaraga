@@ -394,7 +394,7 @@ export default function BookingsPage() {
     
     if (status === 'Completed') {
       const { data: items } = await supabase.from('booking_items').select('*, therapist_id').eq('booking_id', id);
-      const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total, therapist_discount_total').eq('id', id).single();
+      const { data: bk }    = await supabase.from('bookings').select('price, shared_discount_total, therapist_discount_total, booking_date, customer_name, final_price').eq('id', id).single();
       if (items && bk) {
         const serviceItems = items.filter((i: any) => i.service_name !== 'Biaya Transport');
         const totalPrice = serviceItems.reduce((s: number, i: any) => s + (Number(i.price) || 0), 0);
@@ -419,6 +419,37 @@ export default function BookingsPage() {
           const earned = Math.max(0, grossCommission - therapistBearsShared);
           await supabase.from('booking_items').update({ commission_earned: earned }).eq('id', item.id);
         }));
+
+        // Sync cash_transactions ledger for Completed status
+        try {
+          const dateObj = new Date(bk.booking_date + 'T00:00:00');
+          const y = dateObj.getFullYear();
+          const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const last4 = id.substring(id.length - 4).toUpperCase();
+          const refId = `SR-${y}${m}-${last4}`;
+          const finalTotal = bk.final_price ?? bk.price ?? 0;
+
+          const { data: existingTx } = await supabase.from('cash_transactions').select('id').eq('reference_id', refId).maybeSingle();
+          if (existingTx) {
+            await supabase.from('cash_transactions').update({
+              amount: finalTotal,
+              description: `${bk.customer_name} - ${refId}`,
+            }).eq('id', existingTx.id);
+          } else {
+            await supabase.from('cash_transactions').insert({
+              transaction_date: new Date().toISOString(),
+              type: 'inflow',
+              category: 'service_income',
+              payment_account: 'qris',
+              amount: finalTotal,
+              description: `${bk.customer_name} - ${refId}`,
+              reference_id: refId,
+              created_by: 'Booking Status Update'
+            });
+          }
+        } catch (e) {
+          console.error('Cashbook sync error:', e);
+        }
       }
     } else if (orig?.status === 'Completed') {
       const { data: oldDiscounts } = await supabase
@@ -440,6 +471,21 @@ export default function BookingsPage() {
       await supabase.from('booking_discounts').delete().eq('booking_id', id);
       await supabase.from('booking_items').delete().eq('booking_id', id).eq('service_name', 'Biaya Transport');
       await supabase.from('booking_items').update({ commission_earned: 0 }).eq('booking_id', id);
+
+      // Remove cashbook inflow when status reverts from Completed
+      try {
+        const targetBk = bookings.find(b => b.id === id);
+        if (targetBk?.booking_date) {
+          const dateObj = new Date(targetBk.booking_date + 'T00:00:00');
+          const y = dateObj.getFullYear();
+          const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const last4 = id.substring(id.length - 4).toUpperCase();
+          const refId = `SR-${y}${m}-${last4}`;
+          await supabase.from('cash_transactions').delete().eq('reference_id', refId);
+        }
+      } catch (e) {
+        console.error('Cashbook delete sync error:', e);
+      }
     }
   };
 
@@ -454,6 +500,20 @@ export default function BookingsPage() {
       if (!confirmed) { setDeleteId(null); return; }
     }
     setDeleting(true);
+
+    if (target?.booking_date) {
+      try {
+        const dateObj = new Date(target.booking_date + 'T00:00:00');
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const last4 = target.id.substring(target.id.length - 4).toUpperCase();
+        const refId = `SR-${y}${m}-${last4}`;
+        await supabase.from('cash_transactions').delete().eq('reference_id', refId);
+      } catch (e) {
+        console.error('Cashbook delete sync on booking delete error:', e);
+      }
+    }
+
     await supabase.from('bookings').delete().eq('id', deleteId);
     setBookings(prev => prev.filter(b => b.id !== deleteId));
     if (selectedBooking?.id === deleteId) {

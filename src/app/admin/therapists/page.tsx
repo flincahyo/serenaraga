@@ -339,7 +339,11 @@ function TherapistDrawer({
             acc[key].has_transport = true;
             acc[key].transport_fee = Number(row.price) || 0;
           } else {
-            acc[key].service_name = acc[key].service_name ? `${acc[key].service_name} + ${row.service_name}` : row.service_name;
+            if (!acc[key].service_name) {
+              acc[key].service_name = row.service_name;
+            } else if (!acc[key].service_name.includes(row.service_name)) {
+              acc[key].service_name = `${acc[key].service_name} + ${row.service_name}`;
+            }
           }
         }
 

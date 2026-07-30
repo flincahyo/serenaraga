@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type, Settings2 } from 'lucide-react';
+import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type, Settings2, Upload } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -48,6 +48,8 @@ export interface VoucherData {
   terms3?: string;
   contact?: string;
   tagline?: string;
+  partner_logo?: string;
+  partnerLogo?: string;
   // New event fields
   voucher_type?: string;
   event_item?: string;
@@ -1283,6 +1285,59 @@ export default function FeedStudioV2() {
                       onChange={(e) => handleTextEdit('voucherData.terms3', e.target.value)}
                       className="w-full bg-[#faf9f7] border border-stone-200/50 rounded-xl px-3 py-2 text-[11px] outline-none"
                     />
+                  </div>
+
+                  {/* Logo Partner / Kolaborasi Upload */}
+                  <div className="space-y-1.5 pt-3 border-t border-stone-200/60">
+                    <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em] block">
+                      Logo Partner / Kolaborasi (Opsional)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      {activeDraft.voucherData?.partner_logo || activeDraft.voucherData?.partnerLogo ? (
+                        <div className="flex items-center justify-between w-full p-2 bg-[#faf9f7] border border-stone-200/50 rounded-xl">
+                          <div className="flex items-center gap-2.5 max-w-[180px] truncate">
+                            <img
+                              src={activeDraft.voucherData.partner_logo || activeDraft.voucherData.partnerLogo}
+                              alt="Partner Logo"
+                              className="w-8 h-8 object-contain rounded-md bg-white p-0.5 border border-stone-200"
+                            />
+                            <span className="text-xs font-semibold text-stone-700 truncate">Logo Partner Diset</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleTextEdit('voucherData.partner_logo', '');
+                              handleTextEdit('voucherData.partnerLogo', '');
+                            }}
+                            className="text-xs text-rose-500 font-bold hover:underline px-1"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="w-full cursor-pointer flex items-center justify-center gap-2 p-2.5 bg-[#faf9f7] hover:bg-stone-100 border border-dashed border-stone-300 rounded-xl text-stone-600 text-xs font-semibold transition-all">
+                          <Upload size={14} className="text-earth-primary" />
+                          <span>Upload Logo Brand Partner</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  const res = reader.result as string;
+                                  handleTextEdit('voucherData.partner_logo', res);
+                                  handleTextEdit('voucherData.partnerLogo', res);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>

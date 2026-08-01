@@ -170,7 +170,8 @@ function TherapistDrawer({
   const { user } = useUser();
   const [manualTipAmount, setManualTipAmount] = useState<number | ''>('');
   const [manualTipNote, setManualTipNote] = useState<string>('');
-  const [payoutAccount, setPayoutAccount] = useState<'cash' | 'bca' | 'qris' | 'edc'>('qris');
+  const [payoutAccount, setPayoutAccount] = useState<string>('qris');
+  const [customAccounts, setCustomAccounts] = useState<any[]>([]);
   const [recordingPayout, setRecordingPayout] = useState(false);
   const [payoutRecorded, setPayoutRecorded] = useState(false);
   const slipRef = useRef<HTMLDivElement>(null);
@@ -279,15 +280,35 @@ function TherapistDrawer({
     setLoadingSchedule(false);
   };
 
+  // Fetch custom payment_accounts and auto-select account tagged with 'therapist_commission'
+  const fetchAccounts = useCallback(async () => {
+    const { data } = await supabase.from('settings').select('value').eq('key', 'payment_accounts').single();
+    if (data && data.value) {
+      try {
+        const parsed = JSON.parse(data.value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCustomAccounts(parsed);
+          const taggedAcc = parsed.find((a: any) => a.tag === 'therapist_commission');
+          if (taggedAcc && taggedAcc.id) {
+            setPayoutAccount(taggedAcc.id);
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing payment_accounts in therapist payout:', e);
+      }
+    }
+  }, [supabase]);
+
   useEffect(() => {
     if (isOpen && therapist) {
       setActiveTab(defaultTab);
       loadScheduleData(therapist.id);
+      fetchAccounts();
       setPayoutItems([]);
       setManualTipAmount('');
       setManualTipNote('');
     }
-  }, [isOpen, therapist, defaultTab]);
+  }, [isOpen, therapist, defaultTab, fetchAccounts]);
 
   const loadPayoutData = async () => {
     if (!therapist) return;
@@ -897,26 +918,34 @@ function TherapistDrawer({
                       <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-3.5 rounded-2xl space-y-3 shadow-xs">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Pilih Rekening Pembayaran Payout:</span>
-                          <div className="flex bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-semibold gap-1">
-                            {[
-                              { id: 'qris', label: 'QRIS', icon: Smartphone },
-                              { id: 'bca', label: 'BCA', icon: Building2 },
-                              { id: 'cash', label: 'Cash', icon: Banknote },
-                            ].map(acc => {
-                              const Icon = acc.icon;
+                          <div className="flex bg-white dark:bg-zinc-800 p-1 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-semibold gap-1 flex-wrap">
+                            {(customAccounts.length > 0
+                              ? customAccounts
+                              : [
+                                  { id: 'qris', label: 'QRIS', icon: Smartphone },
+                                  { id: 'bca', label: 'BCA', icon: Building2 },
+                                  { id: 'cash', label: 'Cash', icon: Banknote },
+                                ]
+                            ).map((acc: any) => {
+                              const isSelected = payoutAccount === acc.id;
+                              const isTagged = acc.tag === 'therapist_commission';
                               return (
                                 <button
                                   key={acc.id}
                                   type="button"
-                                  onClick={() => setPayoutAccount(acc.id as any)}
+                                  onClick={() => setPayoutAccount(acc.id)}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                                    payoutAccount === acc.id
+                                    isSelected
                                       ? 'bg-earth-primary text-white shadow-xs'
                                       : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
                                   }`}
                                 >
-                                  <Icon size={12} />
                                   <span>{acc.label}</span>
+                                  {isTagged && (
+                                    <span className={`text-[8px] px-1 py-0.2 rounded font-black ${isSelected ? 'bg-white/30 text-white' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200'}`}>
+                                      Pos Komisi
+                                    </span>
+                                  )}
                                 </button>
                               );
                             })}

@@ -1,19 +1,22 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Wallet, TrendingUp, TrendingDown, Plus, Download, Search,
   Calendar, ArrowUpRight, ArrowDownRight, Filter, Receipt, Trash2,
   Building2, QrCode, CreditCard, Banknote, FileText, X, Check, Loader2,
   Sparkles, AlertCircle, ShoppingBag, Zap, Users, Megaphone, UserCheck,
   MoreHorizontal, Package, Briefcase, Smartphone, ArrowLeftRight, Upload, Image as ImageIcon, Eye,
-  Landmark, Coins, Settings, Pencil
+  Landmark, Coins, Settings, Pencil, MousePointerClick, Tag
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
+import { reconcileMonthlyAllocations } from '@/lib/allocation-reconciler';
 
 type TransactionType = 'inflow' | 'outflow';
 type PaymentAccount = string;
+
+export type AccountTag = 'bhp' | 'therapist_commission' | 'owner_profit' | 'operational';
 
 export type CustomAccount = {
   id: string;
@@ -21,12 +24,20 @@ export type CustomAccount = {
   icon: string;
   color: string;
   show_in_invoice?: boolean;
+  tag?: AccountTag | null;
 };
 
+export const ACCOUNT_TAG_OPTIONS: { id: AccountTag; label: string; description: string; badgeClass: string }[] = [
+  { id: 'bhp', label: 'Pos Dana BHP', description: 'Menampung modal restock bahan habis pakai', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
+  { id: 'therapist_commission', label: 'Pos Komisi Terapis', description: 'Menampung hak komisi & gaji terapis', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+  { id: 'owner_profit', label: 'Pos Laba Owner', description: 'Menampung pendapatan bersih pemilik', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+  { id: 'operational', label: 'Penampung Utama', description: 'Rekening penerima bayaran utama (QRIS/Cash)', badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' },
+];
+
 const DEFAULT_ACCOUNTS: CustomAccount[] = [
-  { id: 'qris', label: 'QRIS', icon: 'Smartphone', color: 'purple', show_in_invoice: true },
-  { id: 'bca', label: 'Bank BCA', icon: 'Building2', color: 'blue', show_in_invoice: true },
-  { id: 'cash', label: 'Kas Laci POS', icon: 'Banknote', color: 'emerald', show_in_invoice: true },
+  { id: 'qris', label: 'QRIS', icon: 'Smartphone', color: 'purple', show_in_invoice: true, tag: 'operational' },
+  { id: 'bca', label: 'Bank BCA', icon: 'Building2', color: 'blue', show_in_invoice: true, tag: 'therapist_commission' },
+  { id: 'cash', label: 'Kas Laci POS', icon: 'Banknote', color: 'emerald', show_in_invoice: true, tag: 'operational' },
   { id: 'edc', label: 'Kartu EDC', icon: 'CreditCard', color: 'amber', show_in_invoice: true },
 ];
 
@@ -166,14 +177,22 @@ export default function FinancePage() {
   const [newAccIcon, setNewAccIcon] = useState('Building2');
   const [newAccColor, setNewAccColor] = useState('blue');
   const [newAccShowInInvoice, setNewAccShowInInvoice] = useState(true);
+  const [newAccTag, setNewAccTag] = useState<AccountTag | ''>('');
   const [savingAcc, setSavingAcc] = useState(false);
 
-  // Fetch Custom Accounts from Settings
+  // Allocation Mode Setting ('auto_instant' vs 'manual_confirm')
+  const [allocationMode, setAllocationMode] = useState<'auto_instant' | 'manual_confirm'>('manual_confirm');
+
+  // Fetch Settings (Custom Accounts & Allocation Mode)
   const fetchAccounts = useCallback(async () => {
-    const { data } = await supabase.from('settings').select('value').eq('key', 'payment_accounts').single();
-    if (data && data.value) {
+    const [{ data: accData }, { data: modeData }] = await Promise.all([
+      supabase.from('settings').select('value').eq('key', 'payment_accounts').single(),
+      supabase.from('settings').select('value').eq('key', 'cashbook_allocation_mode').single()
+    ]);
+
+    if (accData && accData.value) {
       try {
-        const parsed = JSON.parse(data.value);
+        const parsed = JSON.parse(accData.value);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setCustomAccounts(parsed);
         }
@@ -181,11 +200,26 @@ export default function FinancePage() {
         console.error('Error parsing payment_accounts setting:', e);
       }
     }
+
+    if (modeData && modeData.value) {
+      if (modeData.value === 'auto_instant' || modeData.value === 'manual_confirm') {
+        setAllocationMode(modeData.value);
+      }
+    }
   }, [supabase]);
 
   useEffect(() => {
     fetchAccounts();
   }, [fetchAccounts]);
+
+  const handleSaveAllocationMode = async (mode: 'auto_instant' | 'manual_confirm') => {
+    setAllocationMode(mode);
+    await supabase.from('settings').upsert({
+      key: 'cashbook_allocation_mode',
+      value: mode,
+      updated_at: new Date().toISOString()
+    });
+  };
 
   const getAccountConfig = useCallback((accId: string) => {
     const found = customAccounts.find(a => a.id === accId || a.id.toLowerCase() === (accId || '').toLowerCase());
@@ -197,7 +231,8 @@ export default function FinancePage() {
         icon: IconComp,
         color: colorClass,
         iconName: found.icon,
-        show_in_invoice: found.show_in_invoice !== false
+        show_in_invoice: found.show_in_invoice !== false,
+        tag: found.tag || null
       };
     }
     return {
@@ -205,7 +240,8 @@ export default function FinancePage() {
       icon: Wallet,
       color: 'text-zinc-600 bg-zinc-50 dark:bg-zinc-800 border-zinc-200',
       iconName: 'Wallet',
-      show_in_invoice: true
+      show_in_invoice: true,
+      tag: null
     };
   }, [customAccounts]);
 
@@ -215,6 +251,7 @@ export default function FinancePage() {
     setNewAccIcon(acc.icon);
     setNewAccColor(acc.color);
     setNewAccShowInInvoice(acc.show_in_invoice !== false);
+    setNewAccTag(acc.tag || '');
   };
 
   const cancelEditAccount = () => {
@@ -223,6 +260,7 @@ export default function FinancePage() {
     setNewAccIcon('Building2');
     setNewAccColor('blue');
     setNewAccShowInInvoice(true);
+    setNewAccTag('');
   };
 
   // Handle Add or Edit Account
@@ -240,6 +278,7 @@ export default function FinancePage() {
             icon: newAccIcon,
             color: newAccColor,
             show_in_invoice: newAccShowInInvoice,
+            tag: newAccTag || null,
           };
         }
         return a;
@@ -255,6 +294,7 @@ export default function FinancePage() {
         icon: newAccIcon,
         color: newAccColor,
         show_in_invoice: newAccShowInInvoice,
+        tag: newAccTag || null,
       };
       updated = [...customAccounts, newAcc];
     }
@@ -310,6 +350,13 @@ export default function FinancePage() {
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<'month' | 'today' | 'all'>('month');
+
+  // Global Month Selector Filter (Defaults to Current Calendar Month)
+  const defaultCurrentMonthStr = useMemo(() => {
+    const nowObj = new Date();
+    return `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+  const [globalMonthFilter, setGlobalMonthFilter] = useState<string>(defaultCurrentMonthStr);
 
   // Standard Form Modal State
   const [modalOpen, setModalOpen] = useState(false);
@@ -389,13 +436,18 @@ export default function FinancePage() {
     });
   };
 
-  const [completedBookingsMap, setCompletedBookingsMap] = useState<Record<string, number>>({});
+  const [completedBookingsBhpMap, setCompletedBookingsBhpMap] = useState<Record<string, number>>({});
+  const [completedBookingsCommMap, setCompletedBookingsCommMap] = useState<Record<string, number>>({});
 
-  // Fetch transactions and completed bookings bhp_cost
+  // Fetch transactions, completed bookings bhp_cost, and booking_items commission_earned
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data, error }, { data: bookingsData }] = await Promise.all([
+      // Reconcile allocations first to ensure database is clean before fetching snapshot
+      const targetMonth = globalMonthFilter === 'all' ? defaultCurrentMonthStr : globalMonthFilter;
+      await reconcileMonthlyAllocations(supabase, targetMonth);
+
+      const [{ data, error }, { data: bookingsData }, { data: itemsData }] = await Promise.all([
         supabase
           .from('cash_transactions')
           .select('*')
@@ -403,8 +455,11 @@ export default function FinancePage() {
           .order('created_at', { ascending: false }),
         supabase
           .from('bookings')
-          .select('id, booking_date, bhp_cost')
-          .eq('status', 'Completed')
+          .select('id, price, booking_date, bhp_cost')
+          .eq('status', 'Completed'),
+        supabase
+          .from('booking_items')
+          .select('booking_id, commission_earned, therapist_id')
       ]);
 
       if (error) {
@@ -425,28 +480,50 @@ export default function FinancePage() {
       }
 
       if (bookingsData) {
-        const map: Record<string, number> = {};
+        const bhpMap: Record<string, number> = {};
+        const commMap: Record<string, number> = {};
+
+        // Aggregate therapist commission earned per booking_id
+        const commSumByBookingId: Record<string, number> = {};
+        if (itemsData) {
+          itemsData.forEach(item => {
+            if (item.booking_id && item.therapist_id) {
+              commSumByBookingId[item.booking_id] = (commSumByBookingId[item.booking_id] || 0) + (Number(item.commission_earned) || 0);
+            }
+          });
+        }
+
         bookingsData.forEach(b => {
-          const cost = Number(b.bhp_cost) || 0;
-          map[b.id] = cost;
-          map[b.id.substring(0, 8)] = cost;
-          
+          const cost = Number(b.bhp_cost) || Math.round((Number(b.price) || 0) * 0.05);
+          const comm = commSumByBookingId[b.id] || 0;
+
+          bhpMap[b.id] = cost;
+          commMap[b.id] = comm;
+
+          bhpMap[b.id.substring(0, 8)] = cost;
+          commMap[b.id.substring(0, 8)] = comm;
+
           if (b.booking_date) {
             const dateObj = new Date(b.booking_date + 'T00:00:00');
             const y = dateObj.getFullYear();
             const m = String(dateObj.getMonth() + 1).padStart(2, '0');
             const last4 = b.id.substring(b.id.length - 4).toUpperCase();
-            map[`SR-${y}${m}-${last4}`] = cost;
+            const refCode = `SR-${y}${m}-${last4}`;
+
+            bhpMap[refCode] = cost;
+            commMap[refCode] = comm;
           }
         });
-        setCompletedBookingsMap(map);
+
+        setCompletedBookingsBhpMap(bhpMap);
+        setCompletedBookingsCommMap(commMap);
       }
     } catch (err) {
       console.error('Fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, globalMonthFilter, defaultCurrentMonthStr]);
 
   useEffect(() => {
     fetchTransactions();
@@ -723,10 +800,22 @@ export default function FinancePage() {
             }
           }
 
-          const { error } = await supabase.from('cash_transactions').delete().eq('id', id);
-          if (error) {
-            showAlert('Gagal Menghapus', error.message, 'danger');
+          let deleteErr = null;
+          if (targetTx?.category === 'internal_transfer' && targetTx?.reference_id) {
+            const { error } = await supabase.from('cash_transactions').delete().eq('reference_id', targetTx.reference_id);
+            deleteErr = error;
           } else {
+            const { error } = await supabase.from('cash_transactions').delete().eq('id', id);
+            deleteErr = error;
+          }
+
+          if (deleteErr) {
+            showAlert('Gagal Menghapus', deleteErr.message, 'danger');
+          } else {
+            if (targetTx?.transaction_date) {
+              const mStr = targetTx.transaction_date.slice(0, 7);
+              await reconcileMonthlyAllocations(supabase, mStr);
+            }
             fetchTransactions();
           }
         } catch (err: any) {
@@ -743,14 +832,39 @@ export default function FinancePage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const todayStr = now.toISOString().split('T')[0];
+
+  // Generate dynamic list of available YYYY-MM months for the selector
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    monthSet.add(defaultCurrentMonthStr);
+    transactions.forEach(t => {
+      if (t.transaction_date) {
+        const ym = t.transaction_date.slice(0, 7);
+        if (ym && ym.length === 7) monthSet.add(ym);
+      }
+    });
+    return Array.from(monthSet).sort().reverse();
+  }, [transactions, defaultCurrentMonthStr]);
+
+  const formatMonthLabel = useCallback((ymStr: string) => {
+    if (ymStr === 'all') return 'Semua Periode (All Time)';
+    const [y, m] = ymStr.split('-');
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const idx = parseInt(m, 10) - 1;
+    return `${monthNames[idx] || m} ${y}`;
+  }, []);
 
   const filteredTransactions = transactions.filter(t => {
     const tDate = t.transaction_date.split('T')[0];
     
-    // Date filter
-    if (dateFilter === 'month' && !tDate.startsWith(currentMonthStr)) return false;
+    // Global Month filter
+    if (globalMonthFilter !== 'all' && !tDate.startsWith(globalMonthFilter)) return false;
+
+    // Sub-date filter
     if (dateFilter === 'today' && tDate !== todayStr) return false;
 
     // Account filter
@@ -774,7 +888,7 @@ export default function FinancePage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, accountFilter, typeFilter, dateFilter, itemsPerPage]);
+  }, [search, accountFilter, typeFilter, dateFilter, globalMonthFilter, itemsPerPage]);
 
   const totalFilteredCount = filteredTransactions.length;
   const numPerPage = itemsPerPage === 'all' ? totalFilteredCount : Number(itemsPerPage);
@@ -793,7 +907,9 @@ export default function FinancePage() {
     return t.type === 'inflow' ? sum + Number(t.amount) : sum - Number(t.amount);
   }, 0);
 
-  const monthlyTransactions = transactions.filter(t => t.transaction_date.startsWith(currentMonthStr));
+  const monthlyTransactions = globalMonthFilter === 'all'
+    ? transactions
+    : transactions.filter(t => t.transaction_date.startsWith(globalMonthFilter));
   
   // Pure Operational Sales Revenue (Omset Penjualan Service & Produk)
   const monthlyInflow = monthlyTransactions
@@ -812,29 +928,182 @@ export default function FinancePage() {
   // Net Operational Cash Flow (Omset - Pengeluaran)
   const netMonthly = monthlyInflow - monthlyOutflow;
 
-  // BHP (Bahan Habis Pakai) Reserve Calculation matching current logged cash transactions
-  const monthlyBhpTarget = monthlyTransactions
-    .filter(t => t.type === 'inflow' && t.category !== 'internal_transfer' && t.category !== 'owner_capital')
-    .reduce((sum, t) => {
-      const ref = t.reference_id;
-      let matchedBhp = 0;
-      if (ref && completedBookingsMap[ref] !== undefined) {
-        matchedBhp = completedBookingsMap[ref];
-      } else {
-        const foundKey = Object.keys(completedBookingsMap).find(k => k && (t.description.includes(k) || (t.reference_id && t.reference_id.includes(k))));
-        if (foundKey) {
-          matchedBhp = completedBookingsMap[foundKey];
-        } else {
-          matchedBhp = Math.round((Number(t.amount) * bhpPercent) / 100);
-        }
+  // Helper to find matched booking value (BHP & Commission) for a transaction
+  const findMatchedBookingVal = (t: CashTransaction, map: Record<string, number>): number | null => {
+    const rawRef = (t.reference_id || '').replace(/#/g, '').trim().toUpperCase();
+    const rawDesc = (t.description || '').toUpperCase();
+
+    if (rawRef && map[rawRef] !== undefined) return map[rawRef];
+
+    const keys = Object.keys(map);
+    for (const k of keys) {
+      if (!k) continue;
+      const cleanK = k.replace(/#/g, '').trim().toUpperCase();
+      if ((rawRef && rawRef.includes(cleanK)) || rawDesc.includes(cleanK)) {
+        return map[k];
       }
-      return sum + matchedBhp;
-    }, 0);
+    }
+    return null;
+  };
+
+  // BHP (Bahan Habis Pakai) Reserve Calculation
+  const monthlyBhpTarget = useMemo(() => {
+    return monthlyTransactions
+      .filter(t => t.type === 'inflow' && t.category !== 'internal_transfer' && t.category !== 'owner_capital')
+      .reduce((sum, t) => {
+        const matched = findMatchedBookingVal(t, completedBookingsBhpMap);
+        const cost = matched !== null ? matched : Math.round((Number(t.amount) * 5) / 100);
+        return sum + cost;
+      }, 0);
+  }, [monthlyTransactions, completedBookingsBhpMap]);
 
   const monthlyBhpSpent = monthlyTransactions
-    .filter(t => t.type === 'outflow' && (t.category === 'supplies' || t.description.toLowerCase().includes('bhp') || t.description.toLowerCase().includes('suppli') || t.description.toLowerCase().includes('bahan')))
+    .filter(t => t.type === 'outflow' && t.category !== 'internal_transfer' && (t.category === 'supplies' || t.description.toLowerCase().includes('bhp') || t.description.toLowerCase().includes('suppli') || t.description.toLowerCase().includes('bahan')))
     .reduce((sum, t) => sum + Number(t.amount), 0);
   const bhpReserveRemaining = monthlyBhpTarget - monthlyBhpSpent;
+
+  // ── Smart Allocation Helper Widget Calculations ──
+  const targetBhpAccount = useMemo(() => customAccounts.find(a => a.tag === 'bhp'), [customAccounts]);
+  const targetCommissionAccount = useMemo(() => customAccounts.find(a => a.tag === 'therapist_commission'), [customAccounts]);
+  const targetProfitAccount = useMemo(() => customAccounts.find(a => a.tag === 'owner_profit'), [customAccounts]);
+
+  const totalBhpTargetForPeriod = monthlyBhpTarget;
+
+  // Exact Therapist Commission Target Calculation
+  const totalCommissionTargetForPeriod = useMemo(() => {
+    return monthlyTransactions
+      .filter(t => t.type === 'inflow' && t.category !== 'internal_transfer' && t.category !== 'owner_capital')
+      .reduce((sum, t) => {
+        const matched = findMatchedBookingVal(t, completedBookingsCommMap);
+        // If matched booking exists, use exact commission_earned. If unassigned/manual sale, commission is 0!
+        const comm = matched !== null ? matched : 0;
+        return sum + comm;
+      }, 0);
+  }, [monthlyTransactions, completedBookingsCommMap]);
+
+  const totalProfitTargetForPeriod = useMemo(() => {
+    return Math.max(0, monthlyInflow - totalBhpTargetForPeriod - totalCommissionTargetForPeriod);
+  }, [monthlyInflow, totalBhpTargetForPeriod, totalCommissionTargetForPeriod]);
+
+  // Distinguish Smart Allocation Transfers from General Cash Transfers
+  const isAllocationTransfer = (t: CashTransaction) => {
+    return (
+      t.type === 'inflow' &&
+      t.category === 'internal_transfer' &&
+      (
+        t.description.toLowerCase().includes('alokasi') ||
+        t.description.toLowerCase().includes('pos ') ||
+        t.created_by === 'Smart Allocation Helper'
+      )
+    );
+  };
+
+  // Already executed internal allocations for this period
+  const executedBhpAllocations = useMemo(() => {
+    if (!targetBhpAccount) return 0;
+    return monthlyTransactions
+      .filter(t => isAllocationTransfer(t) && t.payment_account === targetBhpAccount.id)
+      .reduce((s, t) => s + Number(t.amount), 0);
+  }, [monthlyTransactions, targetBhpAccount]);
+
+  const executedCommissionAllocations = useMemo(() => {
+    if (!targetCommissionAccount) return 0;
+    return monthlyTransactions
+      .filter(t => isAllocationTransfer(t) && t.payment_account === targetCommissionAccount.id)
+      .reduce((s, t) => s + Number(t.amount), 0);
+  }, [monthlyTransactions, targetCommissionAccount]);
+
+  const executedProfitAllocations = useMemo(() => {
+    if (!targetProfitAccount) return 0;
+    return monthlyTransactions
+      .filter(t => isAllocationTransfer(t) && t.payment_account === targetProfitAccount.id)
+      .reduce((s, t) => s + Number(t.amount), 0);
+  }, [monthlyTransactions, targetProfitAccount]);
+
+  const pendingBhpAllocation = Math.max(0, totalBhpTargetForPeriod - executedBhpAllocations);
+  const pendingCommissionAllocation = Math.max(0, totalCommissionTargetForPeriod - executedCommissionAllocations);
+  const pendingProfitAllocation = Math.max(0, totalProfitTargetForPeriod - executedProfitAllocations);
+
+  const [executingAllocation, setExecutingAllocation] = useState(false);
+
+  const executeBatchAllocation = async (posType: 'bhp' | 'therapist_commission' | 'owner_profit' | 'all') => {
+    if (executingAllocation) return;
+    setExecutingAllocation(true);
+    try {
+      const defaultSource = customAccounts.find(a => a.tag === 'operational' || a.id === 'qris' || a.id === 'cash')?.id || 'qris';
+      const nowIso = new Date().toISOString();
+
+      const itemsToExecute: { source: string; target: string; amount: number; label: string }[] = [];
+
+      if ((posType === 'bhp' || posType === 'all') && pendingBhpAllocation > 0 && targetBhpAccount) {
+        itemsToExecute.push({
+          source: defaultSource,
+          target: targetBhpAccount.id,
+          amount: pendingBhpAllocation,
+          label: `Pos BHP (${targetBhpAccount.label})`
+        });
+      }
+      if ((posType === 'therapist_commission' || posType === 'all') && pendingCommissionAllocation > 0 && targetCommissionAccount) {
+        itemsToExecute.push({
+          source: defaultSource,
+          target: targetCommissionAccount.id,
+          amount: pendingCommissionAllocation,
+          label: `Pos Komisi Terapis (${targetCommissionAccount.label})`
+        });
+      }
+      if ((posType === 'owner_profit' || posType === 'all') && pendingProfitAllocation > 0 && targetProfitAccount) {
+        itemsToExecute.push({
+          source: defaultSource,
+          target: targetProfitAccount.id,
+          amount: pendingProfitAllocation,
+          label: `Pos Laba Owner (${targetProfitAccount.label})`
+        });
+      }
+
+      if (itemsToExecute.length === 0) {
+        showAlert('Informasi', 'Seluruh alokasi pos rekening sudah tuntas ter-transfer.', 'info');
+        setExecutingAllocation(false);
+        return;
+      }
+
+      for (const item of itemsToExecute) {
+        const refNo = `TRF-ALOC-${Date.now()}`;
+        // Outflow from source
+        await supabase.from('cash_transactions').insert({
+          transaction_date: nowIso,
+          type: 'outflow',
+          category: 'internal_transfer',
+          payment_account: item.source,
+          amount: item.amount,
+          description: `${item.label} - Transfer m-Banking`,
+          reference_id: refNo,
+          created_by: 'Smart Allocation Helper'
+        });
+        // Inflow to target
+        await supabase.from('cash_transactions').insert({
+          transaction_date: nowIso,
+          type: 'inflow',
+          category: 'internal_transfer',
+          payment_account: item.target,
+          amount: item.amount,
+          description: `${item.label} - Transfer m-Banking`,
+          reference_id: refNo,
+          created_by: 'Smart Allocation Helper'
+        });
+      }
+
+      showAlert('Alokasi Berhasil!', 'Catatan pemindahan dana telah tersimpan di Buku Kas. Saldo rekening digital 100% sinkron.', 'info');
+      await fetchTransactions();
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cashbook_updated'));
+      }
+    } catch (e) {
+      console.error('Failed to execute batch allocation:', e);
+    } finally {
+      setExecutingAllocation(false);
+    }
+  };
 
   // Calculate Account Balances for all custom accounts
   const accountBalances: Record<string, number> = {};
@@ -925,13 +1194,35 @@ export default function FinancePage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-earth-primary/10 text-earth-primary flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-earth-primary/10 text-earth-primary flex items-center justify-center shrink-0">
               <Wallet size={20} />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Buku Kas & Keuangan</h1>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Buku Kas & Keuangan</h1>
+                
+                {/* Global Month Selector Pill */}
+                <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl px-2.5 py-1 text-amber-900 dark:text-amber-200 shadow-xs">
+                  <Calendar size={13} className="text-earth-primary shrink-0" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Periode:</span>
+                  <select
+                    value={globalMonthFilter}
+                    onChange={e => setGlobalMonthFilter(e.target.value)}
+                    className="bg-transparent text-xs font-black text-earth-primary cursor-pointer outline-none font-mono"
+                  >
+                    <option value="all" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-bold">
+                      Semua Periode (All Time)
+                    </option>
+                    {availableMonths.map((ym: string) => (
+                      <option key={ym} value={ym} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-bold">
+                        {formatMonthLabel(ym)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                 Pencatatan kas venue, terintegrasi otomatis dengan POS & Invoice.
               </p>
             </div>
@@ -1030,105 +1321,230 @@ export default function FinancePage() {
         </div>
       )}
 
-      {/* KPI Cards (2x2 Grid on Mobile, 4 Columns on Desktop) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        {/* Total Liquid Cash */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-5 shadow-sm space-y-1 sm:space-y-2">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider truncate">Total Kas Liquid</span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-earth-primary/10 text-earth-primary flex items-center justify-center shrink-0">
-              <Wallet size={14} className="sm:w-4 sm:h-4" />
+      {/* ── 1. ULTRA-CLEAN BANNER: Panduan Alokasi Transfer m-Banking (Auto-hides when all allocations are confirmed) ── */}
+      {(pendingBhpAllocation > 0 || pendingCommissionAllocation > 0 || pendingProfitAllocation > 0) && (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3.5 sm:p-4.5 shadow-sm space-y-3 animate-fadeIn">
+          {/* Banner Header Line */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-earth-primary/10 text-earth-primary flex items-center justify-center shrink-0">
+                <Zap size={14} />
+              </div>
+              <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">
+                Panduan Alokasi Transfer m-Banking
+              </h3>
+              <span className="text-[9px] font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200/60 dark:border-blue-800/60 flex items-center gap-1.5 shrink-0">
+                <MousePointerClick size={11} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <span>One-Click Confirm</span>
+              </span>
+            </div>
+
+            <button
+              onClick={() => executeBatchAllocation('all')}
+              disabled={executingAllocation}
+              className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs transition-all shrink-0 disabled:opacity-60"
+            >
+              {executingAllocation ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              <span>Konfirmasi Semua Transfer Selesai</span>
+            </button>
+          </div>
+
+          {/* 3 Clean Horizontal Columns */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 md:divide-x divide-zinc-100 dark:divide-zinc-800">
+            {/* Pos 1: Restock BHP */}
+            <div className="flex items-center justify-between gap-3 md:pr-4">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">1. Restock BHP</span>
+                  {targetBhpAccount && (
+                    <span className="text-[9px] font-extrabold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.2 rounded border border-amber-200/60 dark:border-amber-800/40 shrink-0">
+                      {targetBhpAccount.label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-base font-bold font-mono text-zinc-900 dark:text-white">
+                  {formatRp(pendingBhpAllocation)}
+                </p>
+                <p className="text-[10px] text-zinc-400 leading-tight block">
+                  {pendingBhpAllocation === 0 ? '✓ Saldo teralokasi tuntas' : `Pindah dari Kasir/QRIS ➔ ${targetBhpAccount?.label || 'SeaBank'}`}
+                </p>
+              </div>
+
+              {pendingBhpAllocation > 0 && targetBhpAccount && (
+                <button
+                  type="button"
+                  onClick={() => executeBatchAllocation('bhp')}
+                  disabled={executingAllocation}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-[10px] font-bold transition-all shrink-0"
+                >
+                  Dipindah
+                </button>
+              )}
+            </div>
+
+            {/* Pos 2: Komisi Terapis */}
+            <div className="flex items-center justify-between gap-3 md:px-4">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">2. Komisi Terapis</span>
+                  {targetCommissionAccount && (
+                    <span className="text-[9px] font-extrabold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.2 rounded border border-blue-200/60 dark:border-blue-800/40 shrink-0">
+                      {targetCommissionAccount.label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-base font-bold font-mono text-zinc-900 dark:text-white">
+                  {formatRp(pendingCommissionAllocation)}
+                </p>
+                <p className="text-[10px] text-zinc-400 leading-tight block">
+                  {pendingCommissionAllocation === 0 ? '✓ Saldo teralokasi tuntas' : `Pindah dari Kasir/QRIS ➔ ${targetCommissionAccount?.label || 'Bank BCA'}`}
+                </p>
+              </div>
+
+              {pendingCommissionAllocation > 0 && targetCommissionAccount && (
+                <button
+                  type="button"
+                  onClick={() => executeBatchAllocation('therapist_commission')}
+                  disabled={executingAllocation}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-[10px] font-bold transition-all shrink-0"
+                >
+                  Dipindah
+                </button>
+              )}
+            </div>
+
+            {/* Pos 3: Laba Owner */}
+            <div className="flex items-center justify-between gap-3 md:pl-4">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">3. Laba Owner</span>
+                  {targetProfitAccount && (
+                    <span className="text-[9px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-200/60 dark:border-emerald-800/40 shrink-0">
+                      {targetProfitAccount.label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-base font-bold font-mono text-zinc-900 dark:text-white">
+                  {formatRp(pendingProfitAllocation)}
+                </p>
+                <p className="text-[10px] text-zinc-400 leading-tight block">
+                  {pendingProfitAllocation === 0 ? '✓ Saldo teralokasi tuntas' : `Pindah dari Kasir/QRIS ➔ ${targetProfitAccount?.label || 'Blu'}`}
+                </p>
+              </div>
+
+              {pendingProfitAllocation > 0 && targetProfitAccount && (
+                <button
+                  type="button"
+                  onClick={() => executeBatchAllocation('owner_profit')}
+                  disabled={executingAllocation}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-[10px] font-bold transition-all shrink-0"
+                >
+                  Dipindah
+                </button>
+              )}
             </div>
           </div>
-          <p className="text-base sm:text-2xl font-black text-zinc-900 dark:text-white font-mono truncate">{formatRp(totalLiquid)}</p>
-          <p className="text-[9px] sm:text-[11px] text-zinc-400 truncate">Saldo seluruh rekening</p>
+        </div>
+      )}
+
+      {/* ── 2. MINIMALIST KPI CARDS (4 Cards Grid) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* Total Kas Liquid */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider leading-tight">Kas Liquid</span>
+            <div className="w-5 h-5 rounded-md bg-earth-primary/10 text-earth-primary flex items-center justify-center shrink-0">
+              <Wallet size={12} />
+            </div>
+          </div>
+          <p className="text-base sm:text-xl font-bold font-mono text-zinc-900 dark:text-white truncate">{formatRp(totalLiquid)}</p>
+          <p className="text-[9px] text-zinc-400 leading-none">Seluruh rekening</p>
         </div>
 
-        {/* Omset Penjualan (Pemasukan Operasional) */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-5 shadow-sm space-y-1 sm:space-y-2">
+        {/* Omset Penjualan */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider truncate">Omset (Bulan Ini)</span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
-              <ArrowUpRight size={14} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider leading-tight">
+              Omset <span className="hidden sm:inline">({globalMonthFilter === 'all' ? 'All Time' : formatMonthLabel(globalMonthFilter)})</span>
+            </span>
+            <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <ArrowUpRight size={12} />
             </div>
           </div>
-          <p className="text-base sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono truncate">{formatRp(monthlyInflow)}</p>
-          <p className="text-[9px] sm:text-[11px] text-zinc-400 truncate">Total service & POS</p>
+          <p className="text-base sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 truncate">{formatRp(monthlyInflow)}</p>
+          <p className="text-[9px] text-zinc-400 leading-none">Total service & POS</p>
         </div>
 
-        {/* Pengeluaran Bulan Ini */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-5 shadow-sm space-y-1 sm:space-y-2">
+        {/* Pengeluaran */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider truncate">Pengeluaran</span>
-            <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 flex items-center justify-center shrink-0">
-              <ArrowDownRight size={14} className="sm:w-[18px] sm:h-[18px]" />
+            <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider leading-tight">
+              Pengeluaran <span className="hidden sm:inline">({globalMonthFilter === 'all' ? 'All Time' : formatMonthLabel(globalMonthFilter)})</span>
+            </span>
+            <div className="w-5 h-5 rounded-md bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <ArrowDownRight size={12} />
             </div>
           </div>
-          <p className="text-base sm:text-2xl font-black text-rose-600 dark:text-rose-400 font-mono truncate">{formatRp(monthlyOutflow)}</p>
-          <p className="text-[9px] sm:text-[11px] text-zinc-400 truncate">Operasional & supplies</p>
+          <p className="text-base sm:text-xl font-bold font-mono text-rose-600 dark:text-rose-400 truncate">{formatRp(monthlyOutflow)}</p>
+          <p className="text-[9px] text-zinc-400 leading-none">Operasional & supplies</p>
         </div>
 
-        {/* Laba Operasional Kas */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-5 shadow-sm space-y-1 sm:space-y-2">
+        {/* Laba Kas */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-3 sm:p-4 shadow-2xs space-y-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-xs font-bold text-zinc-400 uppercase tracking-wider truncate">Laba Kas</span>
-            <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 ${netMonthly >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-              {netMonthly >= 0 ? <TrendingUp size={14} className="sm:w-4 sm:h-4" /> : <TrendingDown size={14} className="sm:w-4 sm:h-4" />}
+            <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider leading-tight">
+              Laba Kas <span className="hidden sm:inline">({globalMonthFilter === 'all' ? 'All Time' : formatMonthLabel(globalMonthFilter)})</span>
+            </span>
+            <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${netMonthly >= 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              {netMonthly >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
             </div>
           </div>
-          <p className={`text-base sm:text-2xl font-black font-mono truncate ${netMonthly >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+          <p className={`text-base sm:text-xl font-bold font-mono truncate ${netMonthly >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
             {formatRp(netMonthly)}
           </p>
-          <p className="text-[9px] sm:text-[11px] text-zinc-400 truncate">Omset - Pengeluaran</p>
+          <p className="text-[9px] text-zinc-400 leading-none">Omset - Pengeluaran</p>
         </div>
       </div>
 
       {/* BHP Reserve (Bahan Habis Pakai) Card */}
-      <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 dark:border-amber-900/40 rounded-2xl p-3.5 sm:p-5 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 dark:border-amber-900/40 rounded-2xl p-3.5 sm:p-4 shadow-2xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
         {/* Left Side: Header Info */}
-        <div className="flex items-start gap-2.5 sm:gap-3.5">
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
-            <Package size={16} className="sm:w-5 sm:h-5" />
+        <div className="flex items-start gap-2.5 sm:gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs mt-0.5 sm:mt-0">
+            <Package size={16} />
           </div>
-          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <div className="space-y-0.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-white">Alokasi & Restock Dana BHP</h3>
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[9px] sm:text-[10px] font-extrabold">
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[9px] font-extrabold">
                 Presisi Per Transaksi
               </span>
             </div>
-            <p className="text-[11px] sm:text-xs text-zinc-600 dark:text-zinc-400 max-w-xl leading-snug sm:leading-relaxed">
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-400 max-w-xl leading-snug">
               Akumulasi jatah bahan habis pakai (minyak, tisu, sprei) dari transaksi completed untuk modal restock.
             </p>
           </div>
         </div>
 
         {/* Right Side: Metrics Box + Action Button */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
           {/* Metrics White Container */}
-          <div className="bg-white/90 dark:bg-zinc-900/90 p-3 sm:p-3.5 rounded-xl border border-amber-200/50 dark:border-amber-900/30">
-            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2.5 sm:gap-4 text-left sm:text-right">
+          <div className="bg-white/90 dark:bg-zinc-900/90 p-2.5 sm:p-3 rounded-xl border border-amber-200/50 dark:border-amber-900/30">
+            <div className="grid grid-cols-3 sm:flex sm:items-center gap-2.5 sm:gap-4 text-left sm:text-right">
               <div>
-                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Total Hak BHP</span>
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Total Hak BHP</span>
                 <span className="text-xs sm:text-sm font-bold text-amber-600 dark:text-amber-400 font-mono">{formatRp(monthlyBhpTarget)}</span>
               </div>
-              <div className="w-px h-7 bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
+              <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
               <div>
-                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Dibelanjakan</span>
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Dibelanjakan</span>
                 <span className="text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 font-mono">{formatRp(monthlyBhpSpent)}</span>
               </div>
-              <div className="w-px h-7 bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
+              <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
               <div>
-                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Sisa Restock</span>
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Sisa Restock</span>
                 <span className={`text-xs sm:text-sm font-extrabold font-mono ${bhpReserveRemaining >= 0 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600'}`}>
                   {formatRp(bhpReserveRemaining)}
-                </span>
-              </div>
-              <div className="w-px h-7 bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
-              <div>
-                <span className="text-[9px] sm:text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Kas Bebas Owner</span>
-                <span className="text-xs sm:text-sm font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
-                  {formatRp(Math.max(0, netMonthly - Math.max(0, bhpReserveRemaining)))}
                 </span>
               </div>
             </div>
@@ -1145,43 +1561,52 @@ export default function FinancePage() {
               setReceiptPreview(null);
               setModalOpen(true);
             }}
-            className="px-3.5 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.98] transition-all shrink-0"
+            className="px-3.5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs active:scale-[0.98] transition-all shrink-0"
             title="Catat pengeluaran belanja bahan habis pakai"
           >
-            <ShoppingBag size={15} />
+            <ShoppingBag size={14} />
             <span>Belanja BHP</span>
           </button>
         </div>
       </div>
 
-      {/* Account Balances Pills */}
+      {/* Account Balances Pills Grid */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Saldo Per Rekening / Kas</span>
           <button
             onClick={() => setManageAccountsOpen(true)}
-            className="px-2.5 py-1 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-[11px] font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+            className="px-2.5 py-1 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-750 text-[11px] font-bold flex items-center gap-1.5 shadow-2xs transition-colors shrink-0"
           >
-            <Settings size={13} className="text-earth-primary" />
+            <Settings size={13} className="text-earth-primary shrink-0" />
             <span>Kelola Rekening ({customAccounts.length})</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3">
           {customAccounts.map((acc) => {
             const cfg = getAccountConfig(acc.id);
             const Icon = cfg.icon;
             const bal = accountBalances[acc.id] || 0;
+            const matchedTag = ACCOUNT_TAG_OPTIONS.find(t => t.id === acc.tag);
 
             return (
-              <div key={acc.id} className={`p-3.5 rounded-2xl border flex items-center gap-3 transition-all ${cfg.color}`}>
-                <div className="p-2 rounded-xl bg-white/80 dark:bg-zinc-900/80 shrink-0">
-                  <Icon size={18} />
+              <div key={acc.id} className={`p-3 sm:p-3.5 rounded-2xl border flex flex-col justify-between gap-2 transition-all ${cfg.color}`}>
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="p-1.5 rounded-xl bg-white/80 dark:bg-zinc-900/80 shrink-0">
+                      <Icon size={15} />
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold truncate leading-tight">{cfg.label}</p>
+                  </div>
+                  {matchedTag && (
+                    <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 ${matchedTag.badgeClass}`}>
+                      <Tag size={8} className="shrink-0" />
+                      <span className="whitespace-nowrap">{matchedTag.label}</span>
+                    </span>
+                  )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-80 truncate">{cfg.label}</p>
-                  <p className="text-sm font-bold font-mono truncate">{formatRp(bal)}</p>
-                </div>
+                <p className="text-xs sm:text-sm font-bold font-mono text-zinc-900 dark:text-white pt-0.5 truncate">{formatRp(bal)}</p>
               </div>
             );
           })}
@@ -1950,49 +2375,61 @@ export default function FinancePage() {
             {/* List Active Accounts */}
             <div className="space-y-2">
               <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Rekening Kas Aktif ({customAccounts.length})</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
                 {customAccounts.map(acc => {
                   const cfg = getAccountConfig(acc.id);
                   const Icon = cfg.icon;
                   const isEditingThis = editingAccId === acc.id;
+                  const matchedTag = ACCOUNT_TAG_OPTIONS.find(t => t.id === acc.tag);
 
                   return (
-                    <div key={acc.id} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${isEditingThis ? 'ring-2 ring-earth-primary border-earth-primary bg-amber-50/50 dark:bg-amber-950/20' : cfg.color}`}>
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <Icon size={16} className="shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <span className="text-xs font-bold truncate block">{acc.label}</span>
+                    <div key={acc.id} className={`p-2.5 rounded-xl border flex flex-col justify-between gap-1.5 transition-all ${isEditingThis ? 'ring-2 ring-earth-primary border-earth-primary bg-amber-50/50 dark:bg-amber-950/20' : cfg.color}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Icon size={15} className="shrink-0" />
+                          <span className="text-xs font-bold whitespace-nowrap">{acc.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             type="button"
-                            onClick={() => handleToggleInvoiceVisibility(acc.id)}
-                            className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-colors ${
-                              acc.show_in_invoice !== false
-                                ? 'bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
-                                : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
-                            }`}
-                            title="Klik untuk ubah status tampil di Invoice / POS"
+                            onClick={() => startEditAccount(acc)}
+                            className="p-1 text-zinc-400 hover:text-earth-primary transition-colors"
+                            title="Edit Rekening Ini"
                           >
-                            {acc.show_in_invoice !== false ? '✓ In Invoice' : '✗ Hide In Invoice'}
+                            <Pencil size={13} />
                           </button>
+                          {customAccounts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAccount(acc.id)}
+                              className="p-1 text-zinc-400 hover:text-rose-600 transition-colors"
+                              title="Hapus Rekening"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          onClick={() => startEditAccount(acc)}
-                          className="p-1 text-zinc-400 hover:text-earth-primary transition-colors"
-                          title="Edit Rekening Ini"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        {customAccounts.length > 1 && (
-                          <button
-                            onClick={() => handleDeleteAccount(acc.id)}
-                            className="p-1 text-zinc-400 hover:text-rose-600 transition-colors"
-                            title="Hapus Rekening"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5 border-t border-black/5 dark:border-white/5">
+                        {matchedTag && (
+                          <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-full whitespace-nowrap inline-flex items-center gap-1 ${matchedTag.badgeClass}`}>
+                            <Tag size={8} className="shrink-0" />
+                            <span>{matchedTag.label}</span>
+                          </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleInvoiceVisibility(acc.id)}
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full inline-flex items-center gap-1 transition-colors ${
+                            acc.show_in_invoice !== false
+                              ? 'bg-emerald-600/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                              : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400'
+                          }`}
+                          title="Klik untuk ubah status tampil di Invoice / POS"
+                        >
+                          {acc.show_in_invoice !== false ? '✓ In Invoice' : '✗ Hide In Invoice'}
+                        </button>
                       </div>
                     </div>
                   );
@@ -2025,6 +2462,23 @@ export default function FinancePage() {
                   value={newAccLabel}
                   onChange={e => setNewAccLabel(e.target.value)}
                 />
+              </div>
+
+              {/* Functional Tag Selector */}
+              <div>
+                <label className="text-[10px] text-zinc-400 font-semibold mb-1 block">Tag Fungsi Alokasi Pos Rekening</label>
+                <select
+                  value={newAccTag}
+                  onChange={e => setNewAccTag(e.target.value as AccountTag | '')}
+                  className="admin-input text-xs font-medium"
+                >
+                  <option value="">(Tanpa Tag / Standard)</option>
+                  {ACCOUNT_TAG_OPTIONS.map(tagOpt => (
+                    <option key={tagOpt.id} value={tagOpt.id}>
+                      {tagOpt.label} - {tagOpt.description}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

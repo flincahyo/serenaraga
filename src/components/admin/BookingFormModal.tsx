@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Loader2, X, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
+import { reconcileMonthlyAllocations } from '@/lib/allocation-reconciler';
 
 export type BookingItemRow = {
   tempId: number;
@@ -280,6 +281,11 @@ export default function BookingFormModal({ open, onClose, onSaved, editBookingId
       }
     } catch (cashErr) {
       console.error('Failed to sync cash_transactions in BookingFormModal:', cashErr);
+    }
+
+    if (form.booking_date) {
+      const monthStr = form.booking_date.substring(0, 7);
+      await reconcileMonthlyAllocations(supabase, monthStr);
     }
 
     setSaving(false);

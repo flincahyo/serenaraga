@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
 import { AdminSkeleton } from '@/components/admin/AdminSkeleton';
 import BookingFormModal from '@/components/admin/BookingFormModal';
+import { reconcileMonthlyAllocations } from '@/lib/allocation-reconciler';
 
 type Booking = {
   id: string; created_at: string; customer_name: string; phone: string;
@@ -487,6 +488,13 @@ export default function BookingsPage() {
         console.error('Cashbook delete sync error:', e);
       }
     }
+
+    // Reconcile Smart Allocation internal transfers (TRF-ALOC) if targets changed
+    const targetBkObj = bookings.find(b => b.id === id);
+    if (targetBkObj?.booking_date) {
+      const monthStr = targetBkObj.booking_date.substring(0, 7);
+      await reconcileMonthlyAllocations(supabase, monthStr);
+    }
   };
 
   const openAdd = () => { setEditId(null); setShowForm(true); };
@@ -519,6 +527,12 @@ export default function BookingsPage() {
     if (selectedBooking?.id === deleteId) {
       setDrawerOpen(false);
     }
+
+    if (target?.booking_date) {
+      const monthStr = target.booking_date.substring(0, 7);
+      await reconcileMonthlyAllocations(supabase, monthStr);
+    }
+
     setDeleteId(null);
     setDeleting(false);
   };

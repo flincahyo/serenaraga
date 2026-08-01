@@ -27,11 +27,11 @@ export type CustomAccount = {
   tag?: AccountTag | null;
 };
 
-export const ACCOUNT_TAG_OPTIONS: { id: AccountTag; label: string; description: string; badgeClass: string }[] = [
-  { id: 'bhp', label: 'Pos Dana BHP', description: 'Menampung modal restock bahan habis pakai', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
-  { id: 'therapist_commission', label: 'Pos Komisi Terapis', description: 'Menampung hak komisi & gaji terapis', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
-  { id: 'owner_profit', label: 'Pos Laba Owner', description: 'Menampung pendapatan bersih pemilik', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
-  { id: 'operational', label: 'Penampung Utama', description: 'Rekening penerima bayaran utama (QRIS/Cash)', badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' },
+export const ACCOUNT_TAG_OPTIONS: { id: AccountTag; label: string; shortLabel: string; description: string; badgeClass: string }[] = [
+  { id: 'bhp', label: 'Pos Dana BHP', shortLabel: 'Pos BHP', description: 'Menampung modal restock bahan habis pakai', badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
+  { id: 'therapist_commission', label: 'Pos Komisi Terapis', shortLabel: 'Komisi', description: 'Menampung hak komisi & gaji terapis', badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+  { id: 'owner_profit', label: 'Pos Laba Owner', shortLabel: 'Laba Owner', description: 'Menampung pendapatan bersih pemilik', badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+  { id: 'operational', label: 'Penampung Utama', shortLabel: 'Utama', description: 'Rekening penerima bayaran utama (QRIS/Cash)', badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' },
 ];
 
 const DEFAULT_ACCOUNTS: CustomAccount[] = [
@@ -1600,9 +1600,10 @@ export default function FinancePage() {
                     <p className="text-xs sm:text-sm font-bold truncate leading-tight">{cfg.label}</p>
                   </div>
                   {matchedTag && (
-                    <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 ${matchedTag.badgeClass}`}>
+                    <span className={`text-[8px] sm:text-[9px] font-extrabold px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 ${matchedTag.badgeClass}`}>
                       <Tag size={8} className="shrink-0" />
-                      <span className="whitespace-nowrap">{matchedTag.label}</span>
+                      <span className="sm:hidden whitespace-nowrap">{matchedTag.shortLabel}</span>
+                      <span className="hidden sm:inline whitespace-nowrap">{matchedTag.label}</span>
                     </span>
                   )}
                 </div>
@@ -2415,7 +2416,8 @@ export default function FinancePage() {
                         {matchedTag && (
                           <span className={`text-[8px] font-extrabold px-1.5 py-0.2 rounded-full whitespace-nowrap inline-flex items-center gap-1 ${matchedTag.badgeClass}`}>
                             <Tag size={8} className="shrink-0" />
-                            <span>{matchedTag.label}</span>
+                            <span className="sm:hidden">{matchedTag.shortLabel}</span>
+                            <span className="hidden sm:inline">{matchedTag.label}</span>
                           </span>
                         )}
                         <button

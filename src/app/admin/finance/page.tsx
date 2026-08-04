@@ -751,7 +751,7 @@ export default function FinancePage() {
         category: 'internal_transfer',
         payment_account: transferFrom,
         amount: numAmt,
-        description: `Transfer Kas ke ${ACCOUNT_CONFIG[transferTo].label}${notesText}`,
+        description: `Transfer Kas ke ${getAccountConfig(transferTo).label}${notesText}`,
         reference_id: refId,
         created_by: userLabel,
       };
@@ -763,7 +763,7 @@ export default function FinancePage() {
         category: 'internal_transfer',
         payment_account: transferTo,
         amount: numAmt,
-        description: `Transfer Kas dari ${ACCOUNT_CONFIG[transferFrom].label}${notesText}`,
+        description: `Transfer Kas dari ${getAccountConfig(transferFrom).label}${notesText}`,
         reference_id: refId,
         created_by: userLabel,
       };

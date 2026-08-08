@@ -652,9 +652,17 @@ const InvoiceMaker = () => {
   const sharedDiscountAmount = appliedDiscounts
     .filter(a => (a.borne_by ?? (a.is_owner_borne ? 'owner' : 'shared')) === 'shared')
     .reduce((s, a) => s + a.amount, 0);
-  const therapistDiscountAmount = appliedDiscounts
+  const rawTherapistDiscountAmount = appliedDiscounts
     .filter(a => (a.borne_by ?? (a.is_owner_borne ? 'owner' : 'shared')) === 'therapist')
     .reduce((s, a) => s + a.amount, 0);
+
+  // 2-Layer Separation Logic:
+  // If customer is New Customer (effectiveCount === 0), therapist ALWAYS bears the 5% basis reduction,
+  // EVEN IF the customer uses an owner-borne voucher!
+  const isNewCustomer = effectiveCount === 0;
+  const therapistDiscountAmount = isNewCustomer
+    ? Math.max(rawTherapistDiscountAmount, Math.round(grossTotal * 5 / 100))
+    : rawTherapistDiscountAmount;
 
   // Transport: sum all entries
   const totalTransportFee = transportEntries.reduce((s, e) => s + Number(e.fee || 0), 0);
@@ -803,6 +811,11 @@ const InvoiceMaker = () => {
       );
       const totalBhp = itemsWithBhp.reduce((s, i) => s + i.bhp, 0);
 
+      const isNewCustomer = effectiveCount === 0;
+      const effectiveTherapistDiscountAmount = isNewCustomer
+        ? Math.max(therapistDiscountAmount, Math.round(grossTotal * 5 / 100))
+        : therapistDiscountAmount;
+
       // 2. Update booking
       const displayName = items.map(i => i.name).join(' + ');
       await supabase.from('bookings').update({
@@ -814,7 +827,7 @@ const InvoiceMaker = () => {
         price: grossTotal + totalTransportFee,
         bhp_cost: totalBhp,
         shared_discount_total: sharedDiscountAmount,
-        therapist_discount_total: therapistDiscountAmount,
+        therapist_discount_total: effectiveTherapistDiscountAmount,
       }).eq('id', selectedBookingId);
 
       // 3. Clean up stale booking_items and update/insert active items
@@ -835,7 +848,7 @@ const InvoiceMaker = () => {
       }
 
       const sharedDiscountPerGross = grossTotal > 0 ? sharedDiscountAmount / grossTotal : 0;
-      const therapistDiscountPerGross = grossTotal > 0 ? therapistDiscountAmount / grossTotal : 0;
+      const therapistDiscountPerGross = grossTotal > 0 ? effectiveTherapistDiscountAmount / grossTotal : 0;
       for (const item of itemsWithBhp) {
         const itemSharedDiscount = item.price * sharedDiscountPerGross;
         const itemTherapistDiscount = item.price * therapistDiscountPerGross;

@@ -1028,9 +1028,21 @@ function TherapistDrawer({
                                         {item.customer_name}
                                         {(() => {
                                           const sharedDiscounts = item.discounts?.filter(d => !d.is_owner_borne) || [];
-                                          if (sharedDiscounts.length === 0) return null;
-                                          const discStrs = sharedDiscounts.map(d => `${d.discount_label} disc ${d.discount_value_type === 'percentage' ? d.discount_value + '%' : Math.round((d.discount_value / item.service_price) * 100) + '%'}`);
-                                          return <span style={{ fontWeight: 500, color: '#059669', fontSize: '9px', marginLeft: '6px' }}>( {discStrs.join(', ')} )</span>;
+                                          const hasTherapistCapCut = (item.therapist_discount_total || 0) > 0;
+                                          const tags: string[] = [];
+
+                                          if (hasTherapistCapCut) {
+                                            tags.push('New Customer');
+                                          }
+                                          sharedDiscounts.forEach(d => {
+                                            if (!d.discount_label?.toLowerCase().includes('new customer') && !d.discount_label?.toLowerCase().includes('pelanggan baru')) {
+                                              const pctStr = d.discount_value_type === 'percentage' ? d.discount_value + '%' : Math.round((d.discount_value / item.service_price) * 100) + '%';
+                                              tags.push(`${d.discount_label} disc ${pctStr}`);
+                                            }
+                                          });
+
+                                          if (tags.length === 0) return null;
+                                          return <span style={{ fontWeight: 600, color: '#059669', fontSize: '9px', marginLeft: '6px' }}>( {tags.join(', ')} )</span>;
                                         })()}
                                       </p>
                                       <p style={{ margin: '0', fontSize: '9px', color: '#71717a', lineHeight: 1.3 }}>
@@ -1054,7 +1066,7 @@ function TherapistDrawer({
                                           let text = `Tanggal: ${new Date(item.date + 'T00:00:00').toLocaleDateString('id-ID')} • Jasa: `;
                                           if (basisReduction > 0) {
                                             const basisPct = Math.round((basisReduction / item.service_price) * 100);
-                                            text += `(${formatRp(item.service_price)} - ${basisPct}%) × ${standardPct}%`;
+                                            text += `(${formatRp(item.service_price)} - ${basisPct}% New Cust) × ${standardPct}%`;
                                           } else {
                                             text += `${formatRp(item.service_price)} × ${standardPct}%`;
                                           }

@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "XAI API key is missing" }, { status: 500 });
     }
 
-    const { visualSubject, seasonalNuance, artStyle, format, title, description, quote, myth, fact } = await req.json();
+    const { visualSubject, seasonalNuance, artStyle, format, title, description, quote, myth, fact, isFullAIPoster } = await req.json();
 
     if (!visualSubject || !seasonalNuance) {
       return NextResponse.json({ error: "visualSubject and seasonalNuance are required" }, { status: 400 });
@@ -18,7 +18,10 @@ export async function POST(req: Request) {
     let baseStyle = "Photography style, highly aesthetic, minimalist";
     let textConstraint = "NO TEXT, NO TYPOGRAPHY, empty space for copy.";
 
-    if (artStyle === "vector") {
+    if (isFullAIPoster) {
+      baseStyle = "Professional high-end graphic design poster, cinematic lighting, editorial layout";
+      textConstraint = `Feature bold, stylized graphic typography text "${title || 'SPECIAL PROMO'}" ${description ? `and subheadline "${description}"` : ''} seamlessly integrated into the visual artwork composition. Clear, legible, artistic lettering.`;
+    } else if (artStyle === "vector") {
       baseStyle = "Premium minimalist flat vector illustration, highly elegant paper-cut style. Solid warm muted pastel colors, clean distinct geometric shapes. ABSOLUTELY NO 3D gradients, NO drop shadows on objects, NO messy details, NO photorealism. Professional editorial quality, subtle textured paper background, FULL BLEED artwork filling the entire canvas, NO borders, NO torn paper edges";
       textConstraint = "NO TEXT, NO TYPOGRAPHY.";
     }

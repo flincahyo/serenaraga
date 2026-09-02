@@ -647,3 +647,45 @@ export const EventRedemptionVoucher: React.FC<TemplateProps> = ({ draft, Logo, W
     </div>
   );
 };
+
+export const FullAIPoster: React.FC<TemplateProps> = ({ draft, Logo, WAIco, InstagramIco }) => {
+  return (
+    <div className={`relative z-10 w-[1080px] ${draft.format === 'story' ? 'h-[1920px]' : draft.format === 'square' ? 'h-[1080px]' : draft.format === 'voucher' ? 'h-[520px]' : 'h-[1350px]'} flex flex-col justify-between p-[80px]`}>
+      {draft.bgImage && (
+        <div className="absolute inset-0 z-0">
+          <img src={draft.bgImage} alt="Full AI Poster" className="w-full h-full object-cover" crossOrigin="anonymous" />
+          {draft.vignetteColor && draft.vignetteColor !== 'none' && (
+            <div
+              className={`absolute inset-0 bg-gradient-to-t ${draft.vignetteColor === 'black' ? 'from-black via-black/40' : 'from-white via-white/40'} to-transparent`}
+              style={{ opacity: draft.vignetteIntensity ? draft.vignetteIntensity / 100 : 0.5 }}
+            />
+          )}
+          {draft.darkenIntensity ? (
+            <div className="absolute inset-0 bg-black" style={{ opacity: draft.darkenIntensity / 100 }} />
+          ) : null}
+        </div>
+      )}
+
+      {/* Top Logo */}
+      <div className="relative z-10 w-full flex justify-center">
+        <Logo invert={draft.colorMode === 'dark' ? true : draft.colorMode === 'light' ? false : true} scale={0.7} />
+      </div>
+
+      {/* Empty Center: Full artwork image contains fused typography */}
+      <div className="flex-grow relative z-10" />
+
+      {/* Bottom Contact Footer Bar */}
+      <div className="relative z-10 flex justify-center items-center gap-6 w-full">
+        <span className={`px-6 py-3 backdrop-blur-lg rounded-full text-[18px] font-sans font-medium tracking-widest shadow-lg uppercase flex items-center gap-3 ${draft.colorMode === 'light' ? 'bg-black/10 border border-black/20 text-[#4a4138]' : 'bg-white/10 border border-white/20 text-white'}`}>
+          <Globe size={20} /> WWW.SERENARAGA.FIT
+        </span>
+        <span className={`px-6 py-3 backdrop-blur-lg rounded-full text-[18px] font-sans font-medium tracking-widest shadow-lg uppercase flex items-center gap-3 ${draft.colorMode === 'light' ? 'bg-black/10 border border-black/20 text-[#4a4138]' : 'bg-white/10 border border-white/20 text-white'}`}>
+          <WAIco size={20} /> 0895-1835-9037
+        </span>
+        <span className={`px-6 py-3 backdrop-blur-lg rounded-full text-[18px] font-sans font-medium tracking-widest shadow-lg uppercase flex items-center gap-3 ${draft.colorMode === 'light' ? 'bg-black/10 border border-black/20 text-[#4a4138]' : 'bg-white/10 border border-white/20 text-white'}`}>
+          <InstagramIco size={20} /> @SERENA.RAGA
+        </span>
+      </div>
+    </div>
+  );
+};

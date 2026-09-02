@@ -2,11 +2,11 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type, Settings2, Upload } from 'lucide-react';
+import { Sparkles, Wand2, Download, Copy, Image as ImageIcon, LayoutTemplate, Layers, CheckCircle2, ChevronLeft, ChevronRight, Hash, Globe, Phone, Droplet, Palette, Printer, Loader2, Moon, AlignLeft, AlignCenter, AlignRight, Trash2, GripHorizontal, Type, Settings2, Upload, ImagePlus } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import * as htmlToImage from 'html-to-image';
 import jsPDF from 'jspdf';
-import { SplitScreenDark, ClassicGlass, EditorialOverlay, StoryMinimalist, GiftVoucher } from '@/components/canvas/FeedTemplates';
+import { SplitScreenDark, ClassicGlass, EditorialOverlay, StoryMinimalist, GiftVoucher, FullAIPoster } from '@/components/canvas/FeedTemplates';
 import { PosterCanvas } from '@/components/canvas/PosterCanvas';
 import { CanvasElementData } from '@/components/canvas/DraggableText';
 
@@ -139,7 +139,13 @@ export default function FeedStudioV2() {
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   
   // Layout States
-  const [activeTool, setActiveTool] = useState<'intelligence' | 'drafts' | 'copywriting' | 'voucher' | null>('intelligence');
+  const [activeTool, setActiveTool] = useState<'intelligence' | 'style_adaptor' | 'drafts' | 'copywriting' | 'voucher' | null>('intelligence');
+  
+  // Style Adaptor Reference States
+  const [refImageBase64, setRefImageBase64] = useState<string | null>(null);
+  const [refImagePreview, setRefImagePreview] = useState<string | null>(null);
+  const [stylePrompt, setStylePrompt] = useState<string>('');
+  const [isAnalyzingStyle, setIsAnalyzingStyle] = useState<boolean>(false);
   
   // Bulk PDF State
   const [batchName, setBatchName] = useState<string | null>(null);
@@ -154,6 +160,7 @@ export default function FeedStudioV2() {
   const postRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingBg, setIsDownloadingBg] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [showBgPrompt, setShowBgPrompt] = useState(false);
   const [bgPromptText, setBgPromptText] = useState('');
@@ -484,7 +491,8 @@ export default function FeedStudioV2() {
             description: textData.description,
             quote: textData.quote,
             myth: textData.myth,
-            fact: textData.fact
+            fact: textData.fact,
+            isFullAIPoster: textData.theme === 'full_ai_poster'
           })
         });
         const imgData = await imgRes.json();
@@ -505,6 +513,107 @@ export default function FeedStudioV2() {
       console.error("Generation failed:", error);
       alert("Gagal merender AI. Silakan coba lagi.");
       setStep('idle');
+    }
+  };
+
+  const handleUploadReferenceImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert("Ukuran gambar maksimal 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = reader.result as string;
+      setRefImageBase64(res);
+      setRefImagePreview(res);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGenerateStyleAdaptor = async () => {
+    if (!refImageBase64) return;
+    
+    setIsAnalyzingStyle(true);
+    setStep('ideating');
+    
+    try {
+      // Step 1: Vision Style Analysis
+      const visionRes = await fetch('/api/ai/vision-style', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: refImageBase64,
+          prompt: stylePrompt,
+          format: targetFormat
+        })
+      });
+
+      const visionData = await visionRes.json();
+      if (visionData.error) throw new Error(visionData.error);
+
+      const newDraft: PostDraft = {
+        id: Math.random().toString(36).substr(2, 9),
+        theme: visionData.theme || 'classic_glass',
+        label: visionData.label || 'PROMO',
+        title: visionData.title || '',
+        price: visionData.price || '',
+        description: visionData.description || '',
+        quote: '',
+        author: '',
+        myth: '',
+        fact: '',
+        format: targetFormat,
+        caption: visionData.caption || '',
+        visualSubject: visionData.visualSubject,
+        seasonalNuance: visionData.seasonalNuance,
+        artStyle: visionData.artStyle || 'photo',
+        vignetteColor: visionData.colorMode === 'dark' ? 'black' : 'none',
+        vignetteIntensity: 50,
+        colorMode: visionData.colorMode || 'auto',
+        elements: [],
+        isCarousel: false
+      };
+
+      setActiveDraft(newDraft);
+
+      // Step 2: Visualization (Grok Image with Vision Art Direction)
+      if (visionData.visualSubject) {
+        setStep('visualizing');
+        const imgRes = await fetch('/api/ai/grok-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            visualSubject: visionData.visualSubject,
+            seasonalNuance: visionData.seasonalNuance || "warm ambient light",
+            artStyle: visionData.artStyle || "photo",
+            format: targetFormat,
+            title: visionData.title,
+            description: visionData.description,
+            isFullAIPoster: visionData.theme === 'full_ai_poster' || activeDraft?.theme === 'full_ai_poster'
+          })
+        });
+
+        const imgData = await imgRes.json();
+        if (imgData.url) {
+          const finishedDraft = { ...newDraft, bgImage: imgData.url };
+          setActiveDraft(finishedDraft);
+          saveDrafts([finishedDraft, ...draftHistory]);
+        } else {
+          saveDrafts([newDraft, ...draftHistory]);
+        }
+      } else {
+        saveDrafts([newDraft, ...draftHistory]);
+      }
+
+      setStep('ready');
+    } catch (err: any) {
+      console.error("Style Adaptor failed:", err);
+      alert("Gagal mengadaptasi style poster referensi. Silakan coba lagi.");
+      setStep('idle');
+    } finally {
+      setIsAnalyzingStyle(false);
     }
   };
 
@@ -666,7 +775,45 @@ export default function FeedStudioV2() {
     } finally {
       setIsDownloading(false);
     }
+  };
 
+  const handleDownloadBackgroundOnly = async () => {
+    const bgUrl = viewDraft?.bgImage;
+    if (!bgUrl) {
+      alert('Belum ada gambar background pada draft/slide ini.');
+      return;
+    }
+
+    setIsDownloadingBg(true);
+    try {
+      const response = await fetch(bgUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const fmt = activeDraft?.format || 'feed';
+      const titleClean = activeDraft?.title?.replace(/\s+/g, '_') || fmt;
+      const slideSuffix = isCarousel ? `_Slide_${activeSlideIndex + 1}` : '';
+
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `SerenaRaga_BG_${titleClean}${slideSuffix}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (err) {
+      console.error('Download background failed, attempting direct link download', err);
+      const link = document.createElement('a');
+      link.href = bgUrl;
+      link.target = '_blank';
+      link.download = `SerenaRaga_BG_${activeDraft?.title?.replace(/\s+/g, '_') || 'Image'}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setIsDownloadingBg(false);
+    }
   };
 
   const cycleVignetteColor = () => {
@@ -875,7 +1022,8 @@ export default function FeedStudioV2() {
           artStyle: activeDraft.artStyle || "photorealistic",
           format: targetFormat,
           title: activeDraft.title,
-          description: activeDraft.description
+          description: activeDraft.description,
+          isFullAIPoster: viewDraft?.theme === 'full_ai_poster' || activeDraft.theme === 'full_ai_poster'
         })
       });
       const imgData = await imgRes.json();
@@ -981,6 +1129,13 @@ export default function FeedStudioV2() {
             <Sparkles size={20} />
           </button>
           <button 
+            onClick={() => setActiveTool(activeTool === 'style_adaptor' ? null : 'style_adaptor')}
+            className={`p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-1.5 ${activeTool === 'style_adaptor' ? 'bg-earth-primary/10 text-earth-primary shadow-sm' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'}`}
+            title="Style Adaptor (Upload Referensi)"
+          >
+            <ImagePlus size={20} />
+          </button>
+          <button 
             onClick={() => setActiveTool(activeTool === 'drafts' ? null : 'drafts')}
             className={`p-3 rounded-xl transition-all active:scale-95 flex flex-col items-center gap-1.5 ${activeTool === 'drafts' ? 'bg-earth-primary/10 text-earth-primary shadow-sm' : 'text-stone-400 hover:text-stone-600 hover:bg-stone-50'}`}
             title="Drafts"
@@ -1054,6 +1209,79 @@ export default function FeedStudioV2() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+              </motion.div>
+            )}
+
+            {/* FLYOUT: STYLE ADAPTOR */}
+            {activeTool === 'style_adaptor' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-4 h-full">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-stone-400 flex items-center gap-2">
+                    <ImagePlus size={14} /> Style Adaptor
+                  </h2>
+                  <button onClick={() => setActiveTool(null)} className="text-stone-400 hover:text-stone-600 p-1"><ChevronLeft size={16}/></button>
+                </div>
+
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Upload poster referensi. Vision AI akan menganalisis gaya visualnya dan membuat ulang khusus Serenaraga!
+                </p>
+
+                {/* Dropzone / Upload Preview */}
+                {refImagePreview ? (
+                  <div className="relative rounded-2xl overflow-hidden border border-stone-200 bg-stone-100 group shrink-0">
+                    <img src={refImagePreview} alt="Poster Referensi" className="w-full h-40 object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button 
+                        onClick={() => { setRefImageBase64(null); setRefImagePreview(null); }}
+                        className="bg-white/90 text-red-600 px-3 py-1.5 rounded-xl text-xs font-bold shadow-md hover:bg-white transition-all flex items-center gap-1 active:scale-95"
+                      >
+                        <Trash2 size={12} /> Hapus Poster
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer border-2 border-dashed border-stone-200 hover:border-earth-primary/50 bg-[#faf9f7] hover:bg-stone-50 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 transition-all">
+                    <Upload size={24} className="text-earth-primary" />
+                    <span className="text-xs font-bold text-stone-700 text-center">Upload Poster Referensi</span>
+                    <span className="text-[10px] text-stone-400 text-center">PNG / JPG (Maks 8MB)</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleUploadReferenceImage} 
+                    />
+                  </label>
+                )}
+
+                {/* Target Prompt Textarea */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.15em]">Topik / Pesan Baru</label>
+                  <textarea 
+                    value={stylePrompt}
+                    onChange={(e) => setStylePrompt(e.target.value)}
+                    placeholder="Contoh: Promo Pijat Relaksasi Akhir Pekan..."
+                    className="w-full bg-[#faf9f7] rounded-2xl p-4 text-stone-800 focus:outline-none focus:ring-2 focus:ring-earth-primary/30 border border-stone-100 resize-none h-28 transition-all placeholder:text-stone-400 text-xs leading-relaxed"
+                  />
+                </div>
+
+                {/* Generate Adaptor Button */}
+                <button 
+                  onClick={handleGenerateStyleAdaptor}
+                  disabled={!refImageBase64 || isAnalyzingStyle || (step !== 'idle' && step !== 'ready')}
+                  className="w-full bg-earth-primary text-white py-3 rounded-2xl font-bold text-xs shadow-lg shadow-earth-primary/20 hover:bg-earth-primary/90 transition-all flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 mt-auto"
+                >
+                  {isAnalyzingStyle ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Analisis Vision & Adaptasi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      <span>Adaptasi Style & Generate</span>
+                    </>
+                  )}
+                </button>
               </motion.div>
             )}
 
@@ -1430,6 +1658,8 @@ export default function FeedStudioV2() {
                       const props = { draft: viewDraft, Logo, WAIco, InstagramIco, onEdit: handleTextEdit };
 
                       switch (templateId) {
+                        case 'full_ai_poster':
+                          return <FullAIPoster {...props} />;
                         case 'split_screen_dark':
                           return <SplitScreenDark {...props} />;
                         case 'editorial_overlay':
@@ -1553,6 +1783,7 @@ export default function FeedStudioV2() {
                           <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.2em] mb-2 px-1">Pilih Tema</h4>
                           <div className="flex flex-col gap-1">
                             {[
+                              { id: 'full_ai_poster', label: '🎨 Full AI Graphic (Fused)' },
                               { id: 'classic_glass', label: 'Classic Glass' },
                               { id: 'split_screen_dark', label: 'Split Screen Dark' },
                               { id: 'editorial_overlay', label: 'Editorial Overlay' },
@@ -1605,11 +1836,25 @@ export default function FeedStudioV2() {
                               className="w-full h-24 text-sm p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:ring-2 focus:ring-earth-primary/50 resize-none text-stone-700"
                               placeholder="Ketik prompt baru untuk gambar latar..."
                             />
-                            <div className="flex justify-end gap-2 mt-1">
-                              <button type="button" onClick={() => setShowBgPrompt(false)} className="px-4 py-2 text-xs font-bold text-stone-500 hover:text-stone-800 transition-colors active:scale-95">Batal</button>
-                              <button type="submit" className="px-4 py-2 text-xs font-bold bg-earth-primary text-white rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95">
-                                <Sparkles size={14} /> Generate
-                              </button>
+                            <div className="flex justify-between items-center mt-1">
+                              {viewDraft?.bgImage ? (
+                                <button 
+                                  type="button" 
+                                  onClick={handleDownloadBackgroundOnly}
+                                  disabled={isDownloadingBg}
+                                  className="px-3 py-2 text-xs font-bold text-earth-primary hover:bg-earth-primary/10 rounded-xl transition-colors flex items-center gap-1.5 active:scale-95"
+                                  title="Download Image Background Saja"
+                                >
+                                  {isDownloadingBg ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                                  <span>Download BG</span>
+                                </button>
+                              ) : <div />}
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setShowBgPrompt(false)} className="px-4 py-2 text-xs font-bold text-stone-500 hover:text-stone-800 transition-colors active:scale-95">Batal</button>
+                                <button type="submit" className="px-4 py-2 text-xs font-bold bg-earth-primary text-white rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 active:scale-95">
+                                  <Sparkles size={14} /> Generate
+                                </button>
+                              </div>
                             </div>
                           </form>
                           {/* Triangle pointer */}
@@ -1759,6 +2004,18 @@ export default function FeedStudioV2() {
                   title="Cetak PDF Bulk"
                 >
                   {isGeneratingPDF ? <Loader2 size={16} className="animate-spin" /> : <Printer size={16} />} <span className="text-sm ml-2 font-bold">{isGeneratingPDF ? `Memproses (${renderProgress?.current}/${renderProgress?.total})` : "Download PDF Bulk"}</span>
+                </button>
+              )}
+
+              {viewDraft?.bgImage && (
+                <button 
+                  onClick={handleDownloadBackgroundOnly}
+                  disabled={isDownloadingBg}
+                  title="Download Image Background Saja"
+                  className="flex items-center gap-2 bg-stone-100 hover:bg-stone-200 text-stone-700 px-4 py-2.5 rounded-full text-xs font-bold transition-all disabled:opacity-40 border border-stone-200/80 active:scale-95 whitespace-nowrap shadow-sm"
+                >
+                  {isDownloadingBg ? <Loader2 size={14} className="animate-spin text-earth-primary" /> : <ImageIcon size={14} className="text-earth-primary" />}
+                  <span>Background Only</span>
                 </button>
               )}
 

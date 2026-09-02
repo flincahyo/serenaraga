@@ -1035,7 +1035,9 @@ function TherapistDrawer({
                                             tags.push('New Customer');
                                           }
                                           sharedDiscounts.forEach(d => {
-                                            if (!d.discount_label?.toLowerCase().includes('new customer') && !d.discount_label?.toLowerCase().includes('pelanggan baru')) {
+                                            const lbl = d.discount_label?.toLowerCase() || '';
+                                            const isNewCustLabel = lbl.includes('new customer') || lbl.includes('pelanggan baru') || lbl.includes('first customer') || lbl.includes('pelanggan pertama');
+                                            if (!isNewCustLabel) {
                                               const pctStr = d.discount_value_type === 'percentage' ? d.discount_value + '%' : Math.round((d.discount_value / item.service_price) * 100) + '%';
                                               tags.push(`${d.discount_label} disc ${pctStr}`);
                                             }

@@ -24,6 +24,7 @@ import {
   BarChart3,
   Settings2,
   ShoppingCart,
+  Star,
   LucideIcon,
 } from 'lucide-react';
 import { useUser } from '@/lib/user-context';
@@ -76,6 +77,7 @@ export function AppSidebar({
         { title: 'Tracker Jadwal', url: '/admin/calendar', icon: CalendarDays },
         { title: 'Bookings', url: '/admin/bookings', icon: CalendarCheck },
         { title: 'Invoices', url: '/admin/invoices', icon: Receipt },
+        { title: 'Ulasan & Rating', url: '/admin/reviews', icon: Star },
       ],
     },
     {
@@ -122,6 +124,7 @@ export function AppSidebar({
         { title: 'POS Kasir', url: '/admin/pos', icon: ShoppingCart },
         { title: 'Bookings', url: '/admin/bookings', icon: CalendarCheck },
         { title: 'Invoices', url: '/admin/invoices', icon: Receipt },
+        { title: 'Ulasan & Rating', url: '/admin/reviews', icon: Star },
         { title: 'Pelanggan', url: '/admin/customers', icon: Users },
       ],
     },

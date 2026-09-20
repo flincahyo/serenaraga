@@ -5,7 +5,7 @@ import { toPng } from 'html-to-image';
 import {
   Download, Plus, Trash2, Loader2, Share2, Users, Percent,
   Tag, X, Check, Award, Hash, Bus, Globe, Smartphone, Building2, Banknote, CreditCard,
-  QrCode, Landmark, Wallet, Coins
+  QrCode, Landmark, Wallet, Coins, Link2, ExternalLink, Copy
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase';
 import { useUser } from '@/lib/user-context';
@@ -454,6 +454,7 @@ const InvoiceMaker = () => {
 
   // ── Booking select ──
   const onBookingSelect = async (bookingId: string) => {
+    hasSavedRef.current = false;
     setSelectedBookingId(bookingId);
     if (!bookingId) {
       // Reset transport entries and pool when clearing booking selection
@@ -763,21 +764,22 @@ const InvoiceMaker = () => {
 
   // ── Save: complete booking + record discounts ──
   const completeAndSave = async () => {
-    if (!selectedBookingId) return;
     // Audit #2 Bug #1: double-completion guard
     if (hasSavedRef.current) return;
     hasSavedRef.current = true;
 
-    // Fix #15: verify current status from DB before proceeding
-    const { data: currentBooking } = await supabase
-      .from('bookings').select('status').eq('id', selectedBookingId).single();
-    if (currentBooking?.status === 'Completed') {
-      const confirmed = window.confirm(
-        'Booking ini sudah berstatus COMPLETED.\n\nMelanjutkan akan menimpa data invoice, komisi, dan diskon yang telah tersimpan.\n\nYakin ingin mengubah data?'
-      );
-      if (!confirmed) {
-        hasSavedRef.current = false;
-        return;
+    // Fix #15: verify current status from DB before proceeding if existing booking
+    if (selectedBookingId) {
+      const { data: currentBooking } = await supabase
+        .from('bookings').select('status').eq('id', selectedBookingId).single();
+      if (currentBooking?.status === 'Completed') {
+        const confirmed = window.confirm(
+          'Booking ini sudah berstatus COMPLETED.\n\nMelanjutkan akan menimpa data invoice, komisi, dan diskon yang telah tersimpan.\n\nYakin ingin mengubah data?'
+        );
+        if (!confirmed) {
+          hasSavedRef.current = false;
+          return;
+        }
       }
     }
 
@@ -816,19 +818,44 @@ const InvoiceMaker = () => {
         ? Math.max(therapistDiscountAmount, Math.round(grossTotal * 5 / 100))
         : therapistDiscountAmount;
 
-      // 2. Update booking
+      // 2. Insert or Update booking
+      let activeBookingId = selectedBookingId;
       const displayName = items.map(i => i.name).join(' + ');
-      await supabase.from('bookings').update({
-        status: 'Completed',
-        service_name: displayName,
-        customer_id: customerId,
-        discount_total: totalDiscount,
-        final_price: finalTotal,
-        price: grossTotal + totalTransportFee,
-        bhp_cost: totalBhp,
-        shared_discount_total: sharedDiscountAmount,
-        therapist_discount_total: effectiveTherapistDiscountAmount,
-      }).eq('id', selectedBookingId);
+
+      if (!activeBookingId) {
+        const { data: newBk, error: newBkErr } = await supabase.from('bookings').insert({
+          customer_name: customerName || 'Pelanggan',
+          phone: clean || '',
+          booking_date: date || new Date().toISOString().split('T')[0],
+          service_name: displayName || 'Treatment SerenaRaga',
+          status: 'Completed',
+          customer_id: customerId,
+          discount_total: totalDiscount,
+          final_price: finalTotal,
+          price: grossTotal + totalTransportFee,
+          bhp_cost: totalBhp,
+          shared_discount_total: sharedDiscountAmount,
+          therapist_discount_total: effectiveTherapistDiscountAmount,
+          notes: invoiceNumber ? `[Invoice: ${invoiceNumber}]` : null,
+        }).select('id').single();
+
+        if (newBkErr) throw newBkErr;
+        activeBookingId = newBk.id;
+        setSelectedBookingId(newBk.id);
+      } else {
+        await supabase.from('bookings').update({
+          status: 'Completed',
+          service_name: displayName,
+          customer_id: customerId,
+          discount_total: totalDiscount,
+          final_price: finalTotal,
+          price: grossTotal + totalTransportFee,
+          bhp_cost: totalBhp,
+          shared_discount_total: sharedDiscountAmount,
+          therapist_discount_total: effectiveTherapistDiscountAmount,
+          notes: invoiceNumber ? `[Invoice: ${invoiceNumber}]` : null,
+        }).eq('id', activeBookingId);
+      }
 
       // 3. Clean up stale booking_items and update/insert active items
       const currentDbIds = itemsWithBhp.map(i => i.db_id).filter(Boolean);
@@ -836,14 +863,14 @@ const InvoiceMaker = () => {
         await supabase
           .from('booking_items')
           .delete()
-          .eq('booking_id', selectedBookingId)
+          .eq('booking_id', activeBookingId)
           .neq('service_name', 'Biaya Transport')
           .not('id', 'in', `(${currentDbIds.join(',')})`);
       } else {
         await supabase
           .from('booking_items')
           .delete()
-          .eq('booking_id', selectedBookingId)
+          .eq('booking_id', activeBookingId)
           .neq('service_name', 'Biaya Transport');
       }
 
@@ -879,7 +906,7 @@ const InvoiceMaker = () => {
         } else {
           // Audit #2 Bug #6: INSERT items that have no db_id yet
           await supabase.from('booking_items').insert({
-            booking_id: selectedBookingId,
+            booking_id: activeBookingId,
             service_name: item.name,
             price: item.price,
             therapist_id: item.therapist_id || null,
@@ -890,7 +917,7 @@ const InvoiceMaker = () => {
         }
       }
 
-      await supabase.from('booking_items').delete().eq('booking_id', selectedBookingId).eq('service_name', 'Biaya Transport');
+      await supabase.from('booking_items').delete().eq('booking_id', activeBookingId).eq('service_name', 'Biaya Transport');
       for (const entry of transportEntries) {
         if (Number(entry.fee) > 0) {
           // No therapist assigned → commission_earned = 0 (full transport amount to owner)
@@ -898,7 +925,7 @@ const InvoiceMaker = () => {
             ? Math.round(Number(entry.fee) * (entry.pct / 100))
             : 0;
           await supabase.from('booking_items').insert({
-            booking_id: selectedBookingId,
+            booking_id: activeBookingId,
             service_name: 'Biaya Transport',
             price: Number(entry.fee),
             commission_earned: entryCommission,
@@ -909,11 +936,11 @@ const InvoiceMaker = () => {
       }
 
       // 4. Audit #2 Bug #2: DELETE existing discounts first to prevent duplicates on re-complete
-      await supabase.from('booking_discounts').delete().eq('booking_id', selectedBookingId);
+      await supabase.from('booking_discounts').delete().eq('booking_id', activeBookingId);
       if (appliedDiscounts.length > 0) {
         await supabase.from('booking_discounts').insert(
           appliedDiscounts.map(a => ({
-            booking_id: selectedBookingId,
+            booking_id: activeBookingId,
             discount_id: a.discountId.startsWith('custom_') ? null : (a.discountId.startsWith('voucher_') ? a.discountId.replace('voucher_', '') : a.discountId),
             discount_label: a.label,
             discount_value_type: a.value_type,
@@ -972,20 +999,32 @@ const InvoiceMaker = () => {
 
   const shareToWhatsApp = async () => {
     await completeAndSave();
-    const r = await generateImage();
-    if (!r) return;
-    const file = new File([r.blob], `Invoice-${invoiceNumber}.png`, { type: 'image/png' });
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: `Invoice ${invoiceNumber} - SerenaRaga`, text: `Invoice untuk ${customerName || 'pelanggan'} — Total: ${formatRp(finalTotal)}` }); return; }
-      catch (e) { if ((e as Error).name === 'AbortError') return; }
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://serenaraga.fit';
+    const invoiceUrl = `${origin}/invoice/${invoiceNumber}`;
+    const msg = `Halo Kak ${customerName || 'Pelanggan'}! ✨\n\nTerima kasih telah mempercayakan perawatan ketenangan raga Anda kepada *SerenaRaga*.\n\nBerikut adalah link rincian invoice & bukti pembayaran Anda:\n🔗 ${invoiceUrl}\n\nTotal: *${formatRp(finalTotal)}*\n\nSemoga hari Kakak menyenangkan dan tubuh kembali rileks! 🌿`;
+    
+    let cleanPhone = customerPhone.replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
+    if (cleanPhone) {
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+    } else {
+      alert('Silakan isi nomor WhatsApp pelanggan terlebih dahulu.');
     }
-    const msg = `Invoice ${invoiceNumber} untuk ${customerName || 'pelanggan'}\nTotal: ${formatRp(finalTotal)}\n*(Gambar invoice dilampirkan)*`;
-    const phone = customerPhone.replace(/\D/g, '');
-    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-    const link = document.createElement('a');
-    link.download = `Invoice-${invoiceNumber}.png`;
-    link.href = r.dataUrl;
-    link.click();
+  };
+
+  const openOnlineInvoice = async () => {
+    await completeAndSave();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://serenaraga.fit';
+    const invoiceUrl = `${origin}/invoice/${invoiceNumber}`;
+    window.open(invoiceUrl, '_blank');
+  };
+
+  const copyOnlineInvoiceLink = async () => {
+    await completeAndSave();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://serenaraga.fit';
+    const invoiceUrl = `${origin}/invoice/${invoiceNumber}`;
+    await navigator.clipboard.writeText(invoiceUrl);
+    alert(`Link invoice online ${invoiceNumber} berhasil disalin ke clipboard!`);
   };
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
@@ -1466,16 +1505,44 @@ const InvoiceMaker = () => {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button onClick={shareToWhatsApp} disabled={generating || completing}
-              className="admin-btn-primary flex-1 justify-center py-3 disabled:opacity-60 shadow-md">
-              {generating || completing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-              {selectedBookingId ? 'Selesaikan & Kirim WA' : 'Kirim WA'}
-            </button>
-            <button onClick={downloadInvoice} disabled={generating || completing}
-              className="admin-btn-ghost px-4 py-3 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-800 rounded-xl" title="Download PNG">
-              <Download size={14} />
-            </button>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button
+                onClick={shareToWhatsApp}
+                disabled={generating || completing}
+                className="admin-btn-primary flex-1 justify-center py-3 disabled:opacity-60 shadow-md flex items-center gap-2"
+              >
+                {generating || completing ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+                <span>{selectedBookingId ? 'Selesaikan & Kirim Link WA' : 'Kirim Link WA'}</span>
+              </button>
+              <button
+                onClick={copyOnlineInvoiceLink}
+                disabled={generating || completing}
+                className="admin-btn-ghost px-3.5 py-3 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-800 rounded-xl"
+                title="Salin Link Invoice Online"
+              >
+                <Link2 size={14} />
+              </button>
+              {invoiceNumber && (
+                <button
+                  type="button"
+                  onClick={openOnlineInvoice}
+                  disabled={generating || completing}
+                  className="admin-btn-ghost px-3.5 py-3 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:text-earth-primary transition-colors"
+                  title="Buka Halaman Invoice Online"
+                >
+                  <ExternalLink size={14} />
+                </button>
+              )}
+              <button
+                onClick={downloadInvoice}
+                disabled={generating || completing}
+                className="admin-btn-ghost px-3.5 py-3 disabled:opacity-60 bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-800 rounded-xl"
+                title="Download PNG"
+              >
+                <Download size={14} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

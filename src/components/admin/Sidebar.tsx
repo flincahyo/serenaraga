@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, ClipboardList,
-  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown, ChevronLeft, ChevronRight, Gift, Video, Wallet
+  Receipt, BarChart3, Image, X, LogOut, Settings2, FlaskConical, Users, Tag, UserSquare2, UserCog, ShoppingCart, Share2, ImagePlay, FileText, ChevronDown, ChevronLeft, ChevronRight, Gift, Video, Wallet, Star
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useUser } from '@/lib/user-context';
@@ -19,7 +19,7 @@ const OWNER_NAV_GROUPS = [
       { name: 'Tracker Jadwal', icon: CalendarDays,    href: '/admin/calendar' },
       { name: 'Bookings',       icon: CalendarCheck,   href: '/admin/bookings' },
       { name: 'Invoices',       icon: Receipt,         href: '/admin/invoices' },
-      { name: 'Buku Kas',       icon: Wallet,          href: '/admin/finance' },
+      { name: 'Ulasan & Rating', icon: Star,           href: '/admin/reviews' },
     ]
   },
   {
@@ -60,6 +60,7 @@ const CASHIER_NAV_GROUPS = [
       { name: 'POS Kasir',      icon: ShoppingCart,   href: '/admin/pos' },
       { name: 'Bookings',       icon: CalendarCheck,  href: '/admin/bookings' },
       { name: 'Invoices',       icon: Receipt,        href: '/admin/invoices' },
+      { name: 'Ulasan & Rating', icon: Star,          href: '/admin/reviews' },
       { name: 'Customers',      icon: Users,          href: '/admin/customers' },
     ]
   },

@@ -62,7 +62,7 @@ interface PublicInvoiceViewProps {
 const QUICK_TAGS = [
   'Pijatan Pas & Enak',
   'Terapis Sangat Ramah',
-  'Tempat Bersih & Wangi',
+  'Peralatan Lengkap',
   'Pelayanan Tepat Waktu',
   'Tubuh Terasa Sangat Rileks',
   'Recommended Banget',
@@ -87,7 +87,35 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
   const handleShare = async () => {
     if (typeof window === 'undefined') return;
     const url = window.location.href;
-    if (navigator.share) {
+    const shareText = `Invoice SerenaRaga #${data.invoiceNumber}\nPelanggan: ${data.customerName}\nTotal: ${formatRp(data.finalTotal)}\n🔗 ${url}`;
+
+    // 1. Try sharing PNG image file directly via Web Share API (native WhatsApp / Mobile share sheet)
+    if (invoiceRef.current && typeof navigator !== 'undefined' && navigator.canShare) {
+      try {
+        const dataUrl = await toPng(invoiceRef.current, {
+          cacheBust: true,
+          pixelRatio: 2.5,
+          backgroundColor: '#FDFBF7',
+        });
+        const blobRes = await fetch(dataUrl);
+        const blob = await blobRes.blob();
+        const file = new File([blob], `Invoice-${data.invoiceNumber}.png`, { type: 'image/png' });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Invoice SerenaRaga #${data.invoiceNumber}`,
+            text: shareText,
+            files: [file],
+          });
+          return;
+        }
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return;
+      }
+    }
+
+    // 2. Fallback to native text / url share
+    if (typeof navigator !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
           title: `Invoice SerenaRaga #${data.invoiceNumber}`,
@@ -95,10 +123,12 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
           url,
         });
         return;
-      } catch (e) {
-        // Fallback to clipboard
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return;
       }
     }
+
+    // 3. Fallback to copy link
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);

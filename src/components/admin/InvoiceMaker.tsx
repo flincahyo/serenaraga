@@ -1002,9 +1002,53 @@ const InvoiceMaker = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://serenaraga.fit';
     const invoiceUrl = `${origin}/invoice/${invoiceNumber}`;
     const msg = `Halo Kak ${customerName || 'Pelanggan'}! ✨\n\nTerima kasih telah mempercayakan perawatan ketenangan raga Anda kepada *SerenaRaga*.\n\nBerikut adalah link rincian invoice & bukti pembayaran Anda:\n🔗 ${invoiceUrl}\n\nTotal: *${formatRp(finalTotal)}*\n\nSemoga hari Kakak menyenangkan dan tubuh kembali rileks! 🌿`;
-    
+
     let cleanPhone = customerPhone.replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
+
+    // 1. Generate PNG invoice image first
+    const r = await generateImage();
+
+    // 2. Try native Web Share API (Mobile / Tablet can attach PNG directly to WhatsApp)
+    if (r?.dataUrl && typeof navigator !== 'undefined' && navigator.canShare) {
+      try {
+        const blobRes = await fetch(r.dataUrl);
+        const blob = await blobRes.blob();
+        const file = new File([blob], `Invoice-${invoiceNumber}.png`, { type: 'image/png' });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Invoice SerenaRaga #${invoiceNumber}`,
+            text: msg,
+            files: [file],
+          });
+          return;
+        }
+      } catch (e: any) {
+        if (e?.name === 'AbortError') return;
+      }
+    }
+
+    // 3. Desktop fallback: Auto-copy image to clipboard & auto-download PNG
+    if (r?.dataUrl) {
+      try {
+        const blobRes = await fetch(r.dataUrl);
+        const blob = await blobRes.blob();
+        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard && navigator.clipboard.write) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob }),
+          ]);
+        }
+        const link = document.createElement('a');
+        link.download = `Invoice-${invoiceNumber}.png`;
+        link.href = r.dataUrl;
+        link.click();
+      } catch (e) {
+        console.error('Auto copy/download image error:', e);
+      }
+    }
+
+    // 4. Open WhatsApp Web/App with message & link
     if (cleanPhone) {
       window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
     } else {

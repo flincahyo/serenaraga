@@ -12,7 +12,7 @@ export const SerenaLogoPaths: React.FC<SerenaLogoPathsProps> = ({
   idSuffix = '',
 }) => {
   const brownColor = monochrome ? color : '#8b5e3c';
-  const blackColor = monochrome ? color : '#000000';
+  const blackColor = monochrome ? color : 'currentColor';
   const clipId1 = `logo-clip-1-${idSuffix}`;
   const clipId2 = `logo-clip-2-${idSuffix}`;
 

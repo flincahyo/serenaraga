@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const key = process.env.XAI_API_KEY || "";
-    
+
     if (!key) {
       console.error("Missing XAI_API_KEY");
       return NextResponse.json({ error: "XAI API key is missing" }, { status: 500 });
@@ -15,11 +15,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Reference image (imageBase64) is required" }, { status: 400 });
     }
 
-    const formatContext = format === 'story' 
+    const formatContext = format === 'story'
       ? "Target Format: INSTAGRAM STORY (9:16)."
       : format === 'square'
-      ? "Target Format: SQUARE FEED (1:1)."
-      : "Target Format: PORTRAIT FEED (4:5).";
+        ? "Target Format: SQUARE FEED (1:1)."
+        : "Target Format: PORTRAIT FEED (4:5).";
 
     const systemPrompt = `
       You are an elite Art Director and Multimodal AI Designer for "SerenaRaga", a private homecare massage and wellness service in Indonesia.
@@ -46,8 +46,8 @@ export async function POST(req: Request) {
       - caption (Write in INDONESIAN language. Ready for Instagram. Format with paragraphs, concise hook, body, soft CTA to WhatsApp, max 1-2 natural emojis like 🍃 or 🤍, and hashtags: #SerenaRaga #PijatPanggilanJogja #HomeCareSpa #PijatKeluarga)
     `;
 
-    const imageUrl = imageBase64.startsWith("data:") 
-      ? imageBase64 
+    const imageUrl = imageBase64.startsWith("data:")
+      ? imageBase64
       : `data:image/jpeg;base64,${imageBase64}`;
 
     const response = await fetch("https://api.x.ai/v1/chat/completions", {
@@ -87,9 +87,9 @@ export async function POST(req: Request) {
     return NextResponse.json(resultJson);
   } catch (error: any) {
     console.error("Vision Style API Error Details:", error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: "Failed to analyze reference style",
-      detail: error.message 
+      detail: error.message
     }, { status: 500 });
   }
 }

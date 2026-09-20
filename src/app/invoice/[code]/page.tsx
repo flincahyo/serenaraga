@@ -213,19 +213,40 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     'id-ID'
   )} • Status: LUNAS • Terima kasih telah mempercayakan ketenangan raga Anda kepada SerenaRaga.`;
 
+  const siteUrl = 'https://serenaraga.fit';
+  const ogImageUrl = `${siteUrl}/api/og/invoice?code=${encodeURIComponent(
+    data.invoiceNumber
+  )}&customer=${encodeURIComponent(data.customerName)}&total=${
+    data.finalTotal
+  }&service=${encodeURIComponent(data.items[0]?.name || 'Treatment')}&date=${encodeURIComponent(
+    data.date
+  )}`;
+
   return {
+    metadataBase: new URL(siteUrl),
     title,
     description,
     openGraph: {
       title,
       description,
       type: 'website',
+      url: `${siteUrl}/invoice/${encodeURIComponent(data.invoiceNumber)}`,
       siteName: 'SerenaRaga Home Spa & Massage',
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          type: 'image/png',
+          alt: `Invoice #${data.invoiceNumber} - ${data.customerName}`,
+        },
+      ],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
+      images: [ogImageUrl],
     },
   };
 }

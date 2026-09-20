@@ -232,9 +232,9 @@ export function PublicInvoiceView({ data }: PublicInvoiceViewProps) {
             {/* Header */}
             <div className="flex justify-between items-start mb-7 sm:mb-9 gap-2">
               <div className="flex-1 min-w-0">
-                <div className="relative flex items-center justify-start h-[46px] sm:h-[54px] w-[170px] sm:w-[210px] overflow-hidden -ml-2 mb-1">
+                <div className="flex items-center justify-start mb-1">
                   <SerenaLogoSvg
-                    className="absolute h-[220px] sm:h-[250px] w-auto max-w-none object-contain -ml-5 sm:-ml-6"
+                    className="h-8.5 sm:h-10 w-auto max-w-[170px] sm:max-w-[200px]"
                     idSuffix="header-public"
                   />
                 </div>

@@ -140,12 +140,13 @@ export const SerenaLogoSvg: React.FC<SerenaLogoSvgProps> = ({
   monochrome = false,
   color = 'currentColor',
   idSuffix = '',
+  viewBox = '60 560 1370 370',
   ...props
 }) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 1500 1500"
+      viewBox={viewBox}
       preserveAspectRatio="xMidYMid meet"
       {...props}
     >

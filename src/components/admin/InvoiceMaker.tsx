@@ -1583,9 +1583,9 @@ const InvoiceMaker = () => {
                 {/* Header */}
                 <div className="flex justify-between items-start mb-12">
                   <div>
-                    <div className="relative flex items-center justify-start h-[56px] w-[220px] overflow-hidden -ml-2 mb-1">
+                    <div className="flex items-center justify-start mb-1">
                       <SerenaLogoSvg
-                        className="absolute h-[260px] w-auto max-w-none object-contain -ml-6"
+                        className="h-10 w-auto max-w-[210px]"
                         idSuffix="header-maker"
                       />
                     </div>
